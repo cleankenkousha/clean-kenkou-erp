@@ -20,3 +20,5 @@ pnpm-debug.log*
 .idea
 .DS_Store
 *.local
+.env
+.env.*

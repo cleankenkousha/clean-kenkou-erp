@@ -1,6 +1,7 @@
-import React, { useState } from 'react'
-import { Search, MapPin, Tag, Box, Calendar, Sparkles, Check, Phone } from 'lucide-react'
+import React, { useState, useRef } from 'react'
+import { Search, MapPin, Tag, Box, Calendar, Sparkles, Check, Phone, AlertCircle } from 'lucide-react'
 import { Input, Button } from '../ui'
+import { supabase } from '../../lib/supabase'
 
 export const JobReceptionForm: React.FC = () => {
   const [customerInfo, setCustomerInfo] = useState('')
@@ -8,19 +9,133 @@ export const JobReceptionForm: React.FC = () => {
   const [wasteType, setWasteType] = useState('')
   const [estimatedAmount, setEstimatedAmount] = useState('')
   const [preferredDate, setPreferredDate] = useState('')
+
+  const [isLoading, setIsLoading] = useState(false)
   const [isSaved, setIsSaved] = useState(false)
+  const [errorMessage, setErrorMessage] = useState<string | null>(null)
+
+  // 入力フィールドの参照 (Ref)
+  const customerInfoRef = useRef<HTMLInputElement>(null)
+  const addressRef = useRef<HTMLInputElement>(null)
+  const wasteTypeRef = useRef<HTMLInputElement>(null)
+  const estimatedAmountRef = useRef<HTMLInputElement>(null)
+  const preferredDateRef = useRef<HTMLInputElement>(null)
+
+  const inputRefs = [customerInfoRef, addressRef, wasteTypeRef, estimatedAmountRef, preferredDateRef]
 
   // クイック選択タグ
   const quickWasteTypes = ['段ボール・古紙', '粗大ゴミ', '廃プラスチック', '金属屑', '家電製品']
   const quickAmounts = ['軽トラ 1台分', '2tトラック 1台分', 'パレット 2箱', '袋詰 数個']
   const quickDates = ['本日中', '明日午前', '明後日', '来週月曜']
 
-  const handleSubmit = (e: React.FormEvent) => {
+  // キーダウンハンドラー (Enterでのフォーカス移動＆Ctrl+Enterでの送信)
+  const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>, currentIndex: number) => {
+    // Ctrl + Enter または Cmd + Enter の場合は送信実行
+    if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') {
+      e.preventDefault()
+      e.currentTarget.form?.requestSubmit()
+      return
+    }
+
+    // 単独の Enter キーの場合は次のフィールドにフォーカスを移動
+    if (e.key === 'Enter') {
+      e.preventDefault()
+      const nextIndex = currentIndex + 1
+      if (nextIndex < inputRefs.length) {
+        inputRefs[nextIndex].current?.focus()
+      }
+    }
+  }
+
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
-    setIsSaved(true)
-    setTimeout(() => {
-      setIsSaved(false)
-    }, 3000)
+    setErrorMessage(null)
+    setIsSaved(false)
+
+    // 【二重チェック】必須項目の入力検証
+    if (!customerInfo.trim()) {
+      setErrorMessage('「顧客名 / 電話番号」を入力してください。')
+      customerInfoRef.current?.focus()
+      return
+    }
+    if (!address.trim()) {
+      setErrorMessage('「回収場所（住所）」を入力してください。')
+      addressRef.current?.focus()
+      return
+    }
+    if (!wasteType.trim()) {
+      setErrorMessage('「廃棄物の種類（品目）」を入力してください。')
+      wasteTypeRef.current?.focus()
+      return
+    }
+
+    setIsLoading(true)
+
+    try {
+      // 電話番号の抽出試行 (数字・ハイフンが7文字以上)
+      const phoneMatch = customerInfo.match(/[\d-]{7,}/)?.[0] || ''
+      // 括弧部分を除いた顧客名
+      const customerName = customerInfo.replace(/[\(\（].*?[\)\）]/g, '').trim() || customerInfo || '名称未設定'
+
+      // 1. 顧客情報を customers テーブルに登録
+      const { data: customerData, error: customerError } = await supabase
+        .from('customers')
+        .insert([
+          {
+            name: customerName,
+            phone: phoneMatch || null,
+            address: address || null,
+          },
+        ])
+        .select()
+        .single()
+
+      if (customerError) {
+        throw new Error(`顧客情報の登録に失敗しました: ${customerError.message}`)
+      }
+
+      // 2. 発行された顧客IDを使用して jobs テーブルに案件を登録
+      const jobTitle = wasteType ? `${wasteType} 回収依頼` : `${customerName}様 スポット回収`
+      const notesDetail = [
+        estimatedAmount ? `概算の量: ${estimatedAmount}` : '',
+        preferredDate ? `希望日時: ${preferredDate}` : '',
+      ]
+        .filter(Boolean)
+        .join(' / ')
+
+      const { error: jobError } = await supabase.from('jobs').insert([
+        {
+          customer_id: customerData.id,
+          title: jobTitle,
+          status: 'received',
+          notes: notesDetail || null,
+        },
+      ])
+
+      if (jobError) {
+        throw new Error(`案件情報の登録に失敗しました: ${jobError.message}`)
+      }
+
+      // 3. 成功処理: フォーム初期化およびアラート表示
+      setCustomerInfo('')
+      setAddress('')
+      setWasteType('')
+      setEstimatedAmount('')
+      setPreferredDate('')
+      setIsSaved(true)
+
+      // 最初の入力欄にフォーカスを戻す
+      customerInfoRef.current?.focus()
+
+      setTimeout(() => {
+        setIsSaved(false)
+      }, 5000)
+    } catch (err: any) {
+      console.error('受付登録エラー:', err)
+      setErrorMessage(err.message || 'データ保存中にエラーが発生しました')
+    } finally {
+      setIsLoading(false)
+    }
   }
 
   return (
@@ -46,18 +161,28 @@ export const JobReceptionForm: React.FC = () => {
       {isSaved && (
         <div className="p-3 bg-emerald-50 border border-emerald-200 rounded-md text-emerald-800 text-xs font-medium flex items-center space-x-2">
           <Check className="w-4 h-4 text-emerald-600" />
-          <span>案件を一時保存しました（ダッシュボードに反映完了）。</span>
+          <span>受付を完了しました（Supabase データベースへの保存完了）。</span>
+        </div>
+      )}
+
+      {errorMessage && (
+        <div className="p-3 bg-rose-50 border border-rose-200 rounded-md text-rose-800 text-xs font-medium flex items-center space-x-2">
+          <AlertCircle className="w-4 h-4 text-rose-600 flex-shrink-0" />
+          <span>{errorMessage}</span>
         </div>
       )}
 
       {/* 1. 顧客名 / 電話番号 (スマート検索) */}
       <div className="space-y-2">
         <Input
+          ref={customerInfoRef}
           label="顧客名 / 電話番号"
           requiredMark
+          required
           placeholder="例: 096-xxx-xxxx または 株式会社山鹿商事"
           value={customerInfo}
           onChange={(e) => setCustomerInfo(e.target.value)}
+          onKeyDown={(e) => handleKeyDown(e, 0)}
           helperText="電話番号を入力すると既存顧客が自動検索されます"
         />
         {/* サジェスト用クイック選択ヒント */}
@@ -80,11 +205,14 @@ export const JobReceptionForm: React.FC = () => {
       {/* 2. 回収場所 (住所) */}
       <div className="space-y-2">
         <Input
+          ref={addressRef}
           label="回収場所（住所）"
           requiredMark
+          required
           placeholder="例: 熊本県山鹿市山鹿1000番地 本社ビル裏手"
           value={address}
           onChange={(e) => setAddress(e.target.value)}
+          onKeyDown={(e) => handleKeyDown(e, 1)}
         />
         <div className="flex items-center space-x-2 text-xs text-sub">
           <MapPin className="w-3.5 h-3.5 text-sub" />
@@ -110,11 +238,14 @@ export const JobReceptionForm: React.FC = () => {
       {/* 3. 廃棄物の種類 (品目) */}
       <div className="space-y-2">
         <Input
+          ref={wasteTypeRef}
           label="廃棄物の種類（品目）"
           requiredMark
+          required
           placeholder="例: 段ボール、粗大ゴミ、不要オフィスチェア"
           value={wasteType}
           onChange={(e) => setWasteType(e.target.value)}
+          onKeyDown={(e) => handleKeyDown(e, 2)}
         />
         <div className="flex flex-wrap gap-1.5 pt-1">
           <span className="text-xs text-sub flex items-center mr-1">
@@ -139,11 +270,13 @@ export const JobReceptionForm: React.FC = () => {
       {/* 4. 概算の量 */}
       <div className="space-y-2">
         <Input
+          ref={estimatedAmountRef}
           label="概算の量"
           requiredMark
           placeholder="例: 軽トラ1台分、2tトラック半載"
           value={estimatedAmount}
           onChange={(e) => setEstimatedAmount(e.target.value)}
+          onKeyDown={(e) => handleKeyDown(e, 3)}
         />
         <div className="flex flex-wrap gap-1.5 pt-1">
           <span className="text-xs text-sub flex items-center mr-1">
@@ -166,11 +299,13 @@ export const JobReceptionForm: React.FC = () => {
       {/* 5. 希望日時 */}
       <div className="space-y-2">
         <Input
+          ref={preferredDateRef}
           label="希望日時"
           requiredMark
           placeholder="例: 本日 15:00以降、明日午前中"
           value={preferredDate}
           onChange={(e) => setPreferredDate(e.target.value)}
+          onKeyDown={(e) => handleKeyDown(e, 4)}
         />
         <div className="flex flex-wrap gap-1.5 pt-1">
           <span className="text-xs text-sub flex items-center mr-1">
@@ -194,13 +329,15 @@ export const JobReceptionForm: React.FC = () => {
       <div className="pt-4 border-t border-border flex items-center justify-between">
         <div className="flex items-center space-x-1.5 text-xs text-sub">
           <Sparkles className="w-4 h-4 text-semantic-info" />
-          <span>一時保存後、担当者が自動で配車調整へ回します</span>
+          <span>受付保存後、担当者が自動で配車調整へ回します</span>
         </div>
 
-        <Button type="submit" size="lg" className="px-6">
-          受付を確定して一時保存
+        <Button type="submit" size="lg" className="px-6" isLoading={isLoading}>
+          受付を確定して保存
         </Button>
       </div>
     </form>
   )
 }
+
+
