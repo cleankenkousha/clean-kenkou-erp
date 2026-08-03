@@ -272,7 +272,6 @@ export const JobReceptionForm: React.FC = () => {
         <Input
           ref={estimatedAmountRef}
           label="概算の量"
-          requiredMark
           placeholder="例: 軽トラ1台分、2tトラック半載"
           value={estimatedAmount}
           onChange={(e) => setEstimatedAmount(e.target.value)}
@@ -301,7 +300,6 @@ export const JobReceptionForm: React.FC = () => {
         <Input
           ref={preferredDateRef}
           label="希望日時"
-          requiredMark
           placeholder="例: 本日 15:00以降、明日午前中"
           value={preferredDate}
           onChange={(e) => setPreferredDate(e.target.value)}

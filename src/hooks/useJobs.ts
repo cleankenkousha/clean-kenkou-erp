@@ -108,13 +108,13 @@ export const useJobs = (): UseJobsReturn => {
           throw new Error(updateError.message)
         }
 
-        // ローカルステートを直ちに更新 (customers などの JOIN リレーションデータを確実に保護)
+        // ローカルステートを直ちに更新 (DB に送信した検証済みデータのみを適用)
         setJobs((prevJobs) =>
           prevJobs.map((job) => {
             if (job.id !== jobId) return job
             return {
               ...job,
-              ...updates,
+              ...cleanUpdates,
               customers: job.customers, // リレーションの欠落を防止
             }
           })
@@ -156,18 +156,7 @@ export const useJobs = (): UseJobsReturn => {
               if (payload.eventType === 'INSERT') {
                 fetchJobs(false)
               } else if (payload.eventType === 'UPDATE') {
-                const updatedRow = payload.new as Partial<Job>
-                setJobs((prevJobs) =>
-                  prevJobs.map((job) => {
-                    if (job.id !== updatedRow.id) return job
-                    return {
-                      ...job,
-                      ...updatedRow,
-                      // Realtime ペイロードに含まれない customers リレーションデータを保護維持
-                      customers: job.customers ?? (updatedRow as Job).customers,
-                    }
-                  })
-                )
+                // リレーションデータを含む完全なデータを再取得
                 fetchJobs(false)
               } else if (payload.eventType === 'DELETE') {
                 const oldRow = payload.old as { id: string }

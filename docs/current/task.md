@@ -1,60 +1,47 @@
-# 本日の作業進捗・タスクまとめ (Task Summary)
+# Clean KENKOU ERP 開発進捗と次回残課題
 
-**日付**: 2026年7-31日  
-**プロジェクト**: Clean KENKOU ERP  
+## 📅 本日の実施内容・進捗
 
----
+### 1. システム全体チェックとバグ修正
+- [x] `useJobs.ts` 内 `updateJobDetails` のローカルステート上書き不整合を修正
+- [x] デッドコード `src/pages/DashboardPage.tsx` を削除
+- [x] `JobReceptionForm.tsx` の任意項目から不要な `requiredMark` を削除
+- [x] `.env` が `.gitignore` に登録されていることを確認
 
-## 1. 本日実施した改修内容
+### 2. Supabase Auth ログイン認証 & アクセス制御
+- [x] `src/pages/Login.tsx` (ログイン画面) の作成
+- [x] `src/components/ui/ProtectedRoute.tsx` (認証ガードコンポーネント) の作成
+- [x] `src/App.tsx` で未ログインユーザーのアクセス制御（`/login` へ強制リダイレクト）を適用
+- [x] `src/components/ui/Layout.tsx` のヘッダーにログアウトボタンを設置
+- [x] 本番用 RLS (Row Level Security) 設定用 SQL の作成提示
 
-### ① 希望日時（`scheduled_date`）の型エラー修正および標準カレンダー化
-- **概要**: `JobDetailModal.tsx` で保存時に発生していた `invalid input syntax for type date: "８/１５午後８時"` エラーを解決。
-- **対応内容**:
-  - `JobDetailModal.tsx` の希望日時入力欄を `<Input type="date">` に変更し、ブラウザ標準のカレンダーピッカーからの選択に対応。
-  - 日付のパース・フォーマット処理を `YYYY-MM-DD` 形式（PostgreSQL / Supabase `DATE` 型完全互換）に統一。
-  - 空入力時や初期表示時の日付フォーマットを安全に標準化。
+### 3. Netlify デプロイ環境の構築
+- [x] `netlify.toml` の作成 (SPAビルドおよびルーティングリダイレクト)
+- [x] `public/_redirects` の作成 (Netlify 上での 404 エラー防止)
+- [x] `npm run build` で `dist` への出力が正常であることを検証
 
-### ② データ保存時のドライバー名・顧客リレーション消失バグの修正
-- **概要**: モーダル保存後に「担当・ドライバーの名前」や顧客情報（`customers`）が消えて上書きされる不具合を修正。
-- **対応内容**:
-  - **`useJobs.ts`**:
-    - `updateJobDetails` 関数で `undefined` なプロパティのスキップ処理を追加し、指定された有効カラムのみを安全に更新。
-    - ローカルステートのマージ更新時、JOIN 済みの `customers` リレーションが失われないよう保護。
-    - Supabase Realtime 購読の `UPDATE` イベント受信時も既存のリレーション参照を保護マージするよう改善。
-  - **`JobDetailModal.tsx`**:
-    - メモ欄 `notes` から `[担当ドライバー: 名前]` をスマートに抽出・相互同期する `extractDriverFromNotes` 関数を追加。
-    - 非UUIDのドライバー名入力時にもメモ保持と入力欄復元がスムーズに行われるように改修。
-  - **`KanbanBoard.tsx`**:
-    - モーダルに渡す `job` オブジェクトを最新の `jobs` ステートから派生参照させ、データのリアルタイム同期を強化。
-
-### ③ スマホ（モバイル端末）向けレスポンシブデザインの全面実装
-- **概要**: 現場のドライバーがスマートフォンから快適に配車確認や案件詳細の確認・編集を行えるよう全体を最適化。
-- **対応内容**:
-  - **`Layout.tsx`**:
-    - PC画面（`md` 以上）では左サイドバーナビゲーションを維持。
-    - スマホ画面（`md` 未満）ではサイドバーを非表示にし、画面最下部に固定される「ボトムナビゲーション」を新設。
-  - **`Dashboard.tsx`**:
-    - 上部 KPI パネルをスマホでは縦積み1列、PCでは横並び3列のグリッドレイアウトへレスポンシブ調整。
-  - **`KanbanBoard.tsx`**:
-    - スマホ画面ではステータスカラムが `overflow-x-auto snap-x snap-mandatory` による横スワイプ対応 UI に進化。
-    - `@dnd-kit/core` に `TouchSensor` を追加し、カードのドラッグ＆ドロップおよびグリップハンドルのタッチ操作領域を強化。
-  - **`JobDetailModal.tsx` / `Input.tsx`**:
-    - スマホ画面ではモーダルを画面全体のフルスクリーン表示（`h-full rounded-none`）にし、PC画面では中央ポップアップを維持。
-    - 入力欄・各ボタン・閉じるアイコンの最小サイズを `min-h-[44px]` に拡張し、指で押しやすい UI へ最適化。
+### 4. 「臨時収集工程アプリ」の 100% 完全移植 & 統合
+- [x] 元アプリの全スタイル (`style.css`) を `src/index.css` に 100% 完全適用
+- [x] 7レーン対応カンバンボード (`src/components/features/KanbanBoard.tsx`)
+  - 未着手, 顧客検討, 作業日程調整, 日程確定, 作業実施, 請求書送付, 失注・キャンセル
+  - 🚨 滞留 (10日超) / ⚠️ 停滞 (3日超) の自動判定バッジ
+  - 管理番号 (`#1001`), 受付日, 右寄せ青文字の更新者名
+- [x] 9ステップ工程チェックリスト & 各伝言メモ付き詳細モーダル (`TaskDetailModal.tsx`)
+  - **`computeTaskStatus` によるステップ選択時のメインステータス自動昇格・自動前進機能の完全復元**
+  - **`autoLinkEstimateUnnecessary` による「見積不要」選択時の見積ステップ一括自動設定機能の完全復元**
+  - **`resetStepsAfterStatus` による降格時の下位ステップリセット機能の完全復元**
+  - Googleマップ連携リンク
+- [x] 新規受付入力モーダル (`NewTaskModal.tsx`)
+- [x] Excel集計出力モーダル (`ExportModal.tsx`)
+- [x] 臨時収集依頼書 R8.3.2 完全再現 A4両面指示書印刷機能 (`PrintArea.tsx`)
 
 ---
 
-## 2. 品質検証・ビルド結果
+## 📌 次回やるべき残課題
 
-- **TypeScript 型チェック**: `npx tsc --noEmit` 成功（エラー 0 件）
-- **プロダクションビルド**: `npm run build` 成功（Vite ビルド完了）
-
----
-
-## 3. 次回のタスク・今後の予定
-
-1. **配車調整・現場作業用画面の拡充**
-   - ドライバー向けの当日配車ルート・作業完了報告機能のさらなる強化。
-2. **顧客マスターおよび案件一覧ページの機能追加**
-   - `/customers` および `/jobs` ページにおける検索・フィルター・詳細表示機能の構築。
-3. **実機・モバイルブラウザでの実動作検証**
+- [ ] **1. 細かなUI/UXの微調整**:
+  - 画面表示や文字間隔、ボタン配置などユーザーの実際の使用感に基づく細かなデザイン微調整
+- [ ] **2. Supabase データベースとの完全接続・同期**:
+  - 現在のフロントエンド動作（ダミーデータ含む）から、Supabase `jobs` テーブルへの永続化保存および `onAuthStateChange` / Realtime サブスクリプションとの結合
+- [ ] **3. Excel読込・出力の本格実装**:
+  - `.xlsx` ファイルからの案件データ一括インポート処理の実装

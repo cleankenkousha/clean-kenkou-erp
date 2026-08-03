@@ -1,4 +1,4 @@
-import React, { useState } from 'react'
+import React, { useState, useMemo } from 'react'
 import {
   DndContext,
   DragEndEvent,
@@ -12,68 +12,234 @@ import {
   useDroppable,
 } from '@dnd-kit/core'
 import { CSS } from '@dnd-kit/utilities'
-import {
-  Calendar,
-  User,
-  Tag,
-  Clock,
-  CheckCircle2,
-  AlertCircle,
-  RefreshCw,
-  GripVertical,
-  Maximize2,
-} from 'lucide-react'
-import { useJobs } from '../../hooks'
-import { Job, JobStatus } from '../../types'
-import { JobDetailModal } from './JobDetailModal'
+import { StepsData } from './PrintArea'
 
-interface ColumnConfig {
-  key: string
-  statuses: JobStatus[]
-  defaultTargetStatus: JobStatus
-  title: string
-  badgeStyle: string
-  icon: React.ComponentType<{ className?: string }>
+export type ProcessLane =
+  | '未着手'
+  | '顧客検討'
+  | '作業日程調整'
+  | '日程確定'
+  | '作業実施'
+  | '請求書送付'
+  | '失注・キャンセル'
+
+export interface ProcessTask {
+  id: string
+  receptionNo?: string
+  customer: string
+  tel: string
+  address: string
+  taskType: string
+  status: ProcessLane
+  receptionDate: string
+  assignedTo?: string
+  updater?: string
+  updatedAt: string
+  isArchived?: boolean
+  stepsData?: StepsData
 }
 
-const columns: ColumnConfig[] = [
+export const STEP_DEFINITIONS = [
+  { id: 'reception', name: '受付', options: ['未', '済', '不要'] },
+  { id: 'estimate_schedule', name: '見積日程調整', options: ['未', '済', '見積不要'] },
+  { id: 'estimate_do', name: '見積実施', options: ['未', '済', '不要'] },
+  { id: 'estimate_submit', name: '見積提出', options: ['未', '口頭', 'メール', '郵送', '不要'] },
+  { id: 'customer_consideration', name: '顧客検討', options: ['未', '済', '不要'] },
+  { id: 'work_schedule', name: '作業日程調整', options: ['未', '済', '不要'] },
+  { id: 'schedule_confirmed', name: '日程確定', options: ['未', '済', '不要'] },
+  { id: 'work_execution', name: '作業実施', options: ['未', '済', '不要'] },
+  { id: 'invoice_sent', name: '請求書送付', options: ['未', '済', '不要'] },
+]
+
+export const processLanes: ProcessLane[] = [
+  '未着手',
+  '顧客検討',
+  '作業日程調整',
+  '日程確定',
+  '作業実施',
+  '請求書送付',
+  '失注・キャンセル',
+]
+
+// 日付パーサー
+function parseDateSafely(dateStr?: string | null): Date | null {
+  if (!dateStr) return null
+  let str = String(dateStr).trim()
+  let d = new Date(str)
+  if (!isNaN(d.getTime())) return d
+  let normalized = str.replace(/\//g, '-')
+  if (/^\d{4}-\d{1,2}-\d{1,2} \d{1,2}:\d{1,2}/.test(normalized)) {
+    normalized = normalized.replace(' ', 'T')
+  }
+  d = new Date(normalized)
+  if (!isNaN(d.getTime())) return d
+  return null
+}
+
+function formatDateForDisplay(dateObj?: Date | null): string {
+  if (!dateObj) return '-'
+  const y = dateObj.getFullYear()
+  const m = String(dateObj.getMonth() + 1).padStart(2, '0')
+  const d = String(dateObj.getDate()).padStart(2, '0')
+  const hh = String(dateObj.getHours()).padStart(2, '0')
+  const mm = String(dateObj.getMinutes()).padStart(2, '0')
+  return `${y}/${m}/${d} ${hh}:${mm}`
+}
+
+// 滞留・停滞判定 (元アプリ app.js 100% 同一ロジック)
+export function getTaskStalledInfo(lastUpdatedStr?: string) {
+  if (!lastUpdatedStr) return { borderClass: '', badgeHtml: null }
+  const updatedDate = parseDateSafely(lastUpdatedStr)
+  if (!updatedDate) return { borderClass: '', badgeHtml: null }
+
+  const diffMs = Date.now() - updatedDate.getTime()
+  const diffHours = diffMs / (1000 * 60 * 60)
+
+  if (diffHours >= 240) {
+    // 10日以上 (240時間)
+    return {
+      borderClass: 'alert-danger',
+      badgeHtml: <span className="stalled-badge-danger">🚨 滞留 (10日超)</span>,
+    }
+  } else if (diffHours >= 72) {
+    // 3日以上 (72時間)
+    return {
+      borderClass: 'alert-warning',
+      badgeHtml: <span className="stalled-badge">⚠️ 停滞 (3日超)</span>,
+    }
+  }
+
+  return { borderClass: '', badgeHtml: null }
+}
+
+// 完了タスク判定
+export function isTaskCompleted(task: ProcessTask): boolean {
+  if (!task) return false
+  if (task.status === '失注・キャンセル') return true
+  if (
+    task.status === '請求書送付' &&
+    task.stepsData &&
+    task.stepsData.invoice_sent?.status === '済'
+  )
+    return true
+  return false
+}
+
+// 元アプリ同等の初期ダミーデータ
+export const initialDummyTasks: ProcessTask[] = [
   {
-    key: 'unhandled',
-    statuses: ['received', 'quoting', 'pending'],
-    defaultTargetStatus: 'received',
-    title: '未対応 / 受付済',
-    badgeStyle: 'bg-amber-100 text-amber-800 border-amber-200',
-    icon: AlertCircle,
+    id: '1001',
+    customer: '田尻',
+    tel: '096-300-1122',
+    address: '熊本県山鹿市山鹿1000',
+    taskType: '生活ごみ回収',
+    status: '顧客検討',
+    receptionDate: '7/15',
+    updater: '佐藤',
+    updatedAt: '2026-07-20T14:30:00', // 10日以上前（滞留）
+    isArchived: false,
+    stepsData: {
+      reception: { status: '済', memo: '軽トラ1台分のごみ', worker: '佐藤' },
+      estimate_schedule: { status: '済', memo: '7/17 訪問見積済', worker: '佐藤' },
+      estimate_do: { status: '済', memo: '25,000円で提示', worker: '佐藤' },
+      estimate_submit: { status: '郵送', memo: '見積書郵送済', worker: '佐藤' },
+      customer_consideration: { status: '未', memo: '返答待ち', worker: '佐藤' },
+    },
   },
   {
-    key: 'in_progress',
-    statuses: ['arranged'],
-    defaultTargetStatus: 'arranged',
-    title: '手配済 / 進行中',
-    badgeStyle: 'bg-blue-100 text-blue-800 border-blue-200',
-    icon: Clock,
+    id: '1002',
+    customer: '株式会社山鹿商事',
+    tel: '096-321-4567',
+    address: '熊本県山鹿市鹿本町来民500',
+    taskType: 'オフィス不要品撤去',
+    status: '作業日程調整',
+    receptionDate: '7/28',
+    updater: '田中',
+    updatedAt: '2026-07-30T09:15:00', // 3日以上前（停滞）
+    isArchived: false,
+    stepsData: {
+      reception: { status: '済', memo: 'お得意先につき見積不要', worker: '田中' },
+      estimate_schedule: { status: '見積不要', memo: '', worker: '田中' },
+      estimate_do: { status: '不要', memo: '', worker: '田中' },
+      estimate_submit: { status: '不要', memo: '', worker: '田中' },
+      customer_consideration: { status: '不要', memo: '', worker: '田中' },
+      work_schedule: { status: '未', memo: 'トラック手配調整中', worker: '田中' },
+    },
   },
   {
-    key: 'completed',
-    statuses: ['collected', 'billed', 'completed'],
-    defaultTargetStatus: 'collected',
-    title: '回収完了 / 請求待ち',
-    badgeStyle: 'bg-emerald-100 text-emerald-800 border-emerald-200',
-    icon: CheckCircle2,
+    id: '1003',
+    customer: '高橋',
+    tel: '090-9988-7766',
+    address: '熊本県山鹿市菊鹿町123',
+    taskType: '粗大ごみ（ベッド・冷蔵庫）',
+    status: '未着手',
+    receptionDate: '8/02',
+    updater: '鈴木',
+    updatedAt: '2026-08-02T11:00:00',
+    isArchived: false,
+    stepsData: {
+      reception: { status: '済', memo: '大型家電あり', worker: '鈴木' },
+    },
+  },
+  {
+    id: '1004',
+    customer: '山鹿建設株式会社',
+    tel: '0968-43-1111',
+    address: '熊本県山鹿市古閑888',
+    taskType: '現場廃材スポット回収',
+    status: '日程確定',
+    receptionDate: '7/31',
+    updater: '佐藤',
+    updatedAt: '2026-08-03T10:00:00',
+    isArchived: false,
+    stepsData: {
+      reception: { status: '済', memo: '現場裏手へ車付', worker: '佐藤' },
+      schedule_confirmed: { status: '済', memo: '8/5 午前9時訪問決定', worker: '佐藤' },
+    },
+  },
+  {
+    id: '1005',
+    customer: '中村',
+    tel: '080-1122-3344',
+    address: '熊本県山鹿市鹿央町777',
+    taskType: '引越しに伴う不燃ごみ',
+    status: '作業実施',
+    receptionDate: '8/01',
+    updater: '山本',
+    updatedAt: '2026-08-03T13:20:00',
+    isArchived: false,
+    stepsData: {
+      work_execution: { status: '済', memo: '積み込み完了。処分場移動中。', worker: '山本' },
+    },
+  },
+  {
+    id: '1006',
+    customer: '有限会社メディカルケア',
+    tel: '0968-44-5566',
+    address: '熊本県山鹿市山鹿500',
+    taskType: '定期廃棄物回収',
+    status: '請求書送付',
+    receptionDate: '7/20',
+    updater: '田中',
+    updatedAt: '2026-08-01T16:45:00',
+    isArchived: false,
+    stepsData: {
+      invoice_sent: { status: '未', memo: '月末締め請求書作成中', worker: '田中' },
+    },
   },
 ]
 
-interface KanbanCardProps {
-  job: Job
+interface TaskCardProps {
+  task: ProcessTask
   isOverlay?: boolean
-  onCardClick?: (job: Job) => void
+  onClick?: (task: ProcessTask) => void
 }
 
-const KanbanCard: React.FC<KanbanCardProps> = ({ job, isOverlay, onCardClick }) => {
+const TaskCard: React.FC<TaskCardProps> = ({ task, isOverlay, onClick }) => {
   const { attributes, listeners, setNodeRef, transform, isDragging } =
     useDraggable({
-      id: job.id,
-      data: { job },
+      id: task.id,
+      data: { task },
     })
 
   const style = transform
@@ -82,19 +248,15 @@ const KanbanCard: React.FC<KanbanCardProps> = ({ job, isOverlay, onCardClick }) 
       }
     : undefined
 
-  const customerName = job.customers?.name || '（顧客名なし）'
-  const displayDate =
-    job.scheduled_date ||
-    (job.created_at
-      ? new Date(job.created_at).toLocaleDateString('ja-JP')
-      : '受付日未設定')
+  const stalledInfo = getTaskStalledInfo(task.updatedAt)
+  const isEstimateUnnecessary =
+    task.stepsData &&
+    (task.stepsData.estimate_schedule?.status === '見積不要' ||
+      task.stepsData.estimate_schedule?.status === '不要')
 
-  const handleClick = () => {
-    // ドラッグ中でなければ詳細モーダルを開く
-    if (!isDragging && onCardClick) {
-      onCardClick(job)
-    }
-  }
+  const displayDate = task.updatedAt
+    ? formatDateForDisplay(parseDateSafely(task.updatedAt))
+    : '-'
 
   return (
     <div
@@ -102,130 +264,105 @@ const KanbanCard: React.FC<KanbanCardProps> = ({ job, isOverlay, onCardClick }) 
       style={style}
       {...attributes}
       {...listeners}
-      onClick={handleClick}
-      className={`bg-white p-4 rounded-lg border border-border shadow-sm transition-all cursor-grab active:cursor-grabbing space-y-2 select-none group relative touch-action-none ${
-        isDragging ? 'opacity-40 border-dashed border-slate-400' : ''
-      } ${
-        isOverlay
-          ? 'shadow-xl ring-2 ring-slate-900 ring-offset-2 rotate-2 opacity-95'
-          : 'hover:shadow hover:border-slate-300'
+      onClick={() => !isDragging && onClick?.(task)}
+      className={`task-card ${isDragging ? 'is-dragging' : ''} ${
+        isOverlay ? 'shadow-2xl ring-2 ring-sky-500 scale-105 rotate-1' : ''
       }`}
     >
-      <div className="flex items-center justify-between text-xs text-sub">
-        <div className="flex items-center space-x-1">
-          <div className="p-1 -ml-1 text-slate-400 hover:text-slate-700 rounded hover:bg-slate-100 touch-none cursor-grab active:cursor-grabbing">
-            <GripVertical className="w-4 h-4" />
-          </div>
-          <span className="font-mono text-[10px] bg-slate-100 px-1.5 py-0.5 rounded border border-border truncate max-w-[120px]">
-            {job.id}
-          </span>
+      <div className={stalledInfo.borderClass}>
+        <div className="task-id">
+          #{task.id} <span className="status-badge">{task.status}</span>{' '}
+          {isEstimateUnnecessary && (
+            <span className="unnecessary-badge">📝 見積不要</span>
+          )}{' '}
+          {stalledInfo.badgeHtml}
         </div>
-        <div className="flex items-center space-x-1.5">
-          <span className="flex items-center space-x-1">
-            <Tag className="w-3 h-3 text-sub" />
-            <span className="capitalize">{job.status}</span>
-          </span>
-          {!isOverlay && (
-            <span
-              className="text-sub group-hover:text-slate-900 p-1 rounded hover:bg-slate-100 transition-colors min-h-[32px] min-w-[32px] flex items-center justify-center"
-              title="クリックして詳細を表示"
-            >
-              <Maximize2 className="w-3.5 h-3.5" />
+        <div className="task-title">
+          {task.customer} - {task.taskType}
+        </div>
+        <div
+          className="task-meta"
+          style={{
+            display: 'flex',
+            flexDirection: 'column',
+            gap: '0.15rem',
+            marginTop: '0.4rem',
+          }}
+        >
+          <div
+            style={{
+              display: 'flex',
+              justifyContent: 'space-between',
+              alignItems: 'center',
+            }}
+          >
+            <span>{task.receptionDate} 受付</span>
+            <span style={{ fontWeight: 600, color: 'var(--accent)' }}>
+              {task.updater || '未指定'}
             </span>
-          )}
-        </div>
-      </div>
-
-      <h3 className="font-bold text-sm md:text-base text-main group-hover:text-slate-900 leading-snug">
-        {job.title}
-      </h3>
-
-      <p className="text-xs font-medium text-slate-700 bg-slate-50 px-2.5 py-1.5 rounded border border-slate-100">
-        顧客: {customerName}
-      </p>
-
-      {job.notes && (
-        <p className="text-[11px] text-sub line-clamp-2 italic">
-          {job.notes}
-        </p>
-      )}
-
-      <div className="pt-2 border-t border-slate-100 flex items-center justify-between text-xs text-sub">
-        <div className="flex items-center space-x-1">
-          <Calendar className="w-3.5 h-3.5 text-sub" />
-          <span>{displayDate}</span>
-        </div>
-
-        <div className="flex items-center space-x-1">
-          <User className="w-3.5 h-3.5 text-sub" />
-          <span>{job.assigned_to || '未割り当て'}</span>
+          </div>
+          <div
+            style={{
+              fontSize: '0.7rem',
+              color: 'var(--text-muted)',
+              textAlign: 'right',
+            }}
+          >
+            更新: {displayDate}
+          </div>
         </div>
       </div>
     </div>
   )
 }
 
-interface KanbanColumnProps {
-  column: ColumnConfig
-  jobs: Job[]
-  onCardClick?: (job: Job) => void
+interface ColumnProps {
+  lane: ProcessLane
+  tasks: ProcessTask[]
+  onCardClick?: (task: ProcessTask) => void
 }
 
-const KanbanColumn: React.FC<KanbanColumnProps> = ({ column, jobs, onCardClick }) => {
+const KanbanColumn: React.FC<ColumnProps> = ({ lane, tasks, onCardClick }) => {
   const { setNodeRef, isOver } = useDroppable({
-    id: column.key,
+    id: lane,
   })
-
-  const ColumnIcon = column.icon
 
   return (
     <div
       ref={setNodeRef}
-      className={`p-4 rounded-xl border transition-colors flex flex-col space-y-3 min-h-[420px] md:min-h-[500px] w-[86vw] sm:w-[340px] flex-shrink-0 snap-center md:w-auto ${
-        isOver
-          ? 'bg-slate-200/80 border-slate-400 ring-2 ring-slate-400'
-          : 'bg-slate-50/70 border-border'
-      }`}
+      className={`kanban-lane ${isOver ? 'drag-over' : ''}`}
+      data-status={lane}
     >
-      <div className="flex items-center justify-between pb-2 border-b border-border">
-        <div className="flex items-center space-x-2">
-          <ColumnIcon className="w-4 h-4 text-sub" />
-          <span className="font-semibold text-sm text-main">
-            {column.title}
-          </span>
-        </div>
-        <span
-          className={`text-xs font-bold px-2 py-0.5 rounded-full border ${column.badgeStyle}`}
-        >
-          {jobs.length}
-        </span>
+      <div className="lane-header">
+        <span>{lane}</span>
+        <span className="item-count">{tasks.length}</span>
       </div>
-
-      <div className="flex-1 space-y-3">
-        {jobs.map((job) => (
-          <KanbanCard key={job.id} job={job} onCardClick={onCardClick} />
+      <div className="lane-tasks">
+        {tasks.map((task) => (
+          <TaskCard key={task.id} task={task} onClick={onCardClick} />
         ))}
-
-        {jobs.length === 0 && (
-          <div className="h-32 flex items-center justify-center border-2 border-dashed border-border rounded-lg text-xs text-sub">
-            ここにドラッグ＆ドロップ
-          </div>
-        )}
       </div>
     </div>
   )
 }
 
 export interface KanbanBoardProps {
-  jobsData?: ReturnType<typeof useJobs>
+  viewFilter: 'active' | 'archived' | 'all'
+  tasks?: ProcessTask[]
+  onTaskMove?: (taskId: string, newStatus: ProcessLane) => void
+  onTaskClick?: (task: ProcessTask) => void
 }
 
-const KanbanBoardInner: React.FC<{ jobsData: ReturnType<typeof useJobs> }> = ({
-  jobsData,
+export const KanbanBoard: React.FC<KanbanBoardProps> = ({
+  viewFilter,
+  tasks: externalTasks,
+  onTaskMove,
+  onTaskClick,
 }) => {
-  const { jobs = [], isLoading, error, refetch, updateJobStatus, updateJobDetails } = jobsData
-  const [activeJob, setActiveJob] = useState<Job | null>(null)
-  const [selectedJob, setSelectedJob] = useState<Job | null>(null)
+  const [internalTasks] = useState<ProcessTask[]>(initialDummyTasks)
+  const [activeTask, setActiveTask] = useState<ProcessTask | null>(null)
+
+  const tasks = externalTasks || internalTasks
 
   const sensors = useSensors(
     useSensor(PointerSensor, {
@@ -241,140 +378,64 @@ const KanbanBoardInner: React.FC<{ jobsData: ReturnType<typeof useJobs> }> = ({
     })
   )
 
+  const filteredTasks = useMemo(() => {
+    return tasks.filter((task) => {
+      if (viewFilter === 'active') return !isTaskCompleted(task)
+      if (viewFilter === 'archived') return isTaskCompleted(task)
+      return true
+    })
+  }, [tasks, viewFilter])
+
   const handleDragStart = (event: DragStartEvent) => {
-    const jobData = event.active.data.current?.job as Job | undefined
-    if (jobData) {
-      setActiveJob(jobData)
+    const taskData = event.active.data.current?.task as ProcessTask | undefined
+    if (taskData) {
+      setActiveTask(taskData)
     }
   }
 
-  const handleDragEnd = async (event: DragEndEvent) => {
+  const handleDragEnd = (event: DragEndEvent) => {
     const { active, over } = event
-    setActiveJob(null)
+    setActiveTask(null)
 
     if (!over) return
 
-    const jobId = active.id as string
-    const targetColumnKey = over.id as string
+    const taskId = active.id as string
+    const targetLane = over.id as ProcessLane
 
-    const targetColumn = columns.find((col) => col.key === targetColumnKey)
-    if (!targetColumn) return
-
-    const activeJobData = (jobs || []).find((j) => j && j.id === jobId)
-    if (!activeJobData) return
-
-    // すでにそのカラムに含まれるステータスの場合は更新不要
-    if (targetColumn.statuses.includes(activeJobData.status)) {
-      return
+    if (onTaskMove) {
+      onTaskMove(taskId, targetLane)
     }
-
-    const newStatus = targetColumn.defaultTargetStatus
-    await updateJobStatus(jobId, newStatus)
   }
-
-  if (isLoading) {
-    return (
-      <div className="bg-slate-50/70 p-12 rounded-xl border border-border flex flex-col items-center justify-center space-y-3 min-h-[400px]">
-        <RefreshCw className="w-8 h-8 text-slate-400 animate-spin" />
-        <p className="text-sm text-sub font-medium">案件データを読み込み中...</p>
-      </div>
-    )
-  }
-
-  if (error) {
-    return (
-      <div className="bg-rose-50 p-6 rounded-xl border border-rose-200 text-rose-800 space-y-3">
-        <div className="flex items-center space-x-2 font-bold">
-          <AlertCircle className="w-5 h-5 text-rose-600" />
-          <span>データの取得中にエラーが発生しました</span>
-        </div>
-        <p className="text-xs text-rose-700">{error}</p>
-        <button
-          type="button"
-          onClick={() => refetch()}
-          className="text-xs px-3 py-1.5 bg-white border border-rose-300 rounded font-medium hover:bg-rose-100 text-rose-900 transition-colors"
-        >
-          再読み込み
-        </button>
-      </div>
-    )
-  }
-
-  const safeJobs = Array.isArray(jobs) ? jobs : []
 
   return (
-    <div className="space-y-3 md:space-y-4">
-      <div className="flex items-center justify-between">
-        <div className="flex items-center space-x-2">
-          <h2 className="text-base md:text-lg font-bold text-main">案件ステータスボード</h2>
-          <span className="md:hidden text-[11px] text-sub bg-slate-100 px-2 py-0.5 rounded-full">
-            ← 左右スワイプ可 →
-          </span>
-        </div>
-        <div className="flex items-center space-x-3">
-          <span className="text-xs text-sub">全 {safeJobs.length} 件の案件</span>
-          <button
-            type="button"
-            onClick={() => refetch()}
-            className="p-1.5 hover:bg-slate-100 rounded text-sub transition-colors min-h-[36px] min-w-[36px] flex items-center justify-center"
-            title="最新データに更新"
-          >
-            <RefreshCw className="w-3.5 h-3.5" />
-          </button>
-        </div>
+    <DndContext
+      sensors={sensors}
+      onDragStart={handleDragStart}
+      onDragEnd={handleDragEnd}
+    >
+      <div className="kanban-board">
+        {processLanes.map((lane) => {
+          const tasksInLane = filteredTasks.filter((t) => t.status === lane)
+
+          // アクティブビュー時かつ空の失注・キャンセルレーンは非表示 (元アプリ仕様)
+          if (lane === '失注・キャンセル' && tasksInLane.length === 0 && viewFilter === 'active') {
+            return null
+          }
+
+          return (
+            <KanbanColumn
+              key={lane}
+              lane={lane}
+              tasks={tasksInLane}
+              onCardClick={onTaskClick}
+            />
+          )
+        })}
       </div>
 
-      <DndContext
-        sensors={sensors}
-        onDragStart={handleDragStart}
-        onDragEnd={handleDragEnd}
-      >
-        {/* スマホ画面: 横スワイプ対応 (overflow-x-auto, snap-x, snap-mandatory), PC画面: 3列グリッド */}
-        <div className="flex overflow-x-auto snap-x snap-mandatory space-x-4 pb-4 md:space-x-0 md:grid md:grid-cols-3 md:gap-6 scrollbar-thin">
-          {columns.map((column) => {
-            const jobsInColumn = safeJobs.filter(
-              (job) => job && job.status && column.statuses.includes(job.status)
-            )
-
-            return (
-              <KanbanColumn
-                key={column.key}
-                column={column}
-                jobs={jobsInColumn}
-                onCardClick={(job) => setSelectedJob(job)}
-              />
-            )
-          })}
-        </div>
-
-        <DragOverlay>
-          {activeJob ? <KanbanCard job={activeJob} isOverlay /> : null}
-        </DragOverlay>
-      </DndContext>
-
-      {/* 案件詳細モーダル */}
-      <JobDetailModal
-        job={selectedJob ? (safeJobs.find((j) => j?.id === selectedJob.id) || selectedJob) : null}
-        onClose={() => setSelectedJob(null)}
-        onSave={updateJobDetails}
-      />
-
-    </div>
+      <DragOverlay>
+        {activeTask ? <TaskCard task={activeTask} isOverlay /> : null}
+      </DragOverlay>
+    </DndContext>
   )
 }
-
-const KanbanBoardWithSelfFetch: React.FC = () => {
-  const selfJobsData = useJobs()
-  return <KanbanBoardInner jobsData={selfJobsData} />
-}
-
-export const KanbanBoard: React.FC<KanbanBoardProps> = ({ jobsData }) => {
-  if (jobsData) {
-    return <KanbanBoardInner jobsData={jobsData} />
-  }
-  return <KanbanBoardWithSelfFetch />
-}
-
-
-
-
