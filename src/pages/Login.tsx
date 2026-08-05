@@ -113,7 +113,7 @@ export const Login: React.FC = () => {
         {/* フッター情報 */}
         <div className="text-center pt-2 border-t border-border">
           <p className="text-[11px] text-sub">
-            有限会社山鹿健康社 &copy; Clean KENKOU ERP
+            有限会社クリーン健康社 &copy; Clean KENKOU ERP
           </p>
         </div>
       </div>

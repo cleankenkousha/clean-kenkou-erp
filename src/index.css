@@ -822,22 +822,52 @@ body {
     line-height: 30px;
 }
 
+/* 印刷用ベース配置設定（通常画面時: レイアウトツリーから消さず画面外に退避） */
+.print-container,
+#print-root {
+    position: absolute !important;
+    left: -9999px !important;
+    top: -9999px !important;
+    width: 800px !important;
+    height: 0 !important;
+    visibility: hidden !important;
+    overflow: hidden !important;
+    opacity: 0 !important;
+    pointer-events: none !important;
+}
+
+/* @media print Settings (元アプリ style.css 100% 完全再現) */
 @media print {
     @page {
         size: A4 portrait;
         margin: 5mm 8mm;
     }
 
-    body {
+    html, body {
         background: #ffffff !important;
-        overflow: visible !important;
+        color: #000000 !important;
+        margin: 0 !important;
+        padding: 0 !important;
+        width: 100% !important;
         height: auto !important;
+        overflow: visible !important;
     }
 
-    #root > div:not(#printArea) {
+    /* 画面表示用エレメント・全モーダル・画面コンテナを確実に非表示 */
+    #root,
+    .app-container,
+    .modal-overlay,
+    .view-tabs-container,
+    header,
+    main,
+    nav,
+    aside,
+    div[role="dialog"] {
         display: none !important;
     }
 
+    /* 印刷コンテナのみを確実に表示 */
+    #print-root,
     #printArea,
     .print-container {
         display: block !important;
@@ -851,9 +881,55 @@ body {
         background: #ffffff !important;
         margin: 0 !important;
         padding: 0 !important;
+        opacity: 1 !important;
+        z-index: 999999 !important;
     }
 
+    #print-root *,
     #printArea * {
         visibility: visible !important;
+        color: #000000 !important;
+    }
+
+    .print-page {
+        width: 100% !important;
+        box-sizing: border-box !important;
+        background: #ffffff !important;
+        padding: 8px !important;
+    }
+
+    .print-page-front {
+        page-break-after: always !important;
+        break-after: page !important;
+    }
+
+    .print-page-back {
+        page-break-before: always !important;
+        break-before: page !important;
+        margin-top: 10px !important;
+    }
+
+    .print-table {
+        width: 100% !important;
+        border-collapse: collapse !important;
+        margin-bottom: 5px !important;
+        font-size: 0.775rem !important;
+        font-family: "游明朝", "Yu Mincho", serif !important;
+    }
+
+    .print-table th,
+    .print-table td {
+        border: 1px solid #000000 !important;
+        padding: 3px 6px !important;
+        color: #000000 !important;
+    }
+
+    .print-table th {
+        background-color: #f8fafc !important;
+        -webkit-print-color-adjust: exact !important;
+        print-color-adjust: exact !important;
     }
 }
+
+
+

@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react'
+import React, { useState, useMemo, useEffect } from 'react'
 import {
   KanbanBoard,
   ProcessTask,
@@ -13,9 +13,34 @@ import {
 } from '../components/features/TaskDetailModal'
 import { NewTaskModal } from '../components/features/NewTaskModal'
 import { ExportModal } from '../components/features/ExportModal'
+import { ExcelImportModal } from '../components/features/ExcelImportModal'
 import { PrintArea, PrintTaskData } from '../components/features/PrintArea'
+import { useJobs } from '../hooks/useJobs'
+
+// SupabaseのJobStatus -> KanbanBoardのProcessLaneへの変換
+const mapJobStatusToLane = (status: string): ProcessLane => {
+  switch (status) {
+    case 'received':
+      return '未着手'
+    case 'quoting':
+    case 'pending':
+      return '顧客検討'
+    case 'arranged':
+      return '作業日程調整'
+    case 'collected':
+      return '作業実施'
+    case 'billed':
+    case 'completed':
+      return '請求書送付'
+    case 'cancelled':
+      return '失注・キャンセル'
+    default:
+      return '未着手'
+  }
+}
 
 export const Dashboard: React.FC = () => {
+  const { jobs, refetch, updateJobStatus } = useJobs()
   const [tasks, setTasks] = useState<ProcessTask[]>(initialDummyTasks)
   const [viewFilter, setViewFilter] = useState<'active' | 'archived' | 'all'>('active')
 
@@ -24,9 +49,31 @@ export const Dashboard: React.FC = () => {
   const [isDetailOpen, setIsDetailOpen] = useState(false)
   const [isNewTaskOpen, setIsNewTaskOpen] = useState(false)
   const [isExportOpen, setIsExportOpen] = useState(false)
+  const [isImportOpen, setIsImportOpen] = useState(false)
 
   // 印刷データ
   const [printTask, setPrintTask] = useState<PrintTaskData | null>(null)
+
+  // Supabaseからの案件データ (jobs) が存在する場合は ProcessTask[] へ同期
+  useEffect(() => {
+    if (jobs && jobs.length > 0) {
+      const convertedTasks: ProcessTask[] = jobs.map((job) => ({
+        id: job.id,
+        receptionNo: `#${job.id.slice(0, 4)}`,
+        customer: job.customers?.name || '名称未設定',
+        tel: job.customers?.phone || '',
+        address: job.customers?.address || '',
+        taskType: job.title || '臨時収集',
+        status: mapJobStatusToLane(job.status),
+        receptionDate: job.created_at
+          ? new Date(job.created_at).toLocaleDateString('ja-JP')
+          : '',
+        updatedAt: job.updated_at || job.created_at || new Date().toISOString(),
+        stepsData: {},
+      }))
+      setTasks(convertedTasks)
+    }
+  }, [jobs])
 
   // カウント
   const counts = useMemo(() => {
@@ -36,7 +83,7 @@ export const Dashboard: React.FC = () => {
     return { active: activeCount, archived: archivedCount, all: allCount }
   }, [tasks])
 
-  // ドラッグ＆ドロップでステータス更新 (降格時のステップリセット連動付き)
+  // ドラッグ＆ドロップでステータス更新
   const handleTaskMove = (taskId: string, newStatus: ProcessLane) => {
     const nowStr = new Date().toISOString()
     setTasks((prev) =>
@@ -58,6 +105,20 @@ export const Dashboard: React.FC = () => {
         }
       })
     )
+
+    // DB側へも連動更新 (UUID形式のIDであれば)
+    const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(taskId)
+    if (isUuid) {
+      let dbStatus: any = 'received'
+      if (newStatus === '未着手') dbStatus = 'received'
+      else if (newStatus === '顧客検討') dbStatus = 'quoting'
+      else if (newStatus === '作業日程調整' || newStatus === '日程確定') dbStatus = 'arranged'
+      else if (newStatus === '作業実施') dbStatus = 'collected'
+      else if (newStatus === '請求書送付') dbStatus = 'billed'
+      else if (newStatus === '失注・キャンセル') dbStatus = 'cancelled'
+
+      updateJobStatus(taskId, dbStatus)
+    }
   }
 
   // カードクリック (詳細モーダルオープン)
@@ -74,11 +135,29 @@ export const Dashboard: React.FC = () => {
     setSelectedTask(updatedTask)
   }
 
-  // タスク削除
+  // タスクのキャンセル処理（データは消さずにキャンセルステータスへ更新）
   const handleDeleteTask = (taskId: string) => {
-    setTasks((prev) => prev.filter((t) => t.id !== taskId))
+    const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(taskId)
+    if (isUuid) {
+      updateJobStatus(taskId, 'cancelled')
+    } else {
+      setTasks((prev) =>
+        prev.map((t) => (t.id === taskId ? { ...t, status: '失注・キャンセル' } : t))
+      )
+    }
     setSelectedTask(null)
+    refetch()
   }
+
+  // 印刷データ発火用エフェクト (DOM完全描画を待ってwindow.print起動)
+  useEffect(() => {
+    if (printTask) {
+      const timer = setTimeout(() => {
+        window.print()
+      }, 250)
+      return () => clearTimeout(timer)
+    }
+  }, [printTask])
 
   // 印刷処理
   const handlePrintTask = (task: ProcessTask) => {
@@ -92,13 +171,9 @@ export const Dashboard: React.FC = () => {
       updater: task.updater || '未指定',
       stepsData: task.stepsData,
     })
-
-    setTimeout(() => {
-      window.print()
-    }, 150)
   }
 
-  // 新規タスク登録 (shouldPrintで登録後即印刷)
+  // 新規タスク登録
   const handleCreateNewTask = (
     newTaskData: Omit<ProcessTask, 'id' | 'updatedAt'>,
     shouldPrint = false
@@ -122,10 +197,7 @@ export const Dashboard: React.FC = () => {
     }
   }
 
-  // Excel出力
-  const handleExportMonth = (targetMonth: string) => {
-    alert(`【${targetMonth}】のExcel集計レポート（サマリー＆明細シート）を出力します。`)
-  }
+
 
   return (
     <div className="app-container">
@@ -151,7 +223,7 @@ export const Dashboard: React.FC = () => {
               id="importBtn"
               className="btn-secondary"
               style={{ borderColor: 'var(--accent)', color: 'var(--accent)' }}
-              onClick={() => alert('Excel読込機能：Excelファイルから一括読み込みを行います。')}
+              onClick={() => setIsImportOpen(true)}
               aria-label="Excel読込"
             >
               <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="17 8 12 3 7 8"></polyline><line x1="12" y1="3" x2="12" y2="15"></line></svg>
@@ -170,44 +242,39 @@ export const Dashboard: React.FC = () => {
         </div>
       </header>
 
-      {/* View Filter Tabs Navigation */}
-      <div className="view-tabs-container">
-        <div className="view-tabs">
-          <button
-            type="button"
-            className={`tab-btn ${viewFilter === 'active' ? 'active' : ''}`}
-            onClick={() => setViewFilter('active')}
-          >
-            📋 進行中 <span className="tab-count">{counts.active}</span>
-          </button>
-          <button
-            type="button"
-            className={`tab-btn ${viewFilter === 'archived' ? 'active' : ''}`}
-            onClick={() => setViewFilter('archived')}
-          >
-            📦 完了・過去履歴 <span className="tab-count">{counts.archived}</span>
-          </button>
-          <button
-            type="button"
-            className={`tab-btn ${viewFilter === 'all' ? 'active' : ''}`}
-            onClick={() => setViewFilter('all')}
-          >
-            🗂️ すべて <span className="tab-count">{counts.all}</span>
-          </button>
-        </div>
+      {/* View Filter Switcher Tabs */}
+      <div className="view-switcher-container" style={{ margin: '1rem 0 0.5rem 0', display: 'flex', gap: '0.5rem' }}>
+        <button
+          className={`btn-filter ${viewFilter === 'active' ? 'active' : ''}`}
+          onClick={() => setViewFilter('active')}
+        >
+          📄 進行中 <span className="badge">{counts.active}</span>
+        </button>
+        <button
+          className={`btn-filter ${viewFilter === 'archived' ? 'active' : ''}`}
+          onClick={() => setViewFilter('archived')}
+        >
+          🎨 完了・過去履歴 <span className="badge">{counts.archived}</span>
+        </button>
+        <button
+          className={`btn-filter ${viewFilter === 'all' ? 'active' : ''}`}
+          onClick={() => setViewFilter('all')}
+        >
+          📂 すべて <span className="badge">{counts.all}</span>
+        </button>
       </div>
 
-      {/* Main Kanban Board */}
-      <main className="kanban-board" style={{ flex: 1, padding: '1.25rem' }}>
+      {/* Main Kanban Content */}
+      <main className="main-layout">
         <KanbanBoard
-          viewFilter={viewFilter}
           tasks={tasks}
+          viewFilter={viewFilter}
           onTaskMove={handleTaskMove}
           onTaskClick={handleCardClick}
         />
       </main>
 
-      {/* 案件詳細モーダル */}
+      {/* Modals */}
       <TaskDetailModal
         task={selectedTask}
         isOpen={isDetailOpen}
@@ -217,21 +284,26 @@ export const Dashboard: React.FC = () => {
         onPrint={handlePrintTask}
       />
 
-      {/* 新規受付モーダル */}
       <NewTaskModal
         isOpen={isNewTaskOpen}
         onClose={() => setIsNewTaskOpen(false)}
         onSubmit={handleCreateNewTask}
       />
 
-      {/* Excel集計出力モーダル */}
       <ExportModal
         isOpen={isExportOpen}
         onClose={() => setIsExportOpen(false)}
-        onExport={handleExportMonth}
+        jobs={jobs}
+      />
+
+      {/* Excelインポートモーダル (成功時にrefetch) */}
+      <ExcelImportModal
+        isOpen={isImportOpen}
+        onClose={() => setIsImportOpen(false)}
+        onImportSuccess={() => {
+          refetch()
+        }}
       />
     </div>
   )
 }
-
-export default Dashboard

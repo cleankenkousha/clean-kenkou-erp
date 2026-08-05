@@ -270,46 +270,40 @@ const TaskCard: React.FC<TaskCardProps> = ({ task, isOverlay, onClick }) => {
       }`}
     >
       <div className={stalledInfo.borderClass}>
-        <div className="task-id">
-          #{task.id} <span className="status-badge">{task.status}</span>{' '}
-          {isEstimateUnnecessary && (
-            <span className="unnecessary-badge">📝 見積不要</span>
-          )}{' '}
-          {stalledInfo.badgeHtml}
+        {/* 上部: 顧客名（主役）と各種バッジ */}
+        <div className="flex items-start justify-between gap-1 mb-1">
+          <div className="font-bold text-main text-sm truncate leading-snug">
+            {task.customer}
+          </div>
+          <div className="flex items-center space-x-1 flex-shrink-0">
+            {isEstimateUnnecessary && (
+              <span className="px-1.5 py-0.5 rounded text-[10px] font-semibold bg-amber-100 text-amber-800 border border-amber-200">
+                見積不要
+              </span>
+            )}
+            {stalledInfo.badgeHtml}
+          </div>
         </div>
-        <div className="task-title">
-          {task.customer} - {task.taskType}
+
+        {/* 中段: 案件内容 / 依頼内容 */}
+        <div className="text-xs font-medium text-slate-700 mb-2 truncate">
+          {task.taskType}
         </div>
-        <div
-          className="task-meta"
-          style={{
-            display: 'flex',
-            flexDirection: 'column',
-            gap: '0.15rem',
-            marginTop: '0.4rem',
-          }}
-        >
-          <div
-            style={{
-              display: 'flex',
-              justifyContent: 'space-between',
-              alignItems: 'center',
-            }}
-          >
+
+        {/* 下部 (フッター): 受付日・更新・担当者 + 右端に控えめな管理ID */}
+        <div className="pt-2 border-t border-slate-100 flex items-center justify-between text-[11px] text-sub">
+          <div className="flex items-center space-x-2 truncate">
             <span>{task.receptionDate} 受付</span>
-            <span style={{ fontWeight: 600, color: 'var(--accent)' }}>
-              {task.updater || '未指定'}
-            </span>
+            {task.updater && (
+              <span className="font-semibold text-slate-700 bg-slate-100 px-1.5 py-0.5 rounded">
+                {task.updater}
+              </span>
+            )}
           </div>
-          <div
-            style={{
-              fontSize: '0.7rem',
-              color: 'var(--text-muted)',
-              textAlign: 'right',
-            }}
-          >
-            更新: {displayDate}
-          </div>
+          {/* IDは右端に小さく薄いグレーで表示 */}
+          <span className="font-mono text-[10px] text-slate-400 font-normal ml-1 flex-shrink-0" title={`最終更新: ${displayDate}`}>
+            #{task.id}
+          </span>
         </div>
       </div>
     </div>

@@ -7,6 +7,7 @@ export interface UseJobsReturn {
   isLoading: boolean
   error: string | null
   refetch: () => Promise<void>
+  addJob: (jobData: { customer_id: string; title: string; status?: JobStatus; notes?: string }) => Promise<Job | null>
   updateJobStatus: (jobId: string, newStatus: JobStatus) => Promise<boolean>
   updateJobDetails: (jobId: string, updates: Partial<Job>) => Promise<boolean>
 }
@@ -37,6 +38,38 @@ export const useJobs = (): UseJobsReturn => {
       if (showLoading) setIsLoading(false)
     }
   }, [])
+
+  const addJob = useCallback(
+    async (jobData: { customer_id: string; title: string; status?: JobStatus; notes?: string }): Promise<Job | null> => {
+      try {
+        const { data, error: insertError } = await supabase
+          .from('jobs')
+          .insert([
+            {
+              customer_id: jobData.customer_id,
+              title: jobData.title,
+              status: jobData.status || 'received',
+              notes: jobData.notes || null,
+            },
+          ])
+          .select('*, customers(name, phone, address)')
+          .single()
+
+        if (insertError) {
+          throw new Error(insertError.message)
+        }
+
+        const newJob = data as Job
+        setJobs((prev) => [newJob, ...prev])
+        return newJob
+      } catch (err: any) {
+        console.error('Failed to add job:', err)
+        setError(err.message || '案件の追加に失敗しました')
+        return null
+      }
+    },
+    []
+  )
 
   const updateJobStatus = useCallback(
     async (jobId: string, newStatus: JobStatus): Promise<boolean> => {
@@ -187,11 +220,10 @@ export const useJobs = (): UseJobsReturn => {
     isLoading,
     error,
     refetch: () => fetchJobs(true),
+    addJob,
     updateJobStatus,
     updateJobDetails,
   }
 }
-
-
 
 

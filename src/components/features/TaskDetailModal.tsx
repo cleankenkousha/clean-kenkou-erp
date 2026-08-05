@@ -241,7 +241,7 @@ export const TaskDetailModal: React.FC<TaskDetailModalProps> = ({
   }
 
   const handleDelete = () => {
-    if (confirm(`案件 #${task.id}（${task.customer}）を削除してもよろしいですか？`)) {
+    if (confirm(`案件 #${task.id}（${task.customer}）を『失注・キャンセル』として処理しますか？\n（※完全削除されず、キャンセル履歴として保存されます）`)) {
       onDelete(task.id)
       onClose()
     }
@@ -400,9 +400,9 @@ export const TaskDetailModal: React.FC<TaskDetailModalProps> = ({
             type="button"
             onClick={handleDelete}
             className="btn-secondary"
-            style={{ background: 'var(--danger)', color: 'white', borderColor: 'var(--danger)', marginRight: 'auto' }}
+            style={{ background: '#f43f5e', color: 'white', borderColor: '#f43f5e', marginRight: 'auto' }}
           >
-            削除
+            案件をキャンセル
           </button>
 
           <button

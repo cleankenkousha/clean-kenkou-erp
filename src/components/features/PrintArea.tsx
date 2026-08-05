@@ -1,4 +1,5 @@
 import React from 'react'
+import ReactDOM from 'react-dom'
 
 export interface StepsData {
   reception?: { status: string; memo: string; worker: string }
@@ -28,8 +29,18 @@ interface PrintAreaProps {
 }
 
 export const PrintArea: React.FC<PrintAreaProps> = ({ task }) => {
-  if (!task) return <div id="printArea" className="print-container"></div>
+  // ポータルのマウント先を取得（index.html の #print-root）
+  const targetElement = document.getElementById('print-root') || document.body
 
+  // タスクデータが無い場合は空の印刷コンテナを出力
+  if (!task) {
+    return ReactDOM.createPortal(
+      <div id="printArea" className="print-container"></div>,
+      targetElement
+    )
+  }
+
+  // ステップデータの抽出
   const steps = task.stepsData || {}
 
   const receptionWorker = steps.reception?.worker || task.updater || ''
@@ -41,7 +52,7 @@ export const PrintArea: React.FC<PrintAreaProps> = ({ task }) => {
   const estimateSubmitMemo = steps.estimate_submit?.memo || ''
   const workScheduleMemo = steps.work_schedule?.memo || ''
 
-  // 全特記事項を結合
+  // 全ステップの特記事項を結合
   const allMemos = [
     steps.reception?.memo ? `【受付伝言】${steps.reception.memo}` : '',
     steps.estimate_schedule?.memo ? `【見積日程】${steps.estimate_schedule.memo}` : '',
@@ -54,31 +65,32 @@ export const PrintArea: React.FC<PrintAreaProps> = ({ task }) => {
     steps.invoice_sent?.memo ? `【請求書送付】${steps.invoice_sent.memo}` : '',
   ].filter(Boolean).join('\n')
 
-  return (
+  // Portal経由で #print-root 直下にレンダリング
+  return ReactDOM.createPortal(
     <div id="printArea" className="print-container">
-      {/* 表面 (A4 1ページ目) */}
+      {/* 表面 (A4 1ページ目: 臨時収集依頼書) */}
       <div className="print-page print-page-front">
         <div className="print-header-row">
           <h1 className="print-title">
-            臨時収集依頼書<span className="print-subtitle">（ホッチキス止めるときは、この紙を表に）</span>
+            臨時収集依頼書<span className="print-subtitle">（ホッチキス止めするときは、この紙を表に）</span>
           </h1>
           <div className="print-signatures">
             <div className="sig-box">
               <div className="sig-title">受付責任者</div>
-              <div className="sig-name">（{receptionWorker}）</div>
+              <div className="sig-name">（　{receptionWorker}　）</div>
             </div>
             <div className="sig-box">
               <div className="sig-title">現地調査・見積責任者</div>
-              <div className="sig-name">（{estimateWorker}）</div>
+              <div className="sig-name">（　{estimateWorker}　）</div>
             </div>
             <div className="sig-box">
               <div className="sig-title">作業責任者</div>
-              <div className="sig-name">（{workWorker}）</div>
+              <div className="sig-name">（　{workWorker}　）</div>
             </div>
           </div>
         </div>
 
-        {/* Table 1: 基本情報 */}
+        {/* 基本情報 */}
         <table className="print-table table-section1">
           <tbody>
             <tr>
@@ -108,14 +120,16 @@ export const PrintArea: React.FC<PrintAreaProps> = ({ task }) => {
           </tbody>
         </table>
 
-        {/* Table 2: 見積・事前確認情報 */}
+        {/* 見積・事前に確認すべき事項 */}
         <table className="print-table table-section2">
           <tbody>
             <tr>
               <th style={{ width: '14%' }}>見積日</th>
               <td style={{ width: '36%' }}>{estimateDate}</td>
               <th style={{ width: '15%' }}>見積額</th>
-              <td style={{ width: '35%' }} className="font-large">{estimateSubmitMemo}</td>
+              <td style={{ width: '35%' }} className="font-large">
+                {estimateSubmitMemo ? `口頭 (${estimateSubmitMemo})` : '別紙　口頭 (　　　　　　　)'}
+              </td>
             </tr>
             <tr>
               <th>現場状況</th>
@@ -123,7 +137,7 @@ export const PrintArea: React.FC<PrintAreaProps> = ({ task }) => {
             </tr>
             <tr>
               <th>予定台数</th>
-              <td>2ｔなら　　　　台分</td>
+              <td>2ｔなら　　　台分</td>
               <th>予定人員</th>
               <td>　　人で　　日間（1日は午後～として）</td>
             </tr>
@@ -137,13 +151,15 @@ export const PrintArea: React.FC<PrintAreaProps> = ({ task }) => {
               <th>報告書/マニ伝</th>
               <td>不要　必要（　　　　　） 写真： 不要　必要</td>
               <th>回収予定日</th>
-              <td>{workScheduleMemo} （連絡済：口OK）</td>
+              <td>
+                {workScheduleMemo || '　　年　　月　　日'} <span style={{ fontSize: '0.75rem', color: '#475569' }}>（日程連絡 OK記入: 　　）</span>
+              </td>
             </tr>
             <tr>
               <th>外注作業</th>
-              <td>なし　あり（　　　　　） 手配： 口OK</td>
+              <td>なし　あり（　　　　　） 外注手配： 口OK</td>
               <th>アンケート</th>
-              <td>依頼したい　不要　立ち合い： あり　なし</td>
+              <td>依頼したい　不要　当日立ち合い： あり　なし</td>
             </tr>
             <tr>
               <th>請求先</th>
@@ -157,18 +173,18 @@ export const PrintArea: React.FC<PrintAreaProps> = ({ task }) => {
             <tr>
               <th>特記事項</th>
               <td colSpan={3} className="print-memos-cell">
-                <div style={{ whiteSpace: 'pre-wrap' }}>{allMemos}</div>
+                <div style={{ whiteSpace: 'pre-wrap', minHeight: '60px' }}>{allMemos || '/  /  /  /  /  /'}</div>
               </td>
             </tr>
           </tbody>
         </table>
       </div>
 
-      {/* 裏面 (A4 2ページ目) */}
+      {/* 裏面 (A4 2ページ目: 現場作業実績・回収結果記入欄) */}
       <div className="print-page print-page-back">
         <div className="print-header-row">
           <h2 className="print-title">【現場作業実績・回収結果記入欄】</h2>
-          <div style={{ fontSize: '0.75rem' }}>管理番号: {task.receptionNo}</div>
+          <div style={{ fontSize: '0.75rem', fontWeight: 'bold' }}>管理番号: {task.receptionNo}</div>
         </div>
 
         <table className="print-table table-section3">
@@ -176,100 +192,107 @@ export const PrintArea: React.FC<PrintAreaProps> = ({ task }) => {
             <tr>
               <th style={{ width: '15%' }}>アンケート</th>
               <td style={{ width: '35%' }}>回収済　　未回収</td>
-              <th style={{ width: '15%' }}>当日の状況</th>
-              <td style={{ width: '35%' }}>増えた　　減った　　変化なし</td>
+              <th style={{ width: '20%' }}>当日の状況（見積時より）</th>
+              <td style={{ width: '30%' }}>増えた　　減った　　変化なし</td>
             </tr>
             <tr>
               <th>請求・支払い</th>
-              <td colSpan={3} style={{ fontSize: '0.8rem', color: '#475569', height: '40px', verticalAlign: 'top' }}>
-                ※お客様から請求や支払に関して何か言われた場合に記入（特になければ未記入OK）
+              <td colSpan={3} style={{ fontSize: '0.775rem', color: '#475569', height: '42px', verticalAlign: 'top' }}>
+                ※お客様から請求や支払に関して何か言われた場合に記入。何も言われなければ未記入でOK
               </td>
             </tr>
             <tr>
               <th>延べ業務時間</th>
-              <td colSpan={3}>　　　人 ×　　Host ×　　　日間 ＝ 延べ　　　　人・h</td>
+              <td colSpan={3} style={{ fontSize: '0.825rem' }}>
+                ※3人×3h×2日間なら3×3×2＝18人・ｈと記入 ／ 　　人 × 　　h × 　　日 ＝ 延べ 　　　人・ｈ
+              </td>
             </tr>
           </tbody>
         </table>
 
-        <table className="print-table table-items" style={{ marginTop: '6px' }}>
+        {/* 収集品目・数量テーブル */}
+        <table className="print-table table-items" style={{ marginTop: '8px' }}>
           <thead>
             <tr>
-              <th style={{ width: '15%' }}>分類</th>
-              <th style={{ width: '25%' }}>品目名</th>
-              <th style={{ width: '45%' }}>回収重量・個数記録</th>
+              <th style={{ width: '18%' }}>分類</th>
+              <th style={{ width: '27%' }}>品目名</th>
+              <th style={{ width: '40%' }}>回収重量・個数記録</th>
               <th style={{ width: '15%' }}>確認</th>
             </tr>
           </thead>
           <tbody>
             <tr>
-              <td rowSpan={3} className="center">組合搬入分</td>
+              <td rowSpan={3} className="center font-bold">組合搬入分</td>
               <td>金物・危険物</td>
-              <td>　　　　　　　　　kg</td>
+              <td>　　　　　　　　　　　　kg</td>
               <td></td>
             </tr>
             <tr>
               <td>不燃粗大</td>
-              <td>　　　　　　　　　kg</td>
+              <td>　　　　　　　　　　　　kg</td>
               <td></td>
             </tr>
             <tr>
               <td>びん類</td>
-              <td>　　　　　　　　　kg</td>
+              <td>　　　　　　　　　　　　kg</td>
               <td></td>
             </tr>
             <tr>
-              <td className="center">４家電</td>
+              <td className="center font-bold">４家電</td>
               <td>冷蔵庫/洗濯機/TV/エアコン</td>
-              <td>総重量:　　　kg / 種類・台数:　　　　</td>
+              <td>総重量:　　　kg ／ 種類・台数:　　　　</td>
               <td></td>
             </tr>
             <tr>
-              <td rowSpan={6} className="center">その他自社処理</td>
+              <td rowSpan={6} className="center font-bold">その他自社処理</td>
               <td>可燃物</td>
-              <td>　　　　　　　　　kg</td>
+              <td>　　　　　　　　　　　　Kg</td>
               <td></td>
             </tr>
             <tr>
               <td>可燃粗大</td>
-              <td>　　　　　　　　　kg</td>
+              <td>　　　full　　　　　　Kg</td>
               <td></td>
             </tr>
             <tr>
               <td>木くず</td>
-              <td>　　　　　　kg</td>
+              <td>　　　　　　　　　　　　Kg</td>
               <td></td>
             </tr>
             <tr>
               <td>陶器くず</td>
-              <td>　　　　　　　　　kg</td>
+              <td>　　　　　　　　　　　　Kg</td>
               <td></td>
             </tr>
             <tr>
               <td>廃プラ</td>
-              <td>　　　　　　　　　kg</td>
+              <td>　　　　　　　　　　　　Kg</td>
               <td></td>
             </tr>
             <tr>
               <td>混合廃棄物</td>
-              <td>　　　　　　kg</td>
+              <td>　　　　　　　　　　　　Kg</td>
               <td></td>
             </tr>
             <tr>
-              <td className="center">搬出作業</td>
+              <td className="center font-bold">搬出作業</td>
               <td>作業の有無・搬出量</td>
-              <td>なし　あり（　　　　） / 搬出量:　　　㎥</td>
+              <td>なし　あり（　　　　　） ／ 搬出量:　　　㎥</td>
               <td></td>
             </tr>
           </tbody>
         </table>
 
-        <div className="print-memo-box">
+        {/* 現場メモ欄 */}
+        <div className="print-memo-box" style={{ marginTop: '10px' }}>
           <div style={{ fontWeight: 'bold', fontSize: '0.85rem', marginBottom: '4px' }}>
-            現場メモ欄（作業上の特記事項・お客様サイン等）:
+            メモ（作業上の特記事項・現場連絡等）:
+          </div>
+          <div style={{ height: '80px', borderTop: '1px dashed #cbd5e1', paddingTop: '4px' }}>
           </div>
         </div>
       </div>
-    </div>
+    </div>,
+    targetElement
   )
 }

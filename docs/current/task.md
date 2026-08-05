@@ -33,7 +33,14 @@
   - Googleマップ連携リンク
 - [x] 新規受付入力モーダル (`NewTaskModal.tsx`)
 - [x] Excel集計出力モーダル (`ExportModal.tsx`)
-- [x] 臨時収集依頼書 R8.3.2 完全再現 A4両面指示書印刷機能 (`PrintArea.tsx`)
+- [x] **臨時収集依頼書 R8.3.2 完全再現 A4両面指示書印刷機能 (`PrintArea.tsx`)**
+  - **【完了】元アプリ `style.css` の `@media print` 非表示定義（画面上モーダル・ヘッダー・メイン要素の一括隠蔽）および DOM 退避構造の 100% 完全移植・印字確認完了**
+
+### 5. 新規管理ページの追加実装
+- [x] 案件一覧画面 (`src/pages/Jobs.tsx`)
+- [x] 顧客管理画面 (`src/pages/Customers.tsx`, `CustomerModal.tsx`)
+- [x] システム設定画面 (`src/pages/Settings.tsx`)
+- [x] Excel一括インポート機能 (`ExcelImportModal.tsx`)
 
 ---
 
@@ -42,6 +49,7 @@
 - [ ] **1. 細かなUI/UXの微調整**:
   - 画面表示や文字間隔、ボタン配置などユーザーの実際の使用感に基づく細かなデザイン微調整
 - [ ] **2. Supabase データベースとの完全接続・同期**:
-  - 現在のフロントエンド動作（ダミーデータ含む）から、Supabase `jobs` テーブルへの永続化保存および `onAuthStateChange` / Realtime サブスクリプションとの結合
-- [ ] **3. Excel読込・出力の本格実装**:
-  - `.xlsx` ファイルからの案件データ一括インポート処理の実装
+  - Supabase `jobs`, `customers`, `profiles` テーブルへのデータ永続化保存およびリアルタイムサブスクリプションとの結合
+- [ ] **3. Excelインポート機能の試用・動作検証**:
+  - 実際の `.xlsx` ファイル（臨時収集工程チェックシート）を取り込んでの顧客・案件登録テスト
+
