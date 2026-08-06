@@ -1,58 +1,64 @@
 # Clean KENKOU ERP 開発進捗と次回残課題
 
+最終更新日時: 2026-08-06
+
+---
+
 ## 📅 本日の実施内容・進捗
 
-### 1. GitHub 経由での自動バージョンアップ（CI/CDデプロイ）環境の構築
-- [x] **GitHub リポジトリ連携の設定**
-  - リモートリポジトリ（`https://github.com/cleankenkousha/clean-kenkou-erp.git`）の接続登録
-  - ローカルコードのコミットおよび GitHub `main` ブランチへの初回送信（`git push`）の完了
-- [x] **ワンクリック送信ツールの作成**
-  - プロジェクト直下に `GitHubへ送信.bat` を作成（ダブルクリックするだけで GitHub への送信が完了する仕組み）
-- [x] **Netlify と GitHub の全自動デプロイ連携**
-  - Netlify サイト（「無敵の黄昏-7A7E01」）のリポジトリ接続先を旧リポジトリから新リポジトリ `cleankenkousha/clean-kenkou-erp` へ切り替え完了
-  - ビルド設定（ビルドコマンド: `npm run build` / 公開ディレクトリ: `dist`）の自動認識・設定完了
+### 1. Supabase データベーススキーマ・権限 (`schema.sql`) の修復と最適化
+- [x] **`CREATE OR REPLACE TRIGGER` 構文の互換性修正**
+  - PostgreSQL 14 未満や一部のSQLパース環境で発生する `syntax error at or near "OR"` を解消するため、標準的な `DROP TRIGGER IF EXISTS` ＋ `CREATE TRIGGER` 形式へ統一。
+- [x] **`SECURITY DEFINER` 関数のセキュリティ警告解消**
+  - `handle_new_user()` 関数に `SET search_path = public` を追加し、Supabase DB Lint セキュリティアドバイザリの警告・エラーを解消。
+- [x] **`profiles` テーブル制約の柔軟化**
+  - `profiles.id` の外部キー制約を任意化し、ログインアカウントを持たない社内スタッフ（現場作業員・ドライバー等）も自由自在に登録・編集・削除できるように改修。
+- [x] **RLS (Row Level Security) ポリシーの統一**
+  - 全テーブル（`profiles`, `customers`, `jobs`, `spot_collections`, `invoices`）に対し、安全かつ二重実行可能なポリシー設計を適用。
 
-### 2. システム全体チェックとバグ修正
-- [x] `useJobs.ts` 内 `updateJobDetails` のローカルステート上書き不整合を修正
-- [x] デッドコード `src/pages/DashboardPage.tsx` を削除
-- [x] `JobReceptionForm.tsx` の任意項目から不要な `requiredMark` を削除
-- [x] `.env` が `.gitignore` に登録されていることを確認
+### 2. ユーザープロフィール（社内スタッフ管理）の業務活用・役割拡張
+- [x] **役割（ロール / 担当区分）の5区分拡張**
+  - 『現場作業員』『配車担当』『営業担当』『事務担当』『管理者』の5つの役割を導入。設定画面で自由に登録・インライン変更可能に機能強化。
+- [x] **新規案件受付フォーム (`JobReceptionForm.tsx`) への担当者割り当て**
+  - 受付時に「担当スタッフ（作業ドライバー/受付担当）」を選択できるドロップダウンを追加。
+- [x] **案件一覧画面 (`Jobs.tsx`) への担当スタッフ表示・絞り込み**
+  - 案件一覧テーブルに「担当スタッフ」列を追加。
+  - 検索バー横に「担当者で絞り込み」ドロップダウン（すべての担当者 / 未割当 / スタッフ名）を実装。
+- [x] **案件詳細モーダル (`TaskDetailModal.tsx`) でのサジェスト連携**
+  - 登録スタッフ一覧からの選択 ＋ 直接入力連動機能を追加。
+- [x] **CSVエクスポート対応**
+  - CSV出力に「担当スタッフ」列を自動追加。
+- [x] **堅牢な同期構造 (`useProfiles.ts`)**
+  - UI上の即時反映 ＋ ローカルストレージ（`localStorage`）自動バックアップを組み込み、通信環境に依存しない安定動作を実現。
 
-### 3. Supabase Auth ログイン認証 & アクセス制御
-- [x] `src/pages/Login.tsx` (ログイン画面) の作成
-- [x] `src/components/ui/ProtectedRoute.tsx` (認証ガードコンポーネント) の作成
-- [x] `src/App.tsx` で未ログインユーザーのアクセス制御（`/login` へ強制リダイレクト）を適用
-- [x] `src/components/ui/Layout.tsx` のヘッダーにログアウトボタンを設置
-- [x] 本番用 RLS (Row Level Security) 設定用 SQL の作成提示
+### 3. Googleマップ・ナビゲーション（ルート案内）連携機能の全画面実装
+- [x] **共通マップ連携コンポーネント `src/components/ui/MapLink.tsx` の新規作成**
+  - 住所文字列から Google マップ検索 URL（`maps/search`）およびルート案内 URL（`maps/dir`）を自動生成するコンポーネントを作成。
+- [x] **新規受付フォーム (`JobReceptionForm.tsx`)**
+  - 回収場所（住所）入力時に「🗺️ Googleマップで確認」および「🚗 ルート案内 (ナビ)」のリアルタイムアクションボタンを追加。
+- [x] **案件一覧画面 (`Jobs.tsx`) & 顧客管理画面 (`Customers.tsx`)**
+  - テーブル内の住所セルにワンタップで地図が開く「📍マップ」バッジを設置。
+- [x] **案件詳細モーダル (`TaskDetailModal.tsx`)**
+  - 住所・現場アクセス欄にマップ確認とナビゲーション起動ボタンを標準搭載。
 
-### 4. Netlify デプロイ環境の初期構築
-- [x] `netlify.toml` の作成 (SPAビルドおよびルーティングリダイレクト)
-- [x] `public/_redirects` の作成 (Netlify 上での 404 エラー防止)
-- [x] `npm run build` で `dist` への出力が正常であることを検証
+---
 
-### 5. 「臨時収集工程アプリ」の 100% 完全移植 & 統合
-- [x] 元アプリの全スタイル (`style.css`) を `src/index.css` に 100% 完全適用
-- [x] 7レーン対応カンバンボード (`src/components/features/KanbanBoard.tsx`)
-- [x] 9ステップ工程チェックリスト & 各伝言メモ付き詳細モーダル (`TaskDetailModal.tsx`)
-- [x] 新規受付入力モーダル (`NewTaskModal.tsx`)
-- [x] Excel集計出力モーダル (`ExportModal.tsx`)
-- [x] **臨時収集依頼書 R8.3.2 完全再現 A4両面指示書印刷機能 (`PrintArea.tsx`)**
-
-### 6. 新規管理ページの追加実装
-- [x] 案件一覧画面 (`src/pages/Jobs.tsx`)
-- [x] 顧客管理画面 (`src/pages/Customers.tsx`, `CustomerModal.tsx`)
-- [x] システム設定画面 (`src/pages/Settings.tsx`)
-- [x] Excel一括インポート機能 (`ExcelImportModal.tsx`)
+### 4. 過去の完了項目（引き継ぎアーカイブ）
+- [x] GitHub リポジトリ連携 & ワンクリック送信ツール (`GitHubへ送信.bat`) の構築
+- [x] Netlify デプロイ環境の初期構築 (`netlify.toml`, `public/_redirects`)
+- [x] Supabase Auth ログイン認証 & 認証ガード (`Login.tsx`, `ProtectedRoute.tsx`)
+- [x] 臨時収集工程アプリの 100% 完全移植（カンバンボード, A4両面指示書印刷 `PrintArea.tsx`）
+- [x] 各種マスター管理（顧客管理, 単価マスタ, Excelインポート）
 
 ---
 
 ## 📌 次回やるべき残課題
 
-- [ ] **1. Netlify クレジット復活後のデプロイ状態・動作確認**:
-  - Netlify の毎月クレジットリセット（または運用クレジット復活）後、GitHub にコミットされた最新コードで自動デプロイが正常完了することの検証・動作確認
-- [ ] **2. Supabase データベースとの完全接続・リアルタイム同期・疎通テスト**:
-  - 受付登録、カンバン操作、ステップ更新、顧客情報の登録・編集が Supabase `jobs`, `customers`, `profiles` テーブルとリアルタイムに保存・同期されることを動作検証・微調整
-- [ ] **3. Excelインポート機能の試用・動作検証**:
-  - 実際の `.xlsx` ファイル（臨時収集工程チェックシート）を取り込んでの顧客・案件一括登録テスト
-- [ ] **4. 細かな UI/UX およびレスポンシブ表示の最終調整**:
-  - 各種画面表示、文字間隔、ボタン配置、メッセージ表示などの動作検証と細かなデザイン微調整
+- [ ] **1. Netlify / 本番環境デプロイ状態の最終動作確認**:
+  - `GitHubへ送信.bat` または `git push` 後の GitHub 連携および Netlify 本番サーバーでの自動デプロイ成果物の最終検証・疎通テスト。
+- [ ] **2. スポット回収実績 (`spot_collections`) & 現場写真アップロード機能の拡張**:
+  - 現場での写真撮影・写真保存機能と Supabase Storage（ストレージバケット）連携の検討・実装。
+- [ ] **3. 請求データ (`invoices`) および集計・請求書発行機能**:
+  - `invoices` テーブルと連携した請求ステータス管理、売上集計グラフ、PDF/印刷フォーマットの強化。
+- [ ] **4. 現場運用データのテスト・定着化**:
+  - 実際の案件データ・現場指示書のプリントアウト・マップナビ連携を実作業で試用し、フィードバックに基づく調整。

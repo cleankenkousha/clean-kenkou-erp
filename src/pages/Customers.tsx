@@ -4,18 +4,16 @@ import {
   Search,
   Plus,
   Phone,
-  MapPin,
   Edit2,
   Trash2,
   Briefcase,
-  ExternalLink,
   UserCheck,
   Building2,
   RefreshCw,
 } from 'lucide-react'
 import { useCustomers, CustomerWithJobCount } from '../hooks/useCustomers'
 import { CustomerModal } from '../components/features/CustomerModal'
-import { Input, Button } from '../components/ui'
+import { Input, Button, MapLink } from '../components/ui'
 
 export const Customers: React.FC = () => {
   const { customers, isLoading, error, refetch, addCustomer, updateCustomer, deleteCustomer } =
@@ -240,19 +238,12 @@ export const Customers: React.FC = () => {
                     {/* 住所 */}
                     <td className="py-3.5 px-4 text-sub">
                       {customer.address ? (
-                        <a
-                          href={`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(
-                            customer.address
-                          )}`}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="flex items-center space-x-1.5 text-slate-700 hover:text-blue-600 transition-colors max-w-[260px] truncate"
-                          title="Google Mapで開く"
-                        >
-                          <MapPin className="w-3.5 h-3.5 text-sub flex-shrink-0" />
-                          <span className="truncate">{customer.address}</span>
-                          <ExternalLink className="w-3 h-3 text-sub flex-shrink-0 opacity-0 group-hover:opacity-100 transition-opacity" />
-                        </a>
+                        <div className="flex items-center space-x-2">
+                          <span className="truncate max-w-[220px] text-slate-700 font-medium">
+                            {customer.address}
+                          </span>
+                          <MapLink address={customer.address} variant="badge" />
+                        </div>
                       ) : (
                         <span className="text-slate-300">-</span>
                       )}

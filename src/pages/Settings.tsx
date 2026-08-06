@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react'
+import { useLocation, useNavigate } from 'react-router-dom'
 import {
   Settings as SettingsIcon,
   Building2,
@@ -15,8 +16,12 @@ import {
   Sparkles,
   Cloud,
   RefreshCw,
+  ArrowLeft,
+  Calculator,
+  ArrowUp,
+  ArrowDown,
 } from 'lucide-react'
-import { useProfiles } from '../hooks/useProfiles'
+import { useProfiles, getRoleInfo, StaffRole } from '../hooks/useProfiles'
 import { useJobs } from '../hooks/useJobs'
 import { useCustomers } from '../hooks/useCustomers'
 import { useCompanySettings, CompanyInfo, DEFAULT_COMPANY_INFO } from '../hooks/useCompanySettings'
@@ -24,7 +29,14 @@ import { usePriceMaster } from '../hooks/usePriceMaster'
 import { Input, Button } from '../components/ui'
 
 export const Settings: React.FC = () => {
-  const [activeTab, setActiveTab] = useState<'company' | 'staff' | 'items' | 'backup'>('company')
+  const location = useLocation()
+  const navigate = useNavigate()
+  const isReturnFromQuote = Boolean(location.state?.returnToQuote)
+
+  const [activeTab, setActiveTab] = useState<'company' | 'staff' | 'items' | 'backup'>(
+    isReturnFromQuote ? 'items' : 'company'
+  )
+
 
   // 1. 自社情報（クラウド保存対応フック）
   const { companyInfo, updateCompanyInfo, isSyncing: isSyncingCompany } = useCompanySettings()
@@ -38,8 +50,10 @@ export const Settings: React.FC = () => {
   }, [companyInfo])
 
   // 2. スタッフ・担当者
-  const { profiles, isLoading: isLoadingProfiles, updateProfile, addStaff } = useProfiles()
+  const { profiles, isLoading: isLoadingProfiles, updateProfile, addStaff, deleteStaff } = useProfiles()
   const [newStaffName, setNewStaffName] = useState('')
+  const [newStaffRole, setNewStaffRole] = useState<StaffRole>('operator')
+  const [isSavedStaff, setIsSavedStaff] = useState(false)
 
   // 3. 単価マスタ（クラウド保存対応フック）
   const {
@@ -47,9 +61,12 @@ export const Settings: React.FC = () => {
     addItem,
     updateItemPrice,
     deleteItem,
+    moveItemUp,
+    moveItemDown,
     resetToDefaults,
     isSyncing: isSyncingItems,
   } = usePriceMaster()
+
 
   const [newItemCategory, setNewItemCategory] = useState('組合搬入分')
   const [newItemName, setNewItemName] = useState('')
@@ -74,9 +91,19 @@ export const Settings: React.FC = () => {
   const handleAddStaff = async (e: React.FormEvent) => {
     e.preventDefault()
     if (!newStaffName.trim()) return
-    const success = await addStaff(newStaffName.trim())
+    const success = await addStaff(newStaffName.trim(), newStaffRole)
     if (success) {
       setNewStaffName('')
+      setIsSavedStaff(true)
+      setTimeout(() => setIsSavedStaff(false), 4000)
+    }
+  }
+
+  const handleDeleteStaff = async (id: string, name: string) => {
+    if (confirm(`スタッフ「${name}」を削除してもよろしいですか？`)) {
+      await deleteStaff(id)
+      setIsSavedStaff(true)
+      setTimeout(() => setIsSavedStaff(false), 4000)
     }
   }
 
@@ -198,11 +225,25 @@ export const Settings: React.FC = () => {
           </p>
         </div>
 
-        <div className="flex items-center space-x-2 bg-slate-50 border border-slate-200 px-3 py-2 rounded-lg text-xs text-slate-700">
-          <Cloud className="w-4 h-4 text-emerald-600 animate-pulse" />
-          <span className="font-semibold">クラウド全社同期モード（他の方の画面にも即時反映）</span>
+        <div className="flex flex-wrap items-center gap-2">
+          {/* 見積作成から移動してきた場合、または現場用に戻るアクションボタン */}
+          <Button
+            type="button"
+            className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs py-2 px-3 shadow-md flex items-center space-x-1.5"
+            onClick={() => navigate('/jobs', { state: { openQuoteModal: true } })}
+          >
+            <ArrowLeft className="w-4 h-4" />
+            <Calculator className="w-4 h-4" />
+            <span>← 見積作成画面に戻る</span>
+          </Button>
+
+          <div className="flex items-center space-x-2 bg-slate-50 border border-slate-200 px-3 py-2 rounded-lg text-xs text-slate-700">
+            <Cloud className="w-4 h-4 text-emerald-600 animate-pulse" />
+            <span className="font-semibold">クラウド全社同期</span>
+          </div>
         </div>
       </div>
+
 
       {/* 2. Navigation Tabs */}
       <div className="flex items-center space-x-2 border-b border-border bg-white px-4 rounded-xl border shadow-sm overflow-x-auto">
@@ -418,6 +459,17 @@ export const Settings: React.FC = () => {
             </div>
 
             <form onSubmit={handleAddStaff} className="flex items-center space-x-2">
+              <select
+                value={newStaffRole}
+                onChange={(e) => setNewStaffRole(e.target.value as StaffRole)}
+                className="p-2 border border-border rounded-lg text-xs bg-white text-main font-medium focus:outline-none focus:ring-2 focus:ring-slate-900"
+              >
+                <option value="operator">現場作業員</option>
+                <option value="dispatcher">配車担当</option>
+                <option value="sales">営業担当</option>
+                <option value="clerk">事務担当</option>
+                <option value="admin">管理者</option>
+              </select>
               <Input
                 type="text"
                 placeholder="新しいスタッフ名を入力..."
@@ -432,6 +484,13 @@ export const Settings: React.FC = () => {
             </form>
           </div>
 
+          {isSavedStaff && (
+            <div className="p-3 bg-emerald-50 border border-emerald-200 text-emerald-800 rounded-lg text-xs font-semibold flex items-center gap-2 shadow-sm">
+              <CheckCircle2 className="w-4 h-4 text-emerald-600" />
+              <span>担当者・スタッフ情報が更新・保存されました</span>
+            </div>
+          )}
+
           {isLoadingProfiles ? (
             <p className="text-xs text-sub py-4">スタッフ一覧を読み込んでいます...</p>
           ) : (
@@ -440,7 +499,7 @@ export const Settings: React.FC = () => {
                 <thead className="bg-slate-50 text-sub border-b border-border">
                   <tr>
                     <th className="py-3 px-4">表示名（スタッフ名）</th>
-                    <th className="py-3 px-4">役割 / 権限</th>
+                    <th className="py-3 px-4">役割 / 担当区分</th>
                     <th className="py-3 px-4 text-right">操作</th>
                   </tr>
                 </thead>
@@ -452,40 +511,68 @@ export const Settings: React.FC = () => {
                       </td>
                     </tr>
                   ) : (
-                    profiles.map((profile) => (
-                      <tr key={profile.id} className="hover:bg-slate-50">
-                        <td className="py-3 px-4 font-semibold text-main">
-                          {profile.display_name || '名前未設定'}
-                        </td>
-                        <td className="py-3 px-4">
-                          <span
-                            className={`inline-flex items-center px-2 py-0.5 rounded text-[11px] font-medium ${
-                              profile.role === 'admin'
-                                ? 'bg-purple-100 text-purple-800'
-                                : 'bg-slate-100 text-slate-700'
-                            }`}
-                          >
-                            <ShieldCheck className="w-3 h-3 mr-1" />
-                            {profile.role === 'admin' ? '管理者' : '作業オペレーター'}
-                          </span>
-                        </td>
-                        <td className="py-3 px-4 text-right">
-                          <Button
-                            type="button"
-                            variant="outline"
-                            size="sm"
-                            onClick={() => {
-                              const newName = prompt('表示名を入力してください', profile.display_name || '')
-                              if (newName !== null) {
-                                updateProfile(profile.id, { display_name: newName.trim() })
-                              }
-                            }}
-                          >
-                            名前を変更
-                          </Button>
-                        </td>
-                      </tr>
-                    ))
+                    profiles.map((profile) => {
+                      const roleInfo = getRoleInfo(profile.role)
+
+                      return (
+                        <tr key={profile.id} className="hover:bg-slate-50">
+                          <td className="py-3 px-4 font-semibold text-main">
+                            {profile.display_name || '名前未設定'}
+                          </td>
+                          <td className="py-3 px-4">
+                            <div className="flex items-center space-x-2">
+                              <span
+                                className={`inline-flex items-center px-2.5 py-0.5 rounded text-[11px] font-semibold border ${roleInfo.style}`}
+                              >
+                                <ShieldCheck className="w-3 h-3 mr-1" />
+                                {roleInfo.label}
+                              </span>
+                              <select
+                                value={profile.role}
+                                onChange={async (e) => {
+                                  await updateProfile(profile.id, { role: e.target.value as StaffRole })
+                                  setIsSavedStaff(true)
+                                  setTimeout(() => setIsSavedStaff(false), 4000)
+                                }}
+                                className="p-1 border border-border rounded text-[11px] bg-white text-main font-medium focus:outline-none focus:ring-1 focus:ring-slate-900"
+                              >
+                                <option value="operator">現場作業員</option>
+                                <option value="dispatcher">配車担当</option>
+                                <option value="sales">営業担当</option>
+                                <option value="clerk">事務担当</option>
+                                <option value="admin">管理者</option>
+                              </select>
+                            </div>
+                          </td>
+                          <td className="py-3 px-4 text-right space-x-1">
+                            <Button
+                              type="button"
+                              variant="outline"
+                              size="sm"
+                              onClick={async () => {
+                                const newName = prompt('表示名を入力してください', profile.display_name || '')
+                                if (newName !== null && newName.trim()) {
+                                  await updateProfile(profile.id, { display_name: newName.trim() })
+                                  setIsSavedStaff(true)
+                                  setTimeout(() => setIsSavedStaff(false), 4000)
+                                }
+                              }}
+                            >
+                              名前を変更
+                            </Button>
+                            <Button
+                              type="button"
+                              variant="outline"
+                              size="sm"
+                              onClick={() => handleDeleteStaff(profile.id, profile.display_name || 'スタッフ')}
+                              className="hover:bg-rose-50 hover:text-rose-700 hover:border-rose-200"
+                            >
+                              <Trash2 className="w-3 h-3 text-rose-500" />
+                            </Button>
+                          </td>
+                        </tr>
+                      )
+                    })
                   )}
                 </tbody>
               </table>
@@ -617,6 +704,7 @@ export const Settings: React.FC = () => {
             <table className="w-full text-left text-xs">
               <thead className="bg-slate-50 text-sub border-b border-border font-semibold">
                 <tr>
+                  <th className="py-3 px-3 text-center w-16">順序</th>
                   <th className="py-3 px-4">分類</th>
                   <th className="py-3 px-4">品目名</th>
                   <th className="py-3 px-4">単位</th>
@@ -627,13 +715,35 @@ export const Settings: React.FC = () => {
               <tbody className="divide-y divide-border">
                 {items.length === 0 ? (
                   <tr>
-                    <td colSpan={5} className="py-6 text-center text-sub">
+                    <td colSpan={6} className="py-6 text-center text-sub">
                       品目マスタが登録されていません。「品目を新規追加」ボタンから追加してください。
                     </td>
                   </tr>
                 ) : (
-                  items.map((item) => (
+                  items.map((item, idx) => (
                     <tr key={item.id} className="hover:bg-slate-50 transition-colors">
+                      <td className="py-2 px-2 text-center">
+                        <div className="flex items-center justify-center space-x-1">
+                          <button
+                            type="button"
+                            disabled={idx === 0}
+                            onClick={() => moveItemUp(idx)}
+                            className="p-1 hover:bg-slate-200 rounded disabled:opacity-30 transition-colors text-slate-700"
+                            title="上に移動"
+                          >
+                            <ArrowUp className="w-3.5 h-3.5" />
+                          </button>
+                          <button
+                            type="button"
+                            disabled={idx === items.length - 1}
+                            onClick={() => moveItemDown(idx)}
+                            className="p-1 hover:bg-slate-200 rounded disabled:opacity-30 transition-colors text-slate-700"
+                            title="下に移動"
+                          >
+                            <ArrowDown className="w-3.5 h-3.5" />
+                          </button>
+                        </div>
+                      </td>
                       <td className="py-3 px-4 text-sub font-medium">{item.category}</td>
                       <td className="py-3 px-4 font-bold text-main">{item.name}</td>
                       <td className="py-3 px-4 text-sub">{item.unit}</td>
@@ -667,6 +777,7 @@ export const Settings: React.FC = () => {
                 )}
               </tbody>
             </table>
+
           </div>
         </div>
       )}

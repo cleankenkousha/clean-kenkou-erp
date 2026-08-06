@@ -1,4 +1,5 @@
 import React, { useState, useMemo, useEffect } from 'react'
+import { useNavigate } from 'react-router-dom'
 import {
   KanbanBoard,
   ProcessTask,
@@ -14,8 +15,11 @@ import {
 import { NewTaskModal } from '../components/features/NewTaskModal'
 import { ExportModal } from '../components/features/ExportModal'
 import { ExcelImportModal } from '../components/features/ExcelImportModal'
+import { MobileQuoteModal, InitialQuoteData } from '../components/features/MobileQuoteModal'
 import { PrintArea, PrintTaskData } from '../components/features/PrintArea'
 import { useJobs } from '../hooks/useJobs'
+import { useViewMode } from '../hooks/useViewMode'
+
 
 // SupabaseのJobStatus -> KanbanBoardのProcessLaneへの変換
 const mapJobStatusToLane = (status: string): ProcessLane => {
@@ -40,9 +44,19 @@ const mapJobStatusToLane = (status: string): ProcessLane => {
 }
 
 export const Dashboard: React.FC = () => {
+  const navigate = useNavigate()
+  const { isMobileMode } = useViewMode()
   const { jobs, refetch, updateJobStatus } = useJobs()
   const [tasks, setTasks] = useState<ProcessTask[]>(initialDummyTasks)
   const [viewFilter, setViewFilter] = useState<'active' | 'archived' | 'all'>('active')
+
+  // モバイルモードの場合は案件一覧画面 (/jobs) へリダイレクト
+  useEffect(() => {
+    if (isMobileMode) {
+      navigate('/jobs', { replace: true })
+    }
+  }, [isMobileMode, navigate])
+
 
   // モーダル状態
   const [selectedTask, setSelectedTask] = useState<ProcessTask | null>(null)
@@ -50,6 +64,9 @@ export const Dashboard: React.FC = () => {
   const [isNewTaskOpen, setIsNewTaskOpen] = useState(false)
   const [isExportOpen, setIsExportOpen] = useState(false)
   const [isImportOpen, setIsImportOpen] = useState(false)
+  const [isQuoteOpen, setIsQuoteOpen] = useState(false)
+  const [quoteInitialData, setQuoteInitialData] = useState<InitialQuoteData | null>(null)
+
 
   // 印刷データ
   const [printTask, setPrintTask] = useState<PrintTaskData | null>(null)
@@ -282,7 +299,22 @@ export const Dashboard: React.FC = () => {
         onSave={handleSaveTaskDetail}
         onDelete={handleDeleteTask}
         onPrint={handlePrintTask}
+        onOpenQuoteWithData={(data) => {
+          setQuoteInitialData(data)
+          setIsQuoteOpen(true)
+        }}
       />
+
+      <MobileQuoteModal
+        isOpen={isQuoteOpen}
+        onClose={() => {
+          setIsQuoteOpen(false)
+          setQuoteInitialData(null)
+        }}
+        onSuccess={() => refetch()}
+        initialData={quoteInitialData}
+      />
+
 
       <NewTaskModal
         isOpen={isNewTaskOpen}

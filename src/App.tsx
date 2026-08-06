@@ -6,34 +6,38 @@ import { Customers } from './pages/Customers'
 import { Jobs } from './pages/Jobs'
 import { Settings } from './pages/Settings'
 import { Login } from './pages/Login'
+import { ViewModeProvider } from './hooks/useViewMode'
 
 export function App() {
   return (
     <Router>
-      <Routes>
-        {/* パブリックルート */}
-        <Route path="/login" element={<Login />} />
+      <ViewModeProvider>
+        <Routes>
+          {/* パブリックルート */}
+          <Route path="/login" element={<Login />} />
 
-        {/* 認証ガード適用ルート */}
-        <Route
-          path="/*"
-          element={
-            <ProtectedRoute>
-              <Layout>
-                <Routes>
-                  <Route path="/" element={<Dashboard />} />
-                  <Route path="/reception" element={<JobReception />} />
-                  <Route path="/customers" element={<Customers />} />
-                  <Route path="/jobs" element={<Jobs />} />
-                  <Route path="/settings" element={<Settings />} />
-                </Routes>
-              </Layout>
-            </ProtectedRoute>
-          }
-        />
-      </Routes>
+          {/* 認証ガード適用ルート */}
+          <Route
+            path="/*"
+            element={
+              <ProtectedRoute>
+                <Layout>
+                  <Routes>
+                    <Route path="/" element={<Dashboard />} />
+                    <Route path="/reception" element={<JobReception />} />
+                    <Route path="/customers" element={<Customers />} />
+                    <Route path="/jobs" element={<Jobs />} />
+                    <Route path="/settings" element={<Settings />} />
+                  </Routes>
+                </Layout>
+              </ProtectedRoute>
+            }
+          />
+        </Routes>
+      </ViewModeProvider>
     </Router>
   )
 }
 
 export default App
+

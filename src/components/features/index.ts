@@ -7,3 +7,5 @@ export * from './NewTaskModal'
 export * from './ExportModal'
 export * from './PrintArea'
 export * from './CustomerModal'
+export * from './MobileQuoteModal'
+

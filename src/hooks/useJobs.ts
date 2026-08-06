@@ -7,7 +7,7 @@ export interface UseJobsReturn {
   isLoading: boolean
   error: string | null
   refetch: () => Promise<void>
-  addJob: (jobData: { customer_id: string; title: string; status?: JobStatus; notes?: string }) => Promise<Job | null>
+  addJob: (jobData: { customer_id: string; title: string; status?: JobStatus; notes?: string; assigned_to?: string | null }) => Promise<Job | null>
   updateJobStatus: (jobId: string, newStatus: JobStatus) => Promise<boolean>
   updateJobDetails: (jobId: string, updates: Partial<Job>) => Promise<boolean>
 }
@@ -23,7 +23,7 @@ export const useJobs = (): UseJobsReturn => {
     try {
       const { data, error: fetchError } = await supabase
         .from('jobs')
-        .select('*, customers(name, phone, address)')
+        .select('*, customers(name, phone, address), profiles:assigned_to(display_name)')
         .order('created_at', { ascending: false })
 
       if (fetchError) {
@@ -40,7 +40,7 @@ export const useJobs = (): UseJobsReturn => {
   }, [])
 
   const addJob = useCallback(
-    async (jobData: { customer_id: string; title: string; status?: JobStatus; notes?: string }): Promise<Job | null> => {
+    async (jobData: { customer_id: string; title: string; status?: JobStatus; notes?: string; assigned_to?: string | null }): Promise<Job | null> => {
       try {
         const { data, error: insertError } = await supabase
           .from('jobs')
@@ -50,9 +50,10 @@ export const useJobs = (): UseJobsReturn => {
               title: jobData.title,
               status: jobData.status || 'received',
               notes: jobData.notes || null,
+              assigned_to: jobData.assigned_to || null,
             },
           ])
-          .select('*, customers(name, phone, address)')
+          .select('*, customers(name, phone, address), profiles:assigned_to(display_name)')
           .single()
 
         if (insertError) {
@@ -149,6 +150,7 @@ export const useJobs = (): UseJobsReturn => {
               ...job,
               ...cleanUpdates,
               customers: job.customers, // リレーションの欠落を防止
+              profiles: job.profiles,
             }
           })
         )
@@ -161,7 +163,6 @@ export const useJobs = (): UseJobsReturn => {
     },
     []
   )
-
 
   // Supabase Realtime 購読 (Realtime Subscriptions)
   useEffect(() => {
@@ -225,5 +226,3 @@ export const useJobs = (): UseJobsReturn => {
     updateJobDetails,
   }
 }
-
-

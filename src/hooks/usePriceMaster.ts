@@ -7,19 +7,20 @@ export interface ItemPriceMaster {
   name: string
   unit: string
   price: number
+  volume?: number
 }
 
 export const DEFAULT_ITEMS: ItemPriceMaster[] = [
-  { id: '1', category: '組合搬入分', name: '金物・危険物', unit: 'kg', price: 50 },
-  { id: '2', category: '組合搬入分', name: '不燃粗大', unit: 'kg', price: 60 },
-  { id: '3', category: '組合搬入分', name: 'びん類', unit: 'kg', price: 40 },
-  { id: '4', category: '４家電', name: '冷蔵庫（170L以下）', unit: '台', price: 4000 },
-  { id: '5', category: '４家電', name: '洗濯機・衣類乾燥機', unit: '台', price: 3000 },
-  { id: '6', category: '４家電', name: 'エアコン', unit: '台', price: 2500 },
-  { id: '7', category: 'その他自社処理', name: '可燃物', unit: 'kg', price: 45 },
-  { id: '8', category: 'その他自社処理', name: '可燃粗大（木製家具等）', unit: 'kg', price: 55 },
-  { id: '9', category: 'その他自社処理', name: '混合廃棄物', unit: 'kg', price: 70 },
-  { id: '10', category: 'その他自社処理', name: '搬出基本料（2F以上/特殊環境）', unit: '㎥', price: 1500 },
+  { id: '1', category: '家具・リビング', name: '2人掛けソファ', unit: '点', price: 8000, volume: 1.5 },
+  { id: '2', category: '家電', name: '大型冷蔵庫 (300L以上)', unit: '台', price: 10000, volume: 1.2 },
+  { id: '3', category: '家電', name: '洗濯機・衣類乾燥機', unit: '台', price: 6000, volume: 0.8 },
+  { id: '4', category: '家具・寝室', name: 'シングルベッド（フレーム・マットレス）', unit: '点', price: 9000, volume: 1.8 },
+  { id: '5', category: '家電', name: 'テレビ（40インチ以上）', unit: '台', price: 4000, volume: 0.4 },
+  { id: '6', category: '家具・オフィス', name: '学習机 / オフィスデスク', unit: '点', price: 5000, volume: 1.0 },
+  { id: '7', category: '日用品・梱包', name: '段ボール（Mサイズ相当）', unit: '箱', price: 800, volume: 0.1 },
+  { id: '8', category: '家具・収納', name: 'タンス / チェスト', unit: '点', price: 7000, volume: 1.2 },
+  { id: '9', category: '４家電', name: 'エアコン', unit: '台', price: 2500, volume: 0.5 },
+  { id: '10', category: 'その他', name: '可燃物・不用品袋', unit: '袋', price: 500, volume: 0.1 },
 ]
 
 export interface UsePriceMasterReturn {
@@ -30,9 +31,12 @@ export interface UsePriceMasterReturn {
   addItem: (item: Omit<ItemPriceMaster, 'id'>) => Promise<boolean>
   updateItemPrice: (id: string, newPrice: number) => Promise<boolean>
   deleteItem: (id: string) => Promise<boolean>
+  moveItemUp: (index: number) => Promise<boolean>
+  moveItemDown: (index: number) => Promise<boolean>
   resetToDefaults: () => Promise<boolean>
   refetch: () => Promise<void>
 }
+
 
 export const usePriceMaster = (): UsePriceMasterReturn => {
   const [items, setItems] = useState<ItemPriceMaster[]>(() => {
@@ -163,6 +167,26 @@ export const usePriceMaster = (): UsePriceMasterReturn => {
     }
   }, [items])
 
+  const moveItemUp = useCallback(async (index: number): Promise<boolean> => {
+    if (index <= 0 || index >= items.length) return false
+    const newItems = [...items]
+    const temp = newItems[index - 1]
+    newItems[index - 1] = newItems[index]
+    newItems[index] = temp
+    saveLocalAndState(newItems)
+    return true
+  }, [items])
+
+  const moveItemDown = useCallback(async (index: number): Promise<boolean> => {
+    if (index < 0 || index >= items.length - 1) return false
+    const newItems = [...items]
+    const temp = newItems[index + 1]
+    newItems[index + 1] = newItems[index]
+    newItems[index] = temp
+    saveLocalAndState(newItems)
+    return true
+  }, [items])
+
   const resetToDefaults = useCallback(async (): Promise<boolean> => {
     setIsSyncing(true)
     saveLocalAndState(DEFAULT_ITEMS)
@@ -198,7 +222,10 @@ export const usePriceMaster = (): UsePriceMasterReturn => {
     addItem,
     updateItemPrice,
     deleteItem,
+    moveItemUp,
+    moveItemDown,
     resetToDefaults,
     refetch: () => fetchPriceMaster(true),
   }
 }
+

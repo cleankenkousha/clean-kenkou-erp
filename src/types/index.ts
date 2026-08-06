@@ -36,5 +36,8 @@ export interface Job {
     phone?: string | null
     address?: string | null
   } | null
-
+  profiles?: {
+    display_name: string | null
+  } | null
 }
+

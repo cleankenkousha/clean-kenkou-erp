@@ -1,14 +1,18 @@
 import React, { useState, useRef } from 'react'
-import { Search, MapPin, Tag, Box, Calendar, Sparkles, Check, Phone, AlertCircle } from 'lucide-react'
-import { Input, Button } from '../ui'
+import { Search, MapPin, Tag, Box, Calendar, Sparkles, Check, Phone, AlertCircle, UserCheck } from 'lucide-react'
+import { Input, Button, MapLink } from '../ui'
 import { supabase } from '../../lib/supabase'
+import { useProfiles, getRoleInfo } from '../../hooks/useProfiles'
 
 export const JobReceptionForm: React.FC = () => {
+  const { profiles } = useProfiles()
+
   const [customerInfo, setCustomerInfo] = useState('')
   const [address, setAddress] = useState('')
   const [wasteType, setWasteType] = useState('')
   const [estimatedAmount, setEstimatedAmount] = useState('')
   const [preferredDate, setPreferredDate] = useState('')
+  const [assignedTo, setAssignedTo] = useState('')
 
   const [isLoading, setIsLoading] = useState(false)
   const [isSaved, setIsSaved] = useState(false)
@@ -30,14 +34,12 @@ export const JobReceptionForm: React.FC = () => {
 
   // キーダウンハンドラー (Enterでのフォーカス移動＆Ctrl+Enterでの送信)
   const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>, currentIndex: number) => {
-    // Ctrl + Enter または Cmd + Enter の場合は送信実行
     if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') {
       e.preventDefault()
       e.currentTarget.form?.requestSubmit()
       return
     }
 
-    // 単独の Enter キーの場合は次のフィールドにフォーカスを移動
     if (e.key === 'Enter') {
       e.preventDefault()
       const nextIndex = currentIndex + 1
@@ -52,7 +54,6 @@ export const JobReceptionForm: React.FC = () => {
     setErrorMessage(null)
     setIsSaved(false)
 
-    // 【二重チェック】必須項目の入力検証
     if (!customerInfo.trim()) {
       setErrorMessage('「顧客名 / 電話番号」を入力してください。')
       customerInfoRef.current?.focus()
@@ -72,12 +73,9 @@ export const JobReceptionForm: React.FC = () => {
     setIsLoading(true)
 
     try {
-      // 電話番号の抽出試行 (数字・ハイフンが7文字以上)
       const phoneMatch = customerInfo.match(/[\d-]{7,}/)?.[0] || ''
-      // 括弧部分を除いた顧客名
       const customerName = customerInfo.replace(/[\(\（].*?[\)\）]/g, '').trim() || customerInfo || '名称未設定'
 
-      // 1. 顧客情報を customers テーブルに登録
       const { data: customerData, error: customerError } = await supabase
         .from('customers')
         .insert([
@@ -94,7 +92,6 @@ export const JobReceptionForm: React.FC = () => {
         throw new Error(`顧客情報の登録に失敗しました: ${customerError.message}`)
       }
 
-      // 2. 発行された顧客IDを使用して jobs テーブルに案件を登録
       const jobTitle = wasteType ? `${wasteType} 回収依頼` : `${customerName}様 スポット回収`
       const notesDetail = [
         estimatedAmount ? `概算の量: ${estimatedAmount}` : '',
@@ -109,6 +106,7 @@ export const JobReceptionForm: React.FC = () => {
           title: jobTitle,
           status: 'received',
           notes: notesDetail || null,
+          assigned_to: assignedTo || null,
         },
       ])
 
@@ -116,15 +114,14 @@ export const JobReceptionForm: React.FC = () => {
         throw new Error(`案件情報の登録に失敗しました: ${jobError.message}`)
       }
 
-      // 3. 成功処理: フォーム初期化およびアラート表示
       setCustomerInfo('')
       setAddress('')
       setWasteType('')
       setEstimatedAmount('')
       setPreferredDate('')
+      setAssignedTo('')
       setIsSaved(true)
 
-      // 最初の入力欄にフォーカスを戻す
       customerInfoRef.current?.focus()
 
       setTimeout(() => {
@@ -143,7 +140,6 @@ export const JobReceptionForm: React.FC = () => {
       onSubmit={handleSubmit}
       className="max-w-2xl mx-auto bg-white p-6 md:p-8 rounded-xl border border-border shadow-sm space-y-6"
     >
-      {/* フォームサブヘッダー / 電話受付スピード通知 */}
       <div className="flex items-center justify-between pb-4 border-b border-border">
         <div className="flex items-center space-x-2">
           <div className="p-1.5 bg-slate-100 text-main rounded">
@@ -172,7 +168,7 @@ export const JobReceptionForm: React.FC = () => {
         </div>
       )}
 
-      {/* 1. 顧客名 / 電話番号 (スマート検索) */}
+      {/* 1. 顧客名 / 電話番号 */}
       <div className="space-y-2">
         <Input
           ref={customerInfoRef}
@@ -185,7 +181,6 @@ export const JobReceptionForm: React.FC = () => {
           onKeyDown={(e) => handleKeyDown(e, 0)}
           helperText="電話番号を入力すると既存顧客が自動検索されます"
         />
-        {/* サジェスト用クイック選択ヒント */}
         <div className="flex items-center space-x-2 text-xs text-sub pt-1">
           <Search className="w-3.5 h-3.5 text-sub" />
           <span>AI予測サジェスト: </span>
@@ -233,6 +228,9 @@ export const JobReceptionForm: React.FC = () => {
             鹿本町
           </button>
         </div>
+
+        {/* Googleマップ連携ボタン */}
+        <MapLink address={address} variant="buttons" />
       </div>
 
       {/* 3. 廃棄物の種類 (品目) */}
@@ -267,7 +265,28 @@ export const JobReceptionForm: React.FC = () => {
         </div>
       </div>
 
-      {/* 4. 概算の量 */}
+      {/* 4. 担当ドライバー / 受付者 (新規追加項目) */}
+      <div className="space-y-2">
+        <label className="block text-xs font-semibold text-main flex items-center gap-1.5">
+          <UserCheck className="w-4 h-4 text-slate-700" />
+          <span>担当スタッフ（作業ドライバー / 受付担当）</span>
+        </label>
+        <select
+          value={assignedTo}
+          onChange={(e) => setAssignedTo(e.target.value)}
+          className="w-full p-2.5 bg-white border border-border rounded-lg text-xs font-medium text-main focus:outline-none focus:ring-2 focus:ring-slate-900"
+        >
+          <option value="">-- 未割当（担当者を選択） --</option>
+          {profiles.map((p) => (
+            <option key={p.id} value={p.id}>
+              {p.display_name || '名前未設定'} ({getRoleInfo(p.role).label})
+            </option>
+          ))}
+        </select>
+        <p className="text-[11px] text-sub">担当者を設定しておくと配車管理や担当別フィルタリングがスムーズになります</p>
+      </div>
+
+      {/* 5. 概算の量 */}
       <div className="space-y-2">
         <Input
           ref={estimatedAmountRef}
@@ -295,7 +314,7 @@ export const JobReceptionForm: React.FC = () => {
         </div>
       </div>
 
-      {/* 5. 希望日時 */}
+      {/* 6. 希望日時 */}
       <div className="space-y-2">
         <Input
           ref={preferredDateRef}
@@ -337,5 +356,3 @@ export const JobReceptionForm: React.FC = () => {
     </form>
   )
 }
-
-

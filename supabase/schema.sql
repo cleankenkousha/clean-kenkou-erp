@@ -4,23 +4,26 @@
 -- =================================================================
 
 -- 1. 共通関数の作成 (updated_at 自動更新用トリガー関数)
-CREATE OR REPLACE FUNCTION update_updated_at_column()
-RETURNS TRIGGER AS $$
+CREATE OR REPLACE FUNCTION public.update_updated_at_column()
+RETURNS TRIGGER
+LANGUAGE plpgsql
+AS $$
 BEGIN
     NEW.updated_at = now();
     RETURN NEW;
 END;
-$$ LANGUAGE plpgsql;
+$$;
 
 -- -----------------------------------------------------------------
 -- 2. テーブル作成 (依存関係に配慮した作成順序)
 -- -----------------------------------------------------------------
 
--- 2.1 profiles (ユーザー・担当者)
--- Supabase auth.users と 1対1 で連携
+-- 2.1 profiles (ユーザー・社内担当スタッフ)
+-- 自由なスタッフ登録に対応 (user_id で Supabase auth.users と任意連携)
 CREATE TABLE IF NOT EXISTS public.profiles (
-    id UUID PRIMARY KEY REFERENCES auth.users(id) ON DELETE CASCADE,
-    display_name TEXT,
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    user_id UUID REFERENCES auth.users(id) ON DELETE SET NULL,
+    display_name TEXT NOT NULL,
     role TEXT NOT NULL DEFAULT 'operator' CHECK (role IN ('admin', 'operator')),
     created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
     updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
@@ -82,25 +85,30 @@ CREATE TABLE IF NOT EXISTS public.invoices (
 -- 3. updated_at 自動更新トリガーの設定
 -- -----------------------------------------------------------------
 
-CREATE OR REPLACE TRIGGER update_profiles_updated_at
+DROP TRIGGER IF EXISTS update_profiles_updated_at ON public.profiles;
+CREATE TRIGGER update_profiles_updated_at
     BEFORE UPDATE ON public.profiles
-    FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
+    FOR EACH ROW EXECUTE FUNCTION public.update_updated_at_column();
 
-CREATE OR REPLACE TRIGGER update_customers_updated_at
+DROP TRIGGER IF EXISTS update_customers_updated_at ON public.customers;
+CREATE TRIGGER update_customers_updated_at
     BEFORE UPDATE ON public.customers
-    FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
+    FOR EACH ROW EXECUTE FUNCTION public.update_updated_at_column();
 
-CREATE OR REPLACE TRIGGER update_jobs_updated_at
+DROP TRIGGER IF EXISTS update_jobs_updated_at ON public.jobs;
+CREATE TRIGGER update_jobs_updated_at
     BEFORE UPDATE ON public.jobs
-    FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
+    FOR EACH ROW EXECUTE FUNCTION public.update_updated_at_column();
 
-CREATE OR REPLACE TRIGGER update_spot_collections_updated_at
+DROP TRIGGER IF EXISTS update_spot_collections_updated_at ON public.spot_collections;
+CREATE TRIGGER update_spot_collections_updated_at
     BEFORE UPDATE ON public.spot_collections
-    FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
+    FOR EACH ROW EXECUTE FUNCTION public.update_updated_at_column();
 
-CREATE OR REPLACE TRIGGER update_invoices_updated_at
+DROP TRIGGER IF EXISTS update_invoices_updated_at ON public.invoices;
+CREATE TRIGGER update_invoices_updated_at
     BEFORE UPDATE ON public.invoices
-    FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
+    FOR EACH ROW EXECUTE FUNCTION public.update_updated_at_column();
 
 -- -----------------------------------------------------------------
 -- 4. RLS (Row Level Security) の有効化
@@ -113,49 +121,58 @@ ALTER TABLE public.spot_collections ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.invoices ENABLE ROW LEVEL SECURITY;
 
 -- -----------------------------------------------------------------
--- 5. 基本的な RLS ポリシーの作成 (認証済みユーザーの全権限許可)
+-- 5. 基本的な RLS ポリシーの作成 (全アクセス可に統一)
 -- -----------------------------------------------------------------
 
 -- profiles ポリシー
-CREATE POLICY "Allow authenticated users to select profiles"
-    ON public.profiles FOR SELECT TO authenticated USING (true);
-CREATE POLICY "Allow users to update their own profile"
-    ON public.profiles FOR UPDATE TO authenticated USING (auth.uid() = id);
-CREATE POLICY "Allow users to insert their own profile"
-    ON public.profiles FOR INSERT TO authenticated WITH CHECK (auth.uid() = id);
+DROP POLICY IF EXISTS "Allow authenticated users to select profiles" ON public.profiles;
+DROP POLICY IF EXISTS "Allow users to update their own profile" ON public.profiles;
+DROP POLICY IF EXISTS "Allow users to insert their own profile" ON public.profiles;
+DROP POLICY IF EXISTS "Allow access to profiles" ON public.profiles;
 
--- customers ポリシー (認証済みユーザーがアクセス可)
+CREATE POLICY "Allow access to profiles"
+    ON public.profiles FOR ALL USING (true) WITH CHECK (true);
+
+-- customers ポリシー
+DROP POLICY IF EXISTS "Allow authenticated access to customers" ON public.customers;
 CREATE POLICY "Allow authenticated access to customers"
-    ON public.customers FOR ALL TO authenticated USING (true) WITH CHECK (true);
+    ON public.customers FOR ALL USING (true) WITH CHECK (true);
 
--- jobs ポリシー (認証済みユーザーがアクセス可)
+-- jobs ポリシー
+DROP POLICY IF EXISTS "Allow authenticated access to jobs" ON public.jobs;
 CREATE POLICY "Allow authenticated access to jobs"
-    ON public.jobs FOR ALL TO authenticated USING (true) WITH CHECK (true);
+    ON public.jobs FOR ALL USING (true) WITH CHECK (true);
 
--- spot_collections ポリシー (認証済みユーザーがアクセス可)
+-- spot_collections ポリシー
+DROP POLICY IF EXISTS "Allow authenticated access to spot_collections" ON public.spot_collections;
 CREATE POLICY "Allow authenticated access to spot_collections"
-    ON public.spot_collections FOR ALL TO authenticated USING (true) WITH CHECK (true);
+    ON public.spot_collections FOR ALL USING (true) WITH CHECK (true);
 
--- invoices ポリシー (認証済みユーザーがアクセス可)
+-- invoices ポリシー
+DROP POLICY IF EXISTS "Allow authenticated access to invoices" ON public.invoices;
 CREATE POLICY "Allow authenticated access to invoices"
-    ON public.invoices FOR ALL TO authenticated USING (true) WITH CHECK (true);
+    ON public.invoices FOR ALL USING (true) WITH CHECK (true);
 
 -- -----------------------------------------------------------------
--- 6. 新規ユーザー登録時に profiles テーブルへ自動同期するトリガー関数 (任意)
+-- 6. 新規ユーザー登録時に profiles テーブルへ自動同期するトリガー関数
 -- -----------------------------------------------------------------
 
 CREATE OR REPLACE FUNCTION public.handle_new_user()
-RETURNS TRIGGER AS $$
+RETURNS TRIGGER
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public
+AS $$
 BEGIN
-    INSERT INTO public.profiles (id, display_name, role)
+    INSERT INTO public.profiles (user_id, display_name, role)
     VALUES (
         NEW.id,
-        COALESCE(NEW.raw_user_meta_data->>'display_name', split_part(NEW.email, '@', 1)),
+        COALESCE(NEW.raw_user_meta_data->>'display_name', split_part(NEW.email, '@', 1), 'ユーザー'),
         'operator'
     );
     RETURN NEW;
 END;
-$$ LANGUAGE plpgsql SECURITY DEFINER;
+$$;
 
 -- トリガーの登録
 DROP TRIGGER IF EXISTS on_auth_user_created ON auth.users;

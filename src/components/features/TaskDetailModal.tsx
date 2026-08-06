@@ -1,6 +1,10 @@
 import React, { useState, useEffect } from 'react'
+import { Camera, Calculator } from 'lucide-react'
 import { ProcessTask, ProcessLane, STEP_DEFINITIONS } from './KanbanBoard'
 import { StepsData } from './PrintArea'
+import { useProfiles } from '../../hooks/useProfiles'
+import { MapLink } from '../ui/MapLink'
+import { InitialQuoteData } from './MobileQuoteModal'
 
 interface TaskDetailModalProps {
   task: ProcessTask | null
@@ -9,6 +13,7 @@ interface TaskDetailModalProps {
   onSave: (updatedTask: ProcessTask) => void
   onDelete: (taskId: string) => void
   onPrint: (task: ProcessTask) => void
+  onOpenQuoteWithData?: (data: InitialQuoteData) => void
 }
 
 export function getStatusRank(statusStr: string): number {
@@ -86,7 +91,9 @@ export const TaskDetailModal: React.FC<TaskDetailModalProps> = ({
   onSave,
   onDelete,
   onPrint,
+  onOpenQuoteWithData,
 }) => {
+  const { profiles } = useProfiles()
   const [currentStatus, setCurrentStatus] = useState<ProcessLane>('未着手')
   const [updater, setUpdater] = useState('')
   const [stepsData, setStepsData] = useState<StepsData>({})
@@ -100,6 +107,19 @@ export const TaskDetailModal: React.FC<TaskDetailModalProps> = ({
   }, [task])
 
   if (!isOpen || !task) return null
+
+  const handleOpenQuoteForThisTask = () => {
+    if (onOpenQuoteWithData && task) {
+      onClose()
+      onOpenQuoteWithData({
+        jobId: task.id,
+        customerName: task.customer,
+        customerPhone: task.tel,
+        customerAddress: task.address,
+      })
+    }
+  }
+
 
   // ステータスセレクト手動変更時の処理
   const handleStatusSelectChange = (newStatus: ProcessLane) => {
@@ -140,7 +160,6 @@ export const TaskDetailModal: React.FC<TaskDetailModalProps> = ({
       const currentUpdater = updater.trim()
 
       if (stepId === 'estimate_schedule' && statusVal === '見積不要') {
-        // 見積不要選択時の自動一括連動 (autoLinkEstimateUnnecessary)
         const autoWorker = prev.estimate_schedule?.worker || currentUpdater
         nextData = {
           ...nextData,
@@ -150,7 +169,6 @@ export const TaskDetailModal: React.FC<TaskDetailModalProps> = ({
           customer_consideration: { status: '不要', memo: prev.customer_consideration?.memo || '', worker: prev.customer_consideration?.worker || autoWorker },
         }
       } else if (stepId === 'estimate_schedule' && statusVal !== '見積不要' && prev.estimate_schedule?.status === '見積不要') {
-        // 見積不要解除時
         nextData = {
           ...nextData,
           estimate_schedule: { status: statusVal, memo: prev.estimate_schedule?.memo || '', worker: prev.estimate_schedule?.worker || currentUpdater },
@@ -172,7 +190,6 @@ export const TaskDetailModal: React.FC<TaskDetailModalProps> = ({
         }
       }
 
-      // ステップ進捗に基づくメインステータスの自動昇格・連動計算
       const suggestedStatus = computeTaskStatus(nextData)
       const currentRank = getStatusRank(currentStatus)
       const suggestedRank = getStatusRank(suggestedStatus)
@@ -247,8 +264,6 @@ export const TaskDetailModal: React.FC<TaskDetailModalProps> = ({
     }
   }
 
-  const encodedAddress = encodeURIComponent(task.address || '')
-  const mapUrl = `https://www.google.com/maps/search/?api=1&query=${encodedAddress}`
 
   return (
     <div className="modal-overlay active" onClick={onClose}>
@@ -278,21 +293,10 @@ export const TaskDetailModal: React.FC<TaskDetailModalProps> = ({
               <div className="info-value">{task.taskType || ''}</div>
             </div>
             <div className="info-group">
-              <label>住所</label>
-              <div className="info-value" style={{ display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: '0.25rem' }}>
+              <label>住所・現場アクセス</label>
+              <div className="info-value">
                 <span>{task.address || '未登録'}</span>
-                {task.address && (
-                  <a
-                    href={mapUrl}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="map-link"
-                    title="Googleマップで開く"
-                  >
-                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"></path><circle cx="12" cy="10" r="3"></circle></svg>
-                    マップ
-                  </a>
-                )}
+                <MapLink address={task.address} variant="buttons" className="mt-1" />
               </div>
             </div>
             <div className="info-group">
@@ -316,18 +320,46 @@ export const TaskDetailModal: React.FC<TaskDetailModalProps> = ({
               <label>最終更新日時</label>
               <div className="info-value">{task.updatedAt || '未更新'}</div>
             </div>
+
+            {/* 担当者選択（登録済みスタッフからの選択 & 直接入力対応） */}
             <div className="info-group" style={{ gridColumn: '1 / -1' }}>
               <label htmlFor="modalUpdater">
-                担当者名（更新者名） <span className="required">*</span>
+                担当者名（作業/配車担当） <span className="required">*</span>
               </label>
-              <input
-                type="text"
-                id="modalUpdater"
-                value={updater}
-                onChange={(e) => setUpdater(e.target.value)}
-                className="form-input"
-                placeholder="例: 山田"
-              />
+              <div style={{ display: 'flex', gap: '0.5rem' }}>
+                <input
+                  type="text"
+                  id="modalUpdater"
+                  list="staffListOptions"
+                  value={updater}
+                  onChange={(e) => setUpdater(e.target.value)}
+                  className="form-input"
+                  placeholder="リストから選択または担当者名を入力..."
+                  style={{ flex: 1 }}
+                />
+                <datalist id="staffListOptions">
+                  {profiles.map((p) => (
+                    <option key={p.id} value={p.display_name || ''} />
+                  ))}
+                </datalist>
+                {profiles.length > 0 && (
+                  <select
+                    onChange={(e) => {
+                      if (e.target.value) setUpdater(e.target.value)
+                    }}
+                    value=""
+                    className="form-input"
+                    style={{ width: 'auto', minWidth: '130px' }}
+                  >
+                    <option value="">登録スタッフ選択</option>
+                    {profiles.map((p) => (
+                      <option key={p.id} value={p.display_name || ''}>
+                        {p.display_name || '名前未設定'}
+                      </option>
+                    ))}
+                  </select>
+                )}
+              </div>
             </div>
           </div>
 
@@ -374,6 +406,7 @@ export const TaskDetailModal: React.FC<TaskDetailModalProps> = ({
                         </div>
                         <input
                           type="text"
+                          list="staffListOptions"
                           value={currentStepData.worker || ''}
                           onChange={(e) => handleStepWorkerChange(stepKey, e.target.value)}
                           placeholder="担当者"
@@ -388,12 +421,31 @@ export const TaskDetailModal: React.FC<TaskDetailModalProps> = ({
                       placeholder="伝言・メモを追加..."
                       className="timeline-input"
                     />
+
+                    {/* 見積実施 (estimate_do) ステップ時に「カメラ撮影・概算見積作成」ボタンを表示 */}
+                    {(step.id === 'estimate_do' || step.id === 'estimate_schedule') && onOpenQuoteWithData && (
+                      <div className="mt-2 pt-2 border-t border-slate-200/60 flex items-center justify-between">
+                        <span className="text-[11px] text-slate-500 font-semibold flex items-center gap-1">
+                          <Calculator className="w-3.5 h-3.5 text-blue-600" />
+                          現場で写真撮影 & 概算算定
+                        </span>
+                        <button
+                          type="button"
+                          onClick={handleOpenQuoteForThisTask}
+                          className="px-3 py-1.5 bg-blue-600 hover:bg-blue-700 active:scale-95 text-white font-bold text-xs rounded-lg shadow-sm flex items-center space-x-1.5 transition-all"
+                        >
+                          <Camera className="w-4 h-4" />
+                          <span>概算見積を作成 (顧客情報連動)</span>
+                        </button>
+                      </div>
+                    )}
                   </div>
                 </div>
               )
             })}
           </div>
         </div>
+
 
         <div className="modal-footer">
           <button
