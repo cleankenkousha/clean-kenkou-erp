@@ -1,4 +1,4 @@
-import React, { useState } from 'react'
+import React, { useState, useEffect } from 'react'
 import {
   Settings as SettingsIcon,
   Building2,
@@ -13,82 +13,43 @@ import {
   Trash2,
   RotateCcw,
   Sparkles,
+  Cloud,
+  RefreshCw,
 } from 'lucide-react'
 import { useProfiles } from '../hooks/useProfiles'
 import { useJobs } from '../hooks/useJobs'
 import { useCustomers } from '../hooks/useCustomers'
+import { useCompanySettings, CompanyInfo, DEFAULT_COMPANY_INFO } from '../hooks/useCompanySettings'
+import { usePriceMaster } from '../hooks/usePriceMaster'
 import { Input, Button } from '../components/ui'
-
-// 初期自社情報型
-interface CompanyInfo {
-  name: string
-  postalCode: string
-  address: string
-  tel: string
-  fax: string
-  invoiceNo: string
-  bankName: string
-  bankBranch: string
-  bankAccountType: string
-  bankAccountNumber: string
-  bankAccountName: string
-}
-
-const DEFAULT_COMPANY_INFO: CompanyInfo = {
-  name: '有限会社クリーン健康社',
-  postalCode: '861-0501',
-  address: '熊本県山鹿市山鹿1000',
-  tel: '0968-43-1111',
-  fax: '0968-43-2222',
-  invoiceNo: 'T1234567890123',
-  bankName: '肥後銀行',
-  bankBranch: '山鹿支店',
-  bankAccountType: '普通',
-  bankAccountNumber: '1234567',
-  bankAccountName: 'ユウゲンガイシャ クリーンケンコウシャ',
-}
-
-// 品目マスタ型
-export interface ItemPriceMaster {
-  id: string
-  category: string
-  name: string
-  unit: string
-  price: number
-}
-
-const DEFAULT_ITEMS: ItemPriceMaster[] = [
-  { id: '1', category: '組合搬入分', name: '金物・危険物', unit: 'kg', price: 50 },
-  { id: '2', category: '組合搬入分', name: '不燃粗大', unit: 'kg', price: 60 },
-  { id: '3', category: '組合搬入分', name: 'びん類', unit: 'kg', price: 40 },
-  { id: '4', category: '４家電', name: '冷蔵庫（170L以下）', unit: '台', price: 4000 },
-  { id: '5', category: '４家電', name: '洗濯機・衣類乾燥機', unit: '台', price: 3000 },
-  { id: '6', category: '４家電', name: 'エアコン', unit: '台', price: 2500 },
-  { id: '7', category: 'その他自社処理', name: '可燃物', unit: 'kg', price: 45 },
-  { id: '8', category: 'その他自社処理', name: '可燃粗大（木製家具等）', unit: 'kg', price: 55 },
-  { id: '9', category: 'その他自社処理', name: '混合廃棄物', unit: 'kg', price: 70 },
-  { id: '10', category: 'その他自社処理', name: '搬出基本料（2F以上/特殊環境）', unit: '㎥', price: 1500 },
-]
 
 export const Settings: React.FC = () => {
   const [activeTab, setActiveTab] = useState<'company' | 'staff' | 'items' | 'backup'>('company')
 
-  // 1. 自社情報
-  const [companyInfo, setCompanyInfo] = useState<CompanyInfo>(() => {
-    const saved = localStorage.getItem('clean_kenkou_company_info')
-    return saved ? JSON.parse(saved) : DEFAULT_COMPANY_INFO
-  })
+  // 1. 自社情報（クラウド保存対応フック）
+  const { companyInfo, updateCompanyInfo, isSyncing: isSyncingCompany } = useCompanySettings()
+  const [companyForm, setCompanyForm] = useState<CompanyInfo>(DEFAULT_COMPANY_INFO)
   const [isSavedCompany, setIsSavedCompany] = useState(false)
+
+  useEffect(() => {
+    if (companyInfo) {
+      setCompanyForm(companyInfo)
+    }
+  }, [companyInfo])
 
   // 2. スタッフ・担当者
   const { profiles, isLoading: isLoadingProfiles, updateProfile, addStaff } = useProfiles()
   const [newStaffName, setNewStaffName] = useState('')
 
-  // 3. 単価マスタ（編集・永続化対応）
-  const [items, setItems] = useState<ItemPriceMaster[]>(() => {
-    const saved = localStorage.getItem('clean_kenkou_price_master')
-    return saved ? JSON.parse(saved) : DEFAULT_ITEMS
-  })
+  // 3. 単価マスタ（クラウド保存対応フック）
+  const {
+    items,
+    addItem,
+    updateItemPrice,
+    deleteItem,
+    resetToDefaults,
+    isSyncing: isSyncingItems,
+  } = usePriceMaster()
 
   const [newItemCategory, setNewItemCategory] = useState('組合搬入分')
   const [newItemName, setNewItemName] = useState('')
@@ -102,11 +63,11 @@ export const Settings: React.FC = () => {
   const { customers } = useCustomers()
 
   // ---------------- 自社情報保存 ----------------
-  const handleSaveCompany = (e: React.FormEvent) => {
+  const handleSaveCompany = async (e: React.FormEvent) => {
     e.preventDefault()
-    localStorage.setItem('clean_kenkou_company_info', JSON.stringify(companyInfo))
+    await updateCompanyInfo(companyForm)
     setIsSavedCompany(true)
-    setTimeout(() => setIsSavedCompany(false), 3000)
+    setTimeout(() => setIsSavedCompany(false), 4000)
   }
 
   // ---------------- スタッフ追加 ----------------
@@ -120,58 +81,55 @@ export const Settings: React.FC = () => {
   }
 
   // ---------------- 品目マスタ操作 ----------------
-  const saveItemsToStorage = (updatedItems: ItemPriceMaster[]) => {
-    setItems(updatedItems)
-    localStorage.setItem('clean_kenkou_price_master', JSON.stringify(updatedItems))
-    setIsSavedItems(true)
-    setTimeout(() => setIsSavedItems(false), 3000)
-  }
-
-  const handleAddItem = (e: React.FormEvent) => {
+  const handleAddItem = async (e: React.FormEvent) => {
     e.preventDefault()
     if (!newItemName.trim() || newItemPrice === '') return
 
-    const newItem: ItemPriceMaster = {
-      id: crypto.randomUUID(),
+    await addItem({
       category: newItemCategory,
       name: newItemName.trim(),
       unit: newItemUnit.trim() || 'kg',
       price: Number(newItemPrice),
-    }
+    })
 
-    const updated = [...items, newItem]
-    saveItemsToStorage(updated)
+    setIsSavedItems(true)
+    setTimeout(() => setIsSavedItems(false), 4000)
 
     setNewItemName('')
     setNewItemPrice('')
     setIsAddItemOpen(false)
   }
 
-  const handleEditPrice = (id: string, currentPrice: number, name: string) => {
+  const handleEditPrice = async (id: string, currentPrice: number, name: string) => {
     const input = prompt(`「${name}」の新しい参考単価（円）を入力してください:`, currentPrice.toString())
     if (input !== null) {
       const val = parseInt(input, 10)
       if (!isNaN(val) && val >= 0) {
-        const updated = items.map((item) => (item.id === id ? { ...item, price: val } : item))
-        saveItemsToStorage(updated)
+        await updateItemPrice(id, val)
+        setIsSavedItems(true)
+        setTimeout(() => setIsSavedItems(false), 4000)
       } else {
         alert('有効な金額を入力してください。')
       }
     }
   }
 
-  const handleDeleteItem = (id: string, name: string) => {
+  const handleDeleteItem = async (id: string, name: string) => {
     if (confirm(`品目「${name}」をマスタから削除してもよろしいですか？`)) {
-      const updated = items.filter((item) => item.id !== id)
-      saveItemsToStorage(updated)
+      await deleteItem(id)
+      setIsSavedItems(true)
+      setTimeout(() => setIsSavedItems(false), 4000)
     }
   }
 
-  const handleResetDefaultItems = () => {
+  const handleResetDefaultItems = async () => {
     if (confirm('回収品目マスタを初期状態に戻しますか？（追加したカスタム品目はリセットされます）')) {
-      saveItemsToStorage(DEFAULT_ITEMS)
+      await resetToDefaults()
+      setIsSavedItems(true)
+      setTimeout(() => setIsSavedItems(false), 4000)
     }
   }
+
 
   // ---------------- 全データバックアップ ----------------
   const handleExportBackup = () => {
@@ -238,6 +196,11 @@ export const Settings: React.FC = () => {
           <p className="text-xs text-sub mt-1">
             自社情報・請求印字設定、担当スタッフ管理、AI見積連携用単価マスタ、全データバックアップを管理します
           </p>
+        </div>
+
+        <div className="flex items-center space-x-2 bg-slate-50 border border-slate-200 px-3 py-2 rounded-lg text-xs text-slate-700">
+          <Cloud className="w-4 h-4 text-emerald-600 animate-pulse" />
+          <span className="font-semibold">クラウド全社同期モード（他の方の画面にも即時反映）</span>
         </div>
       </div>
 
@@ -307,9 +270,9 @@ export const Settings: React.FC = () => {
               <p className="text-xs text-sub">請求書・作業指示書等に印刷される会社情報です</p>
             </div>
             {isSavedCompany && (
-              <span className="text-xs text-emerald-700 font-semibold flex items-center gap-1 bg-emerald-50 px-3 py-1.5 rounded-lg border border-emerald-200">
-                <CheckCircle2 className="w-4 h-4" />
-                設定を保存しました
+              <span className="text-xs text-emerald-700 font-semibold flex items-center gap-1 bg-emerald-50 px-3 py-1.5 rounded-lg border border-emerald-200 shadow-sm">
+                <CheckCircle2 className="w-4 h-4 text-emerald-600" />
+                クラウドへ保存されました（他の方の画面にも反映中）
               </span>
             )}
           </div>
@@ -319,8 +282,8 @@ export const Settings: React.FC = () => {
               <label className="block font-semibold text-main mb-1">会社名 / 屋号</label>
               <Input
                 type="text"
-                value={companyInfo.name}
-                onChange={(e) => setCompanyInfo({ ...companyInfo, name: e.target.value })}
+                value={companyForm.name}
+                onChange={(e) => setCompanyForm({ ...companyForm, name: e.target.value })}
                 required
               />
             </div>
@@ -330,8 +293,8 @@ export const Settings: React.FC = () => {
               <Input
                 type="text"
                 placeholder="例: T1234567890123"
-                value={companyInfo.invoiceNo}
-                onChange={(e) => setCompanyInfo({ ...companyInfo, invoiceNo: e.target.value })}
+                value={companyForm.invoiceNo}
+                onChange={(e) => setCompanyForm({ ...companyForm, invoiceNo: e.target.value })}
               />
             </div>
 
@@ -339,8 +302,8 @@ export const Settings: React.FC = () => {
               <label className="block font-semibold text-main mb-1">郵便番号</label>
               <Input
                 type="text"
-                value={companyInfo.postalCode}
-                onChange={(e) => setCompanyInfo({ ...companyInfo, postalCode: e.target.value })}
+                value={companyForm.postalCode}
+                onChange={(e) => setCompanyForm({ ...companyForm, postalCode: e.target.value })}
               />
             </div>
 
@@ -348,8 +311,8 @@ export const Settings: React.FC = () => {
               <label className="block font-semibold text-main mb-1">所在地・住所</label>
               <Input
                 type="text"
-                value={companyInfo.address}
-                onChange={(e) => setCompanyInfo({ ...companyInfo, address: e.target.value })}
+                value={companyForm.address}
+                onChange={(e) => setCompanyForm({ ...companyForm, address: e.target.value })}
               />
             </div>
 
@@ -357,8 +320,8 @@ export const Settings: React.FC = () => {
               <label className="block font-semibold text-main mb-1">電話番号</label>
               <Input
                 type="text"
-                value={companyInfo.tel}
-                onChange={(e) => setCompanyInfo({ ...companyInfo, tel: e.target.value })}
+                value={companyForm.tel}
+                onChange={(e) => setCompanyForm({ ...companyForm, tel: e.target.value })}
               />
             </div>
 
@@ -366,8 +329,8 @@ export const Settings: React.FC = () => {
               <label className="block font-semibold text-main mb-1">FAX番号</label>
               <Input
                 type="text"
-                value={companyInfo.fax}
-                onChange={(e) => setCompanyInfo({ ...companyInfo, fax: e.target.value })}
+                value={companyForm.fax}
+                onChange={(e) => setCompanyForm({ ...companyForm, fax: e.target.value })}
               />
             </div>
           </div>
@@ -381,8 +344,8 @@ export const Settings: React.FC = () => {
                 <Input
                   type="text"
                   placeholder="例: 肥後銀行"
-                  value={companyInfo.bankName}
-                  onChange={(e) => setCompanyInfo({ ...companyInfo, bankName: e.target.value })}
+                  value={companyForm.bankName}
+                  onChange={(e) => setCompanyForm({ ...companyForm, bankName: e.target.value })}
                 />
               </div>
 
@@ -391,8 +354,8 @@ export const Settings: React.FC = () => {
                 <Input
                   type="text"
                   placeholder="例: 山鹿支店"
-                  value={companyInfo.bankBranch}
-                  onChange={(e) => setCompanyInfo({ ...companyInfo, bankBranch: e.target.value })}
+                  value={companyForm.bankBranch}
+                  onChange={(e) => setCompanyForm({ ...companyForm, bankBranch: e.target.value })}
                 />
               </div>
 
@@ -400,8 +363,8 @@ export const Settings: React.FC = () => {
                 <label className="block font-semibold text-main mb-1">口座種別・番号</label>
                 <div className="flex space-x-2">
                   <select
-                    value={companyInfo.bankAccountType}
-                    onChange={(e) => setCompanyInfo({ ...companyInfo, bankAccountType: e.target.value })}
+                    value={companyForm.bankAccountType}
+                    onChange={(e) => setCompanyForm({ ...companyForm, bankAccountType: e.target.value })}
                     className="p-2 border border-border rounded-md text-xs"
                   >
                     <option value="普通">普通</option>
@@ -410,8 +373,8 @@ export const Settings: React.FC = () => {
                   <Input
                     type="text"
                     placeholder="1234567"
-                    value={companyInfo.bankAccountNumber}
-                    onChange={(e) => setCompanyInfo({ ...companyInfo, bankAccountNumber: e.target.value })}
+                    value={companyForm.bankAccountNumber}
+                    onChange={(e) => setCompanyForm({ ...companyForm, bankAccountNumber: e.target.value })}
                   />
                 </div>
               </div>
@@ -422,16 +385,24 @@ export const Settings: React.FC = () => {
               <Input
                 type="text"
                 placeholder="例: ユウゲンガイシャ クリーンケンコウシャ"
-                value={companyInfo.bankAccountName}
-                onChange={(e) => setCompanyInfo({ ...companyInfo, bankAccountName: e.target.value })}
+                value={companyForm.bankAccountName}
+                onChange={(e) => setCompanyForm({ ...companyForm, bankAccountName: e.target.value })}
               />
             </div>
           </div>
 
-          <div className="flex justify-end pt-2">
-            <Button type="submit" variant="primary" size="sm">
-              <Save className="w-4 h-4 mr-1.5" />
-              自社情報を保存する
+          <div className="flex items-center justify-between pt-2">
+            <div className="text-xs text-slate-500 flex items-center gap-1">
+              <ShieldCheck className="w-4 h-4 text-emerald-600" />
+              <span>変更内容はクラウドに保存され全使用者に自動共有されます</span>
+            </div>
+            <Button type="submit" variant="primary" size="sm" disabled={isSyncingCompany}>
+              {isSyncingCompany ? (
+                <RefreshCw className="w-4 h-4 mr-1.5 animate-spin" />
+              ) : (
+                <Save className="w-4 h-4 mr-1.5" />
+              )}
+              {isSyncingCompany ? 'クラウド保存中...' : '自社情報を保存する'}
             </Button>
           </div>
         </form>
@@ -564,10 +535,16 @@ export const Settings: React.FC = () => {
             </div>
           </div>
 
-          {isSavedItems && (
-            <div className="p-3 bg-emerald-50 border border-emerald-200 text-emerald-800 rounded-lg text-xs font-semibold flex items-center gap-2">
-              <CheckCircle2 className="w-4 h-4 text-emerald-600" />
-              回収品目マスタを更新・保存しました（AI見積もりに反映されます）
+          {(isSavedItems || isSyncingItems) && (
+            <div className="p-3 bg-emerald-50 border border-emerald-200 text-emerald-800 rounded-lg text-xs font-semibold flex items-center gap-2 shadow-sm">
+              {isSyncingItems ? (
+                <RefreshCw className="w-4 h-4 text-emerald-600 animate-spin" />
+              ) : (
+                <CheckCircle2 className="w-4 h-4 text-emerald-600" />
+              )}
+              {isSyncingItems
+                ? 'クラウド保存・同期処理中...'
+                : 'クラウドへ保存・共有されました（他の方の画面やAI見積もりに即時反映されます）'}
             </div>
           )}
 
