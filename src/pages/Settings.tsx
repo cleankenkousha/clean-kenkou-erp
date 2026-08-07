@@ -20,6 +20,7 @@ import {
   Calculator,
   ArrowUp,
   ArrowDown,
+  ExternalLink,
 } from 'lucide-react'
 import { useProfiles, getRoleInfo, StaffRole } from '../hooks/useProfiles'
 import { useJobs } from '../hooks/useJobs'
@@ -37,8 +38,12 @@ export const Settings: React.FC = () => {
     isReturnFromQuote ? 'items' : 'company'
   )
 
+  const [geminiApiKey, setGeminiApiKey] = useState<string>(() => {
+    return import.meta.env.VITE_GEMINI_API_KEY || localStorage.getItem('clean_kenkou_gemini_api_key') || ''
+  })
 
   // 1. 自社情報（クラウド保存対応フック）
+
   const { companyInfo, updateCompanyInfo, isSyncing: isSyncingCompany } = useCompanySettings()
   const [companyForm, setCompanyForm] = useState<CompanyInfo>(DEFAULT_COMPANY_INFO)
   const [isSavedCompany, setIsSavedCompany] = useState(false)
@@ -622,7 +627,57 @@ export const Settings: React.FC = () => {
             </div>
           </div>
 
+          {/* Gemini API Key (Google AI Studio 無料枠対応) 設定カード */}
+          <div className="p-4 bg-gradient-to-r from-purple-50 via-indigo-50 to-blue-50 border border-purple-200 rounded-xl space-y-2">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+              <div className="flex items-center space-x-2">
+                <Sparkles className="w-5 h-5 text-purple-600 flex-shrink-0" />
+                <span className="text-xs font-bold text-slate-800">
+                  Google Gemini 2.0 Flash AI 画像解析キー設定（1日1,500回 完全無料枠）
+                </span>
+              </div>
+              <a
+                href="https://aistudio.google.com/app/apikey"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-xs font-bold text-purple-700 hover:text-purple-900 hover:underline flex items-center gap-1"
+              >
+                <span>無料APIキーを取得する (AI Studio)</span>
+                <ExternalLink className="w-3.5 h-3.5" />
+              </a>
+            </div>
+            <p className="text-[11px] text-slate-600">
+              Google AI Studioで作成した無料APIキー（1日1,500リクエスト完全無料）を入力すると、不用品写真の現場撮影・貼り付けから超高速なAI品目・体積自動算定が有効になります。
+            </p>
+            <div className="flex items-center space-x-2 pt-1">
+              <Input
+                type="password"
+                placeholder="AIzaSy... (無料APIキー)"
+                value={geminiApiKey}
+                onChange={(e) => setGeminiApiKey(e.target.value)}
+                className="text-xs font-mono bg-white flex-1"
+              />
+              <Button
+                type="button"
+                variant="primary"
+                size="sm"
+                onClick={() => {
+                  if (!geminiApiKey.trim()) {
+                    localStorage.removeItem('clean_kenkou_gemini_api_key')
+                    alert('APIキーの登録をクリアしました。')
+                  } else {
+                    localStorage.setItem('clean_kenkou_gemini_api_key', geminiApiKey.trim())
+                    alert('Gemini APIキー（無料枠）を正常に保存しました！見積作成画面で本物のAI解析が利用できます。')
+                  }
+                }}
+              >
+                APIキーを保存
+              </Button>
+            </div>
+          </div>
+
           {(isSavedItems || isSyncingItems) && (
+
             <div className="p-3 bg-emerald-50 border border-emerald-200 text-emerald-800 rounded-lg text-xs font-semibold flex items-center gap-2 shadow-sm">
               {isSyncingItems ? (
                 <RefreshCw className="w-4 h-4 text-emerald-600 animate-spin" />

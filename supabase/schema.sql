@@ -24,7 +24,7 @@ CREATE TABLE IF NOT EXISTS public.profiles (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     user_id UUID REFERENCES auth.users(id) ON DELETE SET NULL,
     display_name TEXT NOT NULL,
-    role TEXT NOT NULL DEFAULT 'operator' CHECK (role IN ('admin', 'operator')),
+    role TEXT NOT NULL DEFAULT 'operator' CHECK (role IN ('admin', 'sales', 'dispatcher', 'operator', 'clerk')),
     created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
     updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
@@ -81,6 +81,35 @@ CREATE TABLE IF NOT EXISTS public.invoices (
     updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
+-- 2.6 company_settings (自社情報・帳票印字設定)
+CREATE TABLE IF NOT EXISTS public.company_settings (
+    id TEXT PRIMARY KEY DEFAULT 'default',
+    name TEXT NOT NULL DEFAULT '',
+    postal_code TEXT DEFAULT '',
+    address TEXT DEFAULT '',
+    tel TEXT DEFAULT '',
+    fax TEXT DEFAULT '',
+    invoice_no TEXT DEFAULT '',
+    bank_name TEXT DEFAULT '',
+    bank_branch TEXT DEFAULT '',
+    bank_account_type TEXT DEFAULT '普通',
+    bank_account_number TEXT DEFAULT '',
+    bank_account_name TEXT DEFAULT '',
+    created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+-- 2.7 price_master (回収品目・単価マスタ)
+CREATE TABLE IF NOT EXISTS public.price_master (
+    id TEXT PRIMARY KEY DEFAULT gen_random_uuid()::TEXT,
+    category TEXT NOT NULL DEFAULT '',
+    name TEXT NOT NULL DEFAULT '',
+    unit TEXT NOT NULL DEFAULT 'kg',
+    price NUMERIC(12, 2) NOT NULL DEFAULT 0,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
 -- -----------------------------------------------------------------
 -- 3. updated_at 自動更新トリガーの設定
 -- -----------------------------------------------------------------
@@ -110,6 +139,16 @@ CREATE TRIGGER update_invoices_updated_at
     BEFORE UPDATE ON public.invoices
     FOR EACH ROW EXECUTE FUNCTION public.update_updated_at_column();
 
+DROP TRIGGER IF EXISTS update_company_settings_updated_at ON public.company_settings;
+CREATE TRIGGER update_company_settings_updated_at
+    BEFORE UPDATE ON public.company_settings
+    FOR EACH ROW EXECUTE FUNCTION public.update_updated_at_column();
+
+DROP TRIGGER IF EXISTS update_price_master_updated_at ON public.price_master;
+CREATE TRIGGER update_price_master_updated_at
+    BEFORE UPDATE ON public.price_master
+    FOR EACH ROW EXECUTE FUNCTION public.update_updated_at_column();
+
 -- -----------------------------------------------------------------
 -- 4. RLS (Row Level Security) の有効化
 -- -----------------------------------------------------------------
@@ -119,6 +158,8 @@ ALTER TABLE public.customers ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.jobs ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.spot_collections ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.invoices ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.company_settings ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.price_master ENABLE ROW LEVEL SECURITY;
 
 -- -----------------------------------------------------------------
 -- 5. 基本的な RLS ポリシーの作成 (全アクセス可に統一)
@@ -152,6 +193,16 @@ CREATE POLICY "Allow authenticated access to spot_collections"
 DROP POLICY IF EXISTS "Allow authenticated access to invoices" ON public.invoices;
 CREATE POLICY "Allow authenticated access to invoices"
     ON public.invoices FOR ALL USING (true) WITH CHECK (true);
+
+-- company_settings ポリシー
+DROP POLICY IF EXISTS "Allow authenticated access to company_settings" ON public.company_settings;
+CREATE POLICY "Allow authenticated access to company_settings"
+    ON public.company_settings FOR ALL USING (true) WITH CHECK (true);
+
+-- price_master ポリシー
+DROP POLICY IF EXISTS "Allow authenticated access to price_master" ON public.price_master;
+CREATE POLICY "Allow authenticated access to price_master"
+    ON public.price_master FOR ALL USING (true) WITH CHECK (true);
 
 -- -----------------------------------------------------------------
 -- 6. 新規ユーザー登録時に profiles テーブルへ自動同期するトリガー関数

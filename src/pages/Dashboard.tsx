@@ -224,8 +224,8 @@ export const Dashboard: React.FC = () => {
       {/* Header */}
       <header className="app-header">
         <div className="header-content">
-          <h1>臨時収集工程ダッシュボード</h1>
-          <div className="header-actions" style={{ display: 'flex', gap: '0.75rem' }}>
+          <div className="flex items-center gap-3 md:gap-4 flex-wrap">
+            <h1 className="text-xl font-bold text-main">臨時収集工程ダッシュボード</h1>
             <button
               id="newTaskBtn"
               className="btn-primary"
@@ -236,6 +236,8 @@ export const Dashboard: React.FC = () => {
               <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>
               新規受付
             </button>
+          </div>
+          <div className="header-actions" style={{ display: 'flex', gap: '0.75rem' }}>
             <button
               id="importBtn"
               className="btn-secondary"
