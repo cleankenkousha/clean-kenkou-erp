@@ -18,7 +18,6 @@ import {
   Clipboard,
 } from 'lucide-react'
 
-
 import { useNavigate } from 'react-router-dom'
 import { Button, Input } from '../ui'
 import { supabase } from '../../lib/supabase'
@@ -26,12 +25,11 @@ import { usePriceMaster } from '../../hooks/usePriceMaster'
 import { useViewMode } from '../../hooks/useViewMode'
 import { analyzeQuoteImagesWithGemini } from '../../lib/gemini'
 
-
-
 export interface QuoteItem {
   id: string
   name: string
   quantity: number
+  unit: string
   volume: number
   unitPrice: number
 }
@@ -50,7 +48,85 @@ interface MobileQuoteModalProps {
   initialData?: InitialQuoteData | null
 }
 
+// AI検出品目を自社の登録単価マスタ(masterItems)と高精度照合し、自社の登録品名・単価・単位・体積を100%優先適用する関数
+const matchMasterItem = (
+  aiItem: { name: string; quantity: number; unit?: string; volume?: number; unitPrice?: number },
+  masterList: any[]
+) => {
+  if (!masterList || masterList.length === 0) {
+    return {
+      name: aiItem.name,
+      unit: aiItem.unit || '点',
+      unitPrice: aiItem.unitPrice || 3000,
+      volume: aiItem.volume !== undefined ? aiItem.volume : 0.4,
+    }
+  }
 
+  const aiName = aiItem.name.trim()
+
+  // 1. 完全一致チェック
+  const exactMatch = masterList.find((m) => m.name.trim() === aiName)
+  if (exactMatch) {
+    return {
+      name: exactMatch.name,
+      unit: exactMatch.unit || aiItem.unit || '点',
+      unitPrice: exactMatch.price,
+      volume: exactMatch.volume !== undefined ? exactMatch.volume : (aiItem.volume || 0.4),
+    }
+  }
+
+  // 2. 部分一致チェック (マスタ名がAI名に含まれる、またはAI名がマスタ名に含まれる)
+  const partialMatch = masterList.find((m) => aiName.includes(m.name) || m.name.includes(aiName))
+  if (partialMatch) {
+    return {
+      name: partialMatch.name,
+      unit: partialMatch.unit || aiItem.unit || '点',
+      unitPrice: partialMatch.price,
+      volume: partialMatch.volume !== undefined ? partialMatch.volume : (aiItem.volume || 0.4),
+    }
+  }
+
+  // 3. カテゴリ・主要品目キーワード別マッピング
+  const keywords = ['テレビ', '冷蔵庫', '洗濯機', 'エアコン', 'ソファ', 'ベッド', 'タンス', '机', '段ボール', 'タイヤ', '自転車', '布団', '金属', '古紙']
+  for (const kw of keywords) {
+    if (aiName.includes(kw)) {
+      const match = masterList.find((m) => m.name.includes(kw))
+      if (match) {
+        return {
+          name: match.name,
+          unit: match.unit || aiItem.unit || '点',
+          unitPrice: match.price,
+          volume: match.volume !== undefined ? match.volume : (aiItem.volume || 0.4),
+        }
+      }
+    }
+  }
+
+  return {
+    name: aiItem.name,
+    unit: aiItem.unit || '点',
+    unitPrice: aiItem.unitPrice || 3000,
+    volume: aiItem.volume !== undefined ? aiItem.volume : 0.4,
+  }
+}
+
+// 単位（kg / m3 / 個数系）に応じた品目の小計体積(m3)算出ヘルパー
+const calcItemVolume = (item: { unit?: string; volume: number; quantity: number }): number => {
+  const unit = item.unit || '点'
+  const qty = Number(item.quantity) || 0
+  const vol = Number(item.volume) || 0
+
+  if (unit === 'kg') {
+    // kg単位の場合、体積に入力された数値は該当重量(500kg等)全体の概算体積m3として採用
+    return vol
+  }
+  if (unit === 'm3') {
+    // m3単位の場合、数量に入力された数値がm3体積そのもの
+    return qty
+  }
+  // 個数系単位（台、点、個、本、枚、箱、袋）の場合：1点あたり体積 × 数量
+  return vol * qty
+}
 
 export const MobileQuoteModal: React.FC<MobileQuoteModalProps> = ({
   isOpen,
@@ -62,7 +138,6 @@ export const MobileQuoteModal: React.FC<MobileQuoteModalProps> = ({
   const { isMobileMode } = useViewMode()
   const fileInputRef = useRef<HTMLInputElement>(null)
 
-
   const { items: masterItems } = usePriceMaster()
 
   const [capturedImages, setCapturedImages] = useState<string[]>([])
@@ -70,24 +145,11 @@ export const MobileQuoteModal: React.FC<MobileQuoteModalProps> = ({
   const [aiMessage, setAiMessage] = useState<string | null>(null)
   const [aiDetectedItems, setAiDetectedItems] = useState<QuoteItem[]>([])
 
-
   const [customerName, setCustomerName] = useState('')
   const [customerPhone, setCustomerPhone] = useState('')
   const [customerAddress, setCustomerAddress] = useState('')
 
-  // 初期データの自動セット
-  React.useEffect(() => {
-    if (isOpen && initialData) {
-      if (initialData.customerName) setCustomerName(initialData.customerName)
-      if (initialData.customerPhone) setCustomerPhone(initialData.customerPhone)
-      if (initialData.customerAddress) setCustomerAddress(initialData.customerAddress)
-    }
-  }, [isOpen, initialData])
-
-  const [items, setItems] = useState<QuoteItem[]>([
-    { id: '1', name: '2人掛けソファ', quantity: 1, volume: 1.5, unitPrice: 8000 },
-    { id: '2', name: '段ボール（Mサイズ相当）', quantity: 5, volume: 0.1, unitPrice: 800 },
-  ])
+  const [items, setItems] = useState<QuoteItem[]>([])
 
   const [baseFee, setBaseFee] = useState<number>(0)
   const [expenses, setExpenses] = useState<number>(0)
@@ -95,8 +157,33 @@ export const MobileQuoteModal: React.FC<MobileQuoteModalProps> = ({
   const [isSaving, setIsSaving] = useState(false)
   const [errorMsg, setErrorMsg] = useState<string | null>(null)
 
+  // 全データを初期化・クリアするハンドラー
+  const handleResetAll = useCallback(() => {
+    setCapturedImages([])
+    setItems([])
+    setAiMessage(null)
+    setAiDetectedItems([])
+    setBaseFee(0)
+    setExpenses(0)
+    setNotes('')
+    setErrorMsg(null)
+    if (initialData) {
+      setCustomerName(initialData.customerName || '')
+      setCustomerPhone(initialData.customerPhone || '')
+      setCustomerAddress(initialData.customerAddress || '')
+    } else {
+      setCustomerName('')
+      setCustomerPhone('')
+      setCustomerAddress('')
+    }
+  }, [initialData])
 
-
+  // モーダルオープン時の自動状態クリア・初期化
+  React.useEffect(() => {
+    if (isOpen) {
+      handleResetAll()
+    }
+  }, [isOpen, handleResetAll])
 
   const [isDragging, setIsDragging] = useState(false)
 
@@ -142,9 +229,8 @@ export const MobileQuoteModal: React.FC<MobileQuoteModalProps> = ({
     }
   }, [isOpen, addImagesFromFiles])
 
-  // モーダルが非表示の場合はレンダリングしない (すべてのHook宣言より後に配置)
+  // モーダルが非表示の場合はレンダリングしない
   if (!isOpen) return null
-
 
   const handleImageCapture = (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = e.target.files
@@ -181,61 +267,81 @@ export const MobileQuoteModal: React.FC<MobileQuoteModalProps> = ({
     setCapturedImages((prev) => prev.filter((_, i) => i !== index))
   }
 
+  const handleClearAllImages = () => {
+    setCapturedImages([])
+    setAiMessage('画像をすべてクリアしました。')
+  }
 
   const analyzeImageWithAi = async () => {
     if (capturedImages.length === 0) {
-      alert('先に撮影または画像を選択・貼り付けしてください。')
+      alert('先に撮影または現場写真を選択・貼り付けしてください。')
       return
     }
 
     setIsAiAnalyzing(true)
-    setAiMessage('Google AI (Gemini 1.5 Flash) が現場写真を読み込み中... (品目と体積を解析しています)')
+    setAiMessage(`Google AI (Gemini) が社内単価マスタを参照し、計${capturedImages.length}枚の写真を解析中...`)
     setAiDetectedItems([])
 
     try {
-      const detected = await analyzeQuoteImagesWithGemini(capturedImages)
-      const mappedItems: QuoteItem[] = detected.map((item, idx) => ({
-        id: Date.now().toString() + '-' + idx,
-        name: item.name,
-        quantity: item.quantity || 1,
-        volume: item.volume || 0.5,
-        unitPrice: item.unitPrice || 3000,
-      }))
+      const detected = await analyzeQuoteImagesWithGemini(
+        capturedImages,
+        undefined,
+        (progressStatus) => {
+          setAiMessage(progressStatus)
+        },
+        masterItems
+      )
+
+      const mappedItems: QuoteItem[] = detected.map((item, idx) => {
+        const matched = matchMasterItem(item, masterItems)
+        return {
+          id: Date.now().toString() + '-' + idx,
+          name: matched.name,
+          quantity: item.quantity || 1,
+          unit: matched.unit,
+          volume: matched.volume,
+          unitPrice: matched.unitPrice,
+        }
+      })
 
       if (mappedItems.length > 0) {
         setItems(mappedItems)
         setAiDetectedItems(mappedItems)
-        setAiMessage(`AI解析完了: 写真から【${mappedItems.length}件の回収品目】を特定しました！`)
+        setAiMessage(
+          `AI解析完了: 全${capturedImages.length}枚の写真から社内マスタと一致する【${mappedItems.length}件の回収品目】を自動算定しました！`
+        )
       } else {
-        setAiMessage('AI解析完了: 写真からの品目判定を完了しました。手動で微調整してください。')
+        setAiMessage(
+          `AI解析完了: 全${capturedImages.length}枚の写真から品目を判別しました。手動で微調整してください。`
+        )
       }
     } catch (err: any) {
       console.warn('Gemini API Analysis notice:', err)
-      if (err.message?.includes('APIキー')) {
+      const errText = err.message || String(err)
+      if (errText.includes('APIキー')) {
         const inputKey = prompt(
           '【Google Gemini APIキーが必要です】\n\nGoogle AI Studioで作成した無料APIキーを入力すると、AI自動写真解析が利用できます。\n(1日1,500回まで完全無料)\n\n取得URL: https://aistudio.google.com/app/apikey\n\nAPIキーを入力してください:'
         )
         if (inputKey && inputKey.trim()) {
           localStorage.setItem('clean_kenkou_gemini_api_key', inputKey.trim())
-          alert('APIキーを登録しました！もう一度「AI画像読み込み」ボタンを押してください。')
+          alert('APIキーを登録しました！もう一度「AI自動抽出」ボタンを押してください。')
         }
       }
-      setAiMessage('AI画像読み込み完了。抽出された品目をご確認・微調整してください。')
+      setAiMessage(`AI画像読み込み通知: ${errText}`)
     } finally {
       setIsAiAnalyzing(false)
     }
   }
 
-
-
-
-  const handleAddItem = (preset?: { name: string; volume?: number; unitPrice: number }) => {
+  const handleAddItem = (preset?: { name: string; unit?: string; volume?: number; unitPrice: number }) => {
+    const firstMaster = masterItems && masterItems.length > 0 ? masterItems[0] : null
     const newItem: QuoteItem = {
       id: Date.now().toString(),
-      name: preset ? preset.name : '新規品目',
+      name: preset ? preset.name : (firstMaster ? firstMaster.name : '新規不用品'),
       quantity: 1,
-      volume: preset?.volume !== undefined ? preset.volume : 0.5,
-      unitPrice: preset ? preset.unitPrice : 3000,
+      unit: preset?.unit || (firstMaster?.unit || '点'),
+      volume: preset?.volume !== undefined ? preset.volume : (firstMaster?.volume !== undefined ? firstMaster.volume : 0.4),
+      unitPrice: preset ? preset.unitPrice : (firstMaster ? firstMaster.price : 3000),
     }
     setItems((prev) => [...prev, newItem])
   }
@@ -261,8 +367,7 @@ export const MobileQuoteModal: React.FC<MobileQuoteModalProps> = ({
     navigate('/settings', { state: { returnToQuote: true } })
   }
 
-
-  const totalVolume = items.reduce((sum, item) => sum + (Number(item.volume) || 0) * (Number(item.quantity) || 1), 0)
+  const totalVolume = items.reduce((sum, item) => sum + calcItemVolume(item), 0)
   const itemsSubtotal = items.reduce((sum, item) => sum + (Number(item.unitPrice) || 0) * (Number(item.quantity) || 1), 0)
   const grandTotal = itemsSubtotal + (Number(baseFee) || 0) + (Number(expenses) || 0)
 
@@ -288,10 +393,8 @@ export const MobileQuoteModal: React.FC<MobileQuoteModalProps> = ({
         imagesCount: capturedImages.length,
       }
 
-
-
       if (initialData?.jobId) {
-        // 既存の案件に対する見積保存・更新
+        // 既存案件の更新
         const { error: updateErr } = await supabase
           .from('jobs')
           .update({
@@ -317,14 +420,13 @@ export const MobileQuoteModal: React.FC<MobileQuoteModalProps> = ({
 
         const { error: jobErr } = await supabase.from('jobs').insert({
           customer_id: customerData.id,
-          title: `【携帯概算見積】${customerName.trim()}様（約${totalVolume.toFixed(1)}m3 / ¥${grandTotal.toLocaleString()}）`,
+          title: `【概算見積】${customerName.trim()}様（約${totalVolume.toFixed(1)}m3 / ¥${grandTotal.toLocaleString()}）`,
           status: 'quoting',
           notes: JSON.stringify(quoteDetailsNote),
         })
 
         if (jobErr) throw jobErr
       }
-
 
       alert(`概算見積の作成が完了しました。\n合計金額: ¥${grandTotal.toLocaleString()} (約 ${totalVolume.toFixed(1)} m3)`)
       if (onSuccess) onSuccess()
@@ -354,19 +456,30 @@ export const MobileQuoteModal: React.FC<MobileQuoteModalProps> = ({
               <h2 className="text-base sm:text-lg font-bold tracking-tight">
                 {isMobileMode ? '携帯・タブレット概算見積' : 'PC版 概算見積作成 (AI算定・撮影連動)'}
               </h2>
-              <p className="text-xs text-slate-300">写真読み込み・品目選択・自動体積算定を行えます</p>
+              <p className="text-xs text-slate-300">単価マスタ連動・写真読み込み・AI自動体積算定を行えます</p>
             </div>
           </div>
-          <button
-            type="button"
-            onClick={onClose}
-            className="p-2 text-slate-400 hover:text-white rounded-full hover:bg-slate-800 transition-colors"
-          >
-            <X className="w-5 h-5" />
-          </button>
+          <div className="flex items-center space-x-2">
+            <button
+              type="button"
+              onClick={handleResetAll}
+              className="px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-200 hover:text-white rounded-lg text-xs font-semibold flex items-center gap-1 transition-colors border border-slate-700 shadow-sm"
+              title="すべての入力と写真を初期化します"
+            >
+              <Trash2 className="w-3.5 h-3.5 text-rose-400" />
+              <span>入力全クリア</span>
+            </button>
+            <button
+              type="button"
+              onClick={onClose}
+              className="p-2 text-slate-400 hover:text-white rounded-full hover:bg-slate-800 transition-colors"
+            >
+              <X className="w-5 h-5" />
+            </button>
+          </div>
         </div>
 
-        {/* Body (PCモードは2カラム、携帯モードは1カラム) */}
+        {/* Body */}
         <div className="flex-1 overflow-y-auto p-4 sm:p-6 bg-slate-50/50">
           {errorMsg && (
             <div className="mb-4 p-3 bg-rose-50 border border-rose-200 rounded-xl text-xs text-rose-700 flex items-center gap-2">
@@ -388,10 +501,23 @@ export const MobileQuoteModal: React.FC<MobileQuoteModalProps> = ({
                     </span>
                     <h3 className="text-sm font-bold text-main">現場写真の撮影・読み込み</h3>
                   </div>
-                  <span className="text-[11px] text-sub">{capturedImages.length}枚 読み込み済</span>
+                  <div className="flex items-center gap-2">
+                    <span className="text-[11px] text-blue-700 bg-blue-50 px-2.5 py-0.5 rounded-full font-bold border border-blue-200">
+                      {capturedImages.length}枚 読み込み済
+                    </span>
+                    {capturedImages.length > 0 && (
+                      <button
+                        type="button"
+                        onClick={handleClearAllImages}
+                        className="text-[11px] text-rose-600 hover:text-rose-800 underline font-medium"
+                      >
+                        全消去
+                      </button>
+                    )}
+                  </div>
                 </div>
 
-                {/* ファイル入力 (カメラ & PCファイル選択両対応) */}
+                {/* ファイル入力 */}
                 <input
                   type="file"
                   ref={fileInputRef}
@@ -401,7 +527,7 @@ export const MobileQuoteModal: React.FC<MobileQuoteModalProps> = ({
                   className="hidden"
                 />
 
-                {/* ドラッグ＆ドロップ & ドロップゾーン */}
+                {/* ドロップゾーン */}
                 <div
                   onDragOver={handleDragOver}
                   onDragLeave={handleDragLeave}
@@ -440,7 +566,6 @@ export const MobileQuoteModal: React.FC<MobileQuoteModalProps> = ({
                     </Button>
                   </div>
 
-                  {/* PC用操作ガイド */}
                   <div className="flex flex-wrap items-center justify-center gap-2 text-[11px] text-slate-500 pt-0.5">
                     <span className="flex items-center gap-1">
                       <Upload className="w-3.5 h-3.5 text-slate-400" />
@@ -457,56 +582,78 @@ export const MobileQuoteModal: React.FC<MobileQuoteModalProps> = ({
 
                 {aiMessage && (
                   <div className="p-2.5 bg-purple-50 border border-purple-200 rounded-lg text-xs text-purple-800 flex items-center space-x-2">
-                    <Sparkles className="w-4 h-4 text-purple-600 flex-shrink-0" />
+                    <Sparkles className="w-4 h-4 text-purple-600 flex-shrink-0 animate-pulse" />
                     <span className="font-semibold">{aiMessage}</span>
                   </div>
                 )}
 
-                {/* AIが特定・判別した品目一覧バナー */}
+                {/* AI検出結果バナー */}
                 {aiDetectedItems.length > 0 && (
                   <div className="p-3 bg-gradient-to-r from-purple-50 via-indigo-50 to-blue-50 border border-purple-200 rounded-xl space-y-2 shadow-inner">
                     <div className="flex items-center justify-between text-xs text-purple-950 font-bold">
                       <span className="flex items-center gap-1.5">
                         <Sparkles className="w-4 h-4 text-purple-600" />
-                        AIが写真から検出した品目内訳:
+                        AIが特定・マスタ照合した品目・単位内訳:
                       </span>
                       <span className="text-[10px] text-purple-700 bg-white px-2 py-0.5 rounded-full border border-purple-200 font-bold">
-                        全 {aiDetectedItems.length} 件を検出
+                        全 {aiDetectedItems.length} 件を特定
                       </span>
                     </div>
                     <div className="flex flex-wrap gap-1.5 pt-1">
-                      {aiDetectedItems.map((detItem) => (
-                        <span
-                          key={'detected-' + detItem.id}
-                          className="inline-flex items-center gap-1 px-2.5 py-1 bg-white border border-purple-300 rounded-lg text-xs font-bold text-slate-800 shadow-sm"
-                        >
-                          <span className="text-purple-700">🔍 {detItem.name}</span>
-                          <span className="text-blue-700 font-extrabold">x{detItem.quantity}</span>
-                          <span className="text-[10px] text-slate-500 font-normal">({detItem.volume}m³)</span>
-                        </span>
-                      ))}
+                      {aiDetectedItems.map((detItem) => {
+                        const emoji = detItem.name.includes('テレビ') ? '📺' :
+                          detItem.name.includes('冷蔵庫') ? '🧊' :
+                          detItem.name.includes('洗濯機') ? '🧺' :
+                          detItem.name.includes('エアコン') ? '❄️' :
+                          detItem.name.includes('ソファ') || detItem.name.includes('椅子') ? '🛋️' :
+                          detItem.name.includes('ベッド') || detItem.name.includes('布団') ? '🛏️' :
+                          detItem.name.includes('段ボール') || detItem.name.includes('箱') ? '📦' :
+                          detItem.name.includes('タイヤ') ? '🛞' :
+                          detItem.name.includes('金属') || detItem.name.includes('鉄') ? '⚙️' :
+                          detItem.name.includes('古紙') || detItem.name.includes('新聞') ? '📰' : '🔍'
+
+                        return (
+                          <span
+                            key={'detected-' + detItem.id}
+                            className="inline-flex items-center gap-1 px-2.5 py-1 bg-white border border-purple-300 rounded-lg text-xs font-bold text-slate-800 shadow-sm"
+                          >
+                            <span className="text-purple-900">{emoji} {detItem.name}</span>
+                            <span className="text-blue-700 font-extrabold">x{detItem.quantity}{detItem.unit || '点'}</span>
+                            <span className="text-[10px] text-slate-500 font-normal">({detItem.volume}m³)</span>
+                          </span>
+                        )
+                      })}
                     </div>
                     <p className="text-[10px] text-purple-700 pt-0.5">
-                      ※上記の認識結果が品目リストに自動反映されました。数量や単価は必要に応じて入力枠で変更できます。
+                      ※特定品目・リサイクル品目（テレビ・家電・タイヤ・kg・本数等）の単位で明細に自動展開されました。
                     </p>
                   </div>
                 )}
 
-
                 {capturedImages.length > 0 && (
-                  <div className="flex items-center space-x-2 overflow-x-auto pt-1 pb-1">
-                    {capturedImages.map((src, idx) => (
-                      <div key={idx} className="relative flex-shrink-0 w-20 h-20 rounded-lg overflow-hidden border border-border group shadow-sm">
-                        <img src={src} alt={`現場写真 ${idx + 1}`} className="w-full h-full object-cover" />
-                        <button
-                          type="button"
-                          onClick={() => handleRemoveImage(idx)}
-                          className="absolute top-1 right-1 p-1 bg-black/70 text-white rounded-full hover:bg-rose-600 transition-colors"
-                        >
-                          <X className="w-3 h-3" />
-                        </button>
-                      </div>
-                    ))}
+                  <div className="space-y-1.5 pt-1">
+                    <div className="flex items-center justify-between text-[11px] text-slate-500 font-semibold px-0.5">
+                      <span>アップロード写真プレビュー (全 {capturedImages.length} 枚)</span>
+                      <span className="text-[10px] text-slate-400">※30枚以上の一括AI認識に対応</span>
+                    </div>
+                    <div className="grid grid-cols-4 sm:grid-cols-5 gap-2 max-h-48 overflow-y-auto p-1.5 bg-slate-100/70 rounded-xl border border-slate-200">
+                      {capturedImages.map((src, idx) => (
+                        <div key={idx} className="relative aspect-square rounded-lg overflow-hidden border border-slate-200 group shadow-sm bg-black/5">
+                          <img src={src} alt={`現場写真 ${idx + 1}`} className="w-full h-full object-cover" />
+                          <span className="absolute bottom-0.5 left-0.5 bg-black/60 text-white text-[9px] px-1 rounded font-mono">
+                            #{idx + 1}
+                          </span>
+                          <button
+                            type="button"
+                            onClick={() => handleRemoveImage(idx)}
+                            className="absolute top-1 right-1 p-1 bg-black/70 text-white rounded-full hover:bg-rose-600 transition-colors opacity-90 sm:opacity-0 group-hover:opacity-100"
+                            title="写真を削除"
+                          >
+                            <X className="w-3 h-3" />
+                          </button>
+                        </div>
+                      ))}
+                    </div>
                   </div>
                 )}
               </div>
@@ -580,7 +727,7 @@ export const MobileQuoteModal: React.FC<MobileQuoteModalProps> = ({
                     <span className="w-6 h-6 rounded-full bg-blue-100 text-blue-700 text-xs font-bold flex items-center justify-center">
                       3
                     </span>
-                    <h3 className="text-sm font-bold text-main">品目・体積明細</h3>
+                    <h3 className="text-sm font-bold text-main">品目・単価・体積明細</h3>
                   </div>
                   <Button type="button" variant="outline" size="sm" onClick={() => handleAddItem()}>
                     <Plus className="w-3.5 h-3.5 mr-1" />
@@ -588,16 +735,15 @@ export const MobileQuoteModal: React.FC<MobileQuoteModalProps> = ({
                   </Button>
                 </div>
 
-                {/* マスタ設定への案内 */}
                 <div className="flex items-center justify-between text-[10px] text-sub font-semibold">
-                  <span>品目入力（マスタ選択または直接入力）:</span>
+                  <span>品目選択（回収品目・単価マスタ連動）:</span>
                   <button
                     type="button"
                     onClick={handleGoToSettings}
                     className="text-blue-600 hover:underline flex items-center gap-0.5"
                   >
                     <Settings className="w-3 h-3" />
-                    <span>品目マスタ編集・並び替えへ</span>
+                    <span>単価マスタ編集へ</span>
                   </button>
                 </div>
 
@@ -605,7 +751,7 @@ export const MobileQuoteModal: React.FC<MobileQuoteModalProps> = ({
                 <div className="space-y-2.5 pt-1 max-h-72 overflow-y-auto pr-1">
                   {items.length === 0 ? (
                     <div className="p-4 text-center border border-dashed border-border rounded-xl text-sub text-xs">
-                      品目がありません。「品目を新規追加」ボタンから追加してください。
+                      品目がありません。「品目を新規追加」または「AI自動抽出」を行ってください。
                     </div>
                   ) : (
                     items.map((item) => (
@@ -622,8 +768,9 @@ export const MobileQuoteModal: React.FC<MobileQuoteModalProps> = ({
                                 const selected = masterItems.find((m) => m.id === e.target.value)
                                 if (selected) {
                                   handleUpdateItem(item.id, 'name', selected.name)
+                                  handleUpdateItem(item.id, 'unit', selected.unit || '点')
                                   handleUpdateItem(item.id, 'unitPrice', selected.price)
-                                  if (selected.volume) {
+                                  if (selected.volume !== undefined) {
                                     handleUpdateItem(item.id, 'volume', selected.volume)
                                   }
                                 }
@@ -635,7 +782,7 @@ export const MobileQuoteModal: React.FC<MobileQuoteModalProps> = ({
                               </option>
                               {masterItems.map((mItem) => (
                                 <option key={mItem.id} value={mItem.id}>
-                                  {mItem.name} (¥{mItem.price.toLocaleString()})
+                                  {mItem.name} ({mItem.unit ? `${mItem.unit} / ` : ''}¥{mItem.price.toLocaleString()})
                                 </option>
                               ))}
                             </select>
@@ -660,7 +807,8 @@ export const MobileQuoteModal: React.FC<MobileQuoteModalProps> = ({
                           </button>
                         </div>
 
-                        <div className="grid grid-cols-3 gap-2 text-xs">
+                        {/* 数量・単位・体積・単価入力 */}
+                        <div className="grid grid-cols-4 gap-2 text-xs">
                           <div>
                             <label className="text-[10px] text-sub font-semibold block mb-0.5">数量</label>
                             <Input
@@ -671,8 +819,30 @@ export const MobileQuoteModal: React.FC<MobileQuoteModalProps> = ({
                               className="text-xs bg-white text-center font-bold"
                             />
                           </div>
+
                           <div>
-                            <label className="text-[10px] text-sub font-semibold block mb-0.5">体積 (m3/点)</label>
+                            <label className="text-[10px] text-sub font-semibold block mb-0.5">単位</label>
+                            <select
+                              className="w-full text-xs px-1.5 py-1.5 border border-slate-300 rounded-lg bg-white font-bold text-slate-800 focus:outline-none"
+                              value={item.unit || '点'}
+                              onChange={(e) => handleUpdateItem(item.id, 'unit', e.target.value)}
+                            >
+                              <option value="点">点</option>
+                              <option value="個">個</option>
+                              <option value="台">台</option>
+                              <option value="箱">箱</option>
+                              <option value="袋">袋</option>
+                              <option value="kg">kg</option>
+                              <option value="本">本</option>
+                              <option value="枚">枚</option>
+                              <option value="m3">m3</option>
+                            </select>
+                          </div>
+
+                          <div>
+                            <label className="text-[10px] text-sub font-semibold block mb-0.5">
+                              {item.unit === 'kg' ? '概算体積(m3)' : item.unit === 'm3' ? '体積(m3)' : '体積(m3/点)'}
+                            </label>
                             <Input
                               type="number"
                               step="0.1"
@@ -682,6 +852,7 @@ export const MobileQuoteModal: React.FC<MobileQuoteModalProps> = ({
                               className="text-xs bg-white text-center font-bold text-blue-700"
                             />
                           </div>
+
                           <div>
                             <label className="text-[10px] text-sub font-semibold block mb-0.5">単価 (円)</label>
                             <Input
@@ -697,7 +868,7 @@ export const MobileQuoteModal: React.FC<MobileQuoteModalProps> = ({
 
                         <div className="flex items-center justify-between pt-1 border-t border-slate-200 text-[11px] text-sub">
                           <span>
-                            小計体積: <strong className="text-blue-700">{(item.volume * item.quantity).toFixed(1)} m3</strong>
+                            小計体積: <strong className="text-blue-700">{calcItemVolume(item).toFixed(1)} m3</strong>
                           </span>
                           <span>
                             小計金額: <strong className="text-main">¥{(item.unitPrice * item.quantity).toLocaleString()}</strong>
@@ -708,10 +879,8 @@ export const MobileQuoteModal: React.FC<MobileQuoteModalProps> = ({
                   )}
                 </div>
 
-
-                {/* 運搬作業費 & 諸経費 (シンプルな自由金額入力) */}
+                {/* 運搬作業費 & 諸経費 */}
                 <div className="pt-2 grid grid-cols-1 sm:grid-cols-2 gap-3">
-                  {/* 運搬作業費 */}
                   <div className="p-3 bg-slate-100/90 border border-slate-200 rounded-xl space-y-1">
                     <label className="font-bold text-xs text-main block">運搬作業費 (円)</label>
                     <div className="flex items-center space-x-1">
@@ -728,7 +897,6 @@ export const MobileQuoteModal: React.FC<MobileQuoteModalProps> = ({
                     </div>
                   </div>
 
-                  {/* 諸経費 */}
                   <div className="p-3 bg-amber-50/70 border border-amber-200 rounded-xl space-y-1">
                     <label className="font-bold text-xs text-amber-900 block">諸経費 (円)</label>
                     <div className="flex items-center space-x-1">
@@ -746,7 +914,6 @@ export const MobileQuoteModal: React.FC<MobileQuoteModalProps> = ({
                   </div>
                 </div>
 
-                {/* 現場備考 */}
                 <div>
                   <label className="text-[11px] font-semibold text-sub block mb-1">現場備考・特記事項</label>
                   <textarea
@@ -769,7 +936,6 @@ export const MobileQuoteModal: React.FC<MobileQuoteModalProps> = ({
                   </div>
                 </div>
 
-                {/* 内訳サマリー */}
                 <div className="space-y-1 text-xs text-slate-300 bg-slate-800/80 p-2.5 rounded-lg border border-slate-700/60">
                   <div className="flex justify-between">
                     <span>品目小計:</span>
@@ -789,7 +955,6 @@ export const MobileQuoteModal: React.FC<MobileQuoteModalProps> = ({
                   )}
                 </div>
 
-
                 <div className="flex items-center justify-between pt-1">
                   <span className="text-sm font-bold text-slate-200">概算ご提示金額 (税込)</span>
                   <div className="text-right">
@@ -804,7 +969,6 @@ export const MobileQuoteModal: React.FC<MobileQuoteModalProps> = ({
             </div>
           </div>
         </div>
-
 
         {/* Footer */}
         <div className="p-4 bg-white border-t border-border flex items-center space-x-3 justify-end">
@@ -834,4 +998,3 @@ export const MobileQuoteModal: React.FC<MobileQuoteModalProps> = ({
     </div>
   )
 }
-
