@@ -6,21 +6,50 @@ export interface GeminiDetectedItem {
   unit: string
   volume: number
   unitPrice: number
+  reason?: string
 }
 
 /**
  * 画像(DataURL / Blob URL)を長辺最大1000pxに軽量圧縮しBase64およびMIMEタイプを取得
- * 30枚以上の画像でもブラウザメモリとAPI通信量を最適化します
+ * タイムアウト(4秒)およびBlob処理のフリーズ防止を完全実装
  */
 async function compressImageAndGetBase64(
   url: string,
   maxDimension = 1000,
   quality = 0.75
 ): Promise<{ mimeType: string; data: string }> {
+  // Blob URL または Data URL の場合は直接 urlToBase64 で高速安全取得を優先
+  if (url.startsWith('data:') || url.startsWith('blob:')) {
+    try {
+      const directData = await urlToBase64(url)
+      if (directData && directData.data) {
+        return directData
+      }
+    } catch {
+      // フォールバック継続
+    }
+  }
+
   return new Promise((resolve, reject) => {
+    let isSettled = false
+
+    const timer = setTimeout(() => {
+      if (!isSettled) {
+        isSettled = true
+        urlToBase64(url).then(resolve).catch(reject)
+      }
+    }, 4000)
+
     const img = new Image()
-    img.crossOrigin = 'anonymous'
+    // 外部HTTP/HTTPS画像の場合のみ crossOrigin を設定
+    if (url.startsWith('http://') || url.startsWith('https://')) {
+      img.crossOrigin = 'anonymous'
+    }
+
     img.onload = () => {
+      if (isSettled) return
+      isSettled = true
+      clearTimeout(timer)
       try {
         let width = img.width
         let height = img.height
@@ -40,7 +69,8 @@ async function compressImageAndGetBase64(
         canvas.height = height
         const ctx = canvas.getContext('2d')
         if (!ctx) {
-          throw new Error('Canvas Context Creation Failed')
+          urlToBase64(url).then(resolve).catch(reject)
+          return
         }
 
         ctx.drawImage(img, 0, 0, width, height)
@@ -48,13 +78,17 @@ async function compressImageAndGetBase64(
         const [, data] = dataUrl.split(',')
         resolve({ mimeType: 'image/jpeg', data })
       } catch (e) {
-        reject(e)
+        urlToBase64(url).then(resolve).catch(reject)
       }
     }
+
     img.onerror = () => {
-      // フォールバック: 元画像のFetch処理
+      if (isSettled) return
+      isSettled = true
+      clearTimeout(timer)
       urlToBase64(url).then(resolve).catch(reject)
     }
+
     img.src = url
   })
 }
@@ -78,14 +112,11 @@ async function urlToBase64(url: string): Promise<{ mimeType: string; data: strin
   })
 }
 
-// 無料枠で確実に動作する最新安定モデル & APIバージョンリスト
+// Google AI Studio 無料枠・標準枠で確実に動作するモデルリスト (v1betaのみ)
 const STABLE_FREE_MODELS = [
-  { name: 'gemini-1.5-flash-latest', version: 'v1beta' },
   { name: 'gemini-1.5-flash', version: 'v1beta' },
   { name: 'gemini-2.0-flash', version: 'v1beta' },
-  { name: 'gemini-2.0-flash-exp', version: 'v1beta' },
-  { name: 'gemini-1.5-flash', version: 'v1' },
-  { name: 'gemini-1.5-pro-latest', version: 'v1beta' },
+  { name: 'gemini-1.5-pro', version: 'v1beta' },
 ]
 
 /**
@@ -107,7 +138,7 @@ export async function analyzeQuoteImagesWithGemini(
 
   if (!key) {
     throw new Error(
-      'Gemini APIキーが設定されていません。Google AI Studioで無料キーを取得し設定に入力してください。'
+      'Gemini APIキーが設定されていません。システム設定でGemini APIキーを入力してください。'
     )
   }
 
@@ -122,7 +153,7 @@ export async function analyzeQuoteImagesWithGemini(
     onProgress(`全${targetUrls.length}枚の現場写真を高速最適化中...`)
   }
 
-  // 全画像を並列圧縮・Base64変換
+  // 全画像を並列圧縮・Base64変換 (タイムアウト保護付き)
   const inlineDataParts = await Promise.all(
     targetUrls.map(async (url, idx) => {
       try {
@@ -153,7 +184,8 @@ export async function analyzeQuoteImagesWithGemini(
   // 社内回収品目・単価マスタのプロンプト構築
   const masterListText = masterItems && masterItems.length > 0
     ? masterItems.map(m => `- ${m.name} [カテゴリ:${m.category}] (単位:${m.unit || '点'}, 参考単価:¥${m.price}, 推定体積:${m.volume || 0.5}m3)`).join('\n')
-    : `- テレビ（40インチ以上 / 小型） [カテゴリ:家電] (単位:台, 参考単価:¥4000, 推定体積:0.4m3)
+    : `- 衣類乾燥除湿機・除湿機 [カテゴリ:家電] (単位:台, 参考単価:¥3000, 推定体積:0.3m3)
+- 液晶テレビ（40インチ以上 / 小型） [カテゴリ:家電] (単位:台, 参考単価:¥4000, 推定体積:0.4m3)
 - 2人掛けソファ [カテゴリ:家具] (単位:点, 参考単価:¥8000, 推定体積:1.5m3)
 - 大型冷蔵庫 [カテゴリ:家電] (単位:台, 参考単価:¥10000, 推定体積:1.2m3)
 - 洗濯機・衣類乾燥機 [カテゴリ:家電] (単位:台, 参考単価:¥6000, 推定体積:0.8m3)
@@ -162,45 +194,55 @@ export async function analyzeQuoteImagesWithGemini(
 - 段ボール（Mサイズ相当） [カテゴリ:日用品] (単位:箱, 参考単価:¥800, 推定体積:0.1m3)`
 
   const prompt = `
-あなたは不用品回収・遺品整理・ゴミ屋敷清掃のプロ査定AIです。
-提供された計${targetUrls.length}枚の現場写真を隅々まで注意深く確認・解析し、写真に写っている不用品・回収対象品目を特定してください。
+あなたは不用品回収・遺品整理・ゴミ屋敷清掃の超高精度・プロ査定AIです。
+提供された計${targetUrls.length}枚の現場写真を隅々まで注意深く確認・解析し、写真に写っている不用品・回収対象品目を正確に特定してください。
+
+【★最優先指示：銘板・定格表示シール・型番ステッカーのテキスト解読 (OCR)】
+1. 写真の中に、製品の「定格銘板（型式・型番ラベル、仕様シール、メーカーロゴ等）」のアップ写真が含まれている場合は、最優先でそこに印字された文字（メーカー名・品名・型式番号）を精密に読み取ってください。
+   （例: 「コロナ 衣類乾燥除湿機 BD-H102」のラベル写真の場合、テレビや別の家電ではなく「衣類乾燥除湿機」または「除湿機」として正確に同定してください。）
+2. 銘板写真と外観全体写真を組み合わせて照合し、品目を誤認識しないよう極めて慎重に判断してください。
 
 【社内回収品目・単価マスタリスト】
-以下のマスタを参照し、写真に写っている物品があれば優先的に【マスタの品目名称（name）】をそのまま100%完全に一致させて出力してください。マスタの単価・単位も優先採用してください：
+以下の社内マスタを参照し、写真に写っている物品（銘板の読み取り結果含む）がマスタのいずれかの品目に対応する場合は、優先的に【マスタの品目名称（name）】を完全一致または最も適したマスタ名称で出力してください。マスタの単価・単位も優先採用してください：
 ${masterListText}
 
 【特定品目および単位（kg / 本 / 台 / 枚 / m3 / 個）識別に関する重要指示】
-1. 写真の中にテレビ（液晶テレビ/大型テレビ/ブラウン管テレビ）、冷蔵庫、洗濯機、エアコン等の家電製品、ソファ、ベッド、タンス、机などの家具類、タイヤ（本）、物干し竿（本）、新聞・段ボール・金属（kg/箱/m3）などが写っている場合は見落とさずに個別の品目として特定・カウントしてください。
-2. 単位はマスタに準拠して「台」「点」「箱」「袋」「kg」「本」「枚」「m3」「個」などを正確に指定してください。（例: テレビは「台」、タイヤは「本」、金属・古紙は「kg」、ソファは「台」または「点」、段ボールは「箱」）
-3. 部屋全体・現場写真から識別可能なすべての品目を漏れなく抽出してください。
-4. 1点あたりの推定体積(volume: m3数値)と、目安回収単価(unitPrice: 円)を正確に推定してください。
+1. 家電（テレビ、冷蔵庫、洗濯機、除湿機、加湿器、空気清浄機、エアコン、電子レンジ等）、家具（ソファ、ベッド、タンス、机等）、日用品・不用品（タイヤ、物干し竿、段ボール、古紙・金属等）を写真ごとに漏れなく特定・カウントしてください。
+2. 単位はマスタに準拠して「台」「点」「箱」「袋」「kg」「本」「枚」「m3」「個」などを正確に指定してください。
+3. 写真から認識した品目のみを抽出してください。
+4. 1点あたりの推定体積(volume: m3数値)と, 目安回収単価(unitPrice: 円)を正確に推定してください。
 
 【出力フォーマット】
-以下の形式のJSON配列(JSON Array)のみを出力してください。説明文章や思考プロセスは一切出力せず、純粋なJSONのみを返してください。
+以下の形式のJSON配列(JSON Array)のみを出力してください。説明文章やマークダウンの補足は一切含めず、純粋なJSON配列のみを返してください。
 
 [
   {
-    "name": "品目名 (例: 液晶テレビ（40インチ以上）, 2人掛けソファ, 大型冷蔵庫, タイヤ（普通車用）, 段ボール（Mサイズ相当） など)",
+    "name": "品目名 (例: 衣類乾燥除湿機, 液晶テレビ, 2人掛けソファ, 大型冷蔵庫, タイヤ（普通車用）, 段ボール など)",
     "quantity": 数量(数値),
     "unit": "単位 (例: 台, 点, 箱, 袋, kg, 本, 枚, m3, 個)",
-    "volume": 1点あたりの推定体積m3(数値, 例: 0.4),
-    "unitPrice": 1点あたりの目安回収単価円(数値, 例: 4000)
+    "volume": 1点あたりの推定体積m3(数値, 例: 0.3),
+    "unitPrice": 1点あたりの目安回収単価円(数値, 例: 3000),
+    "reason": "AI判定の根拠・メモ (例: 銘板ラベル読取「コロナ BD-H102」 / 状態良好・高年式のため買取候補 / 写真外観から40インチ超液晶テレビと推定 など)"
   }
 ]
 `
 
   let lastErrorMsg = ''
 
-  // 安定モデルで順番に解析を試行
+  // 安定モデルで順番に解析を試行 (各APIリクエストに15秒のタイムアウトを設定)
   for (const modelConfig of STABLE_FREE_MODELS) {
     try {
       const endpoint = `https://generativelanguage.googleapis.com/${modelConfig.version}/models/${modelConfig.name}:generateContent?key=${key}`
+
+      const controller = new AbortController()
+      const fetchTimeout = setTimeout(() => controller.abort(), 15000)
 
       const response = await fetch(endpoint, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
         },
+        signal: controller.signal,
         body: JSON.stringify({
           contents: [
             {
@@ -208,7 +250,7 @@ ${masterListText}
             },
           ],
         }),
-      })
+      }).finally(() => clearTimeout(fetchTimeout))
 
       if (!response.ok) {
         const errorData = await response.json().catch(() => ({}))
@@ -233,23 +275,22 @@ ${masterListText}
         return parsedItems.map(item => ({
           ...item,
           unit: item.unit || '点',
+          reason: item.reason || (item.name.includes('銘板') ? '銘板情報から高精度判別' : 'AI画像解析により特定'),
         }))
       }
     } catch (err: any) {
       console.warn(`Gemini attempt notice (${modelConfig.name}):`, err)
-      lastErrorMsg = err.message || String(err)
+      lastErrorMsg = err.name === 'AbortError' ? 'API応答タイムアウト(15秒)' : (err.message || String(err))
     }
   }
 
-  // API制限や接続エラー等のフォールバック
-  console.warn('Gemini API all models notice:', lastErrorMsg)
+  // API制限やエラーが発生した場合のハンドリング
+  console.error('Gemini API Error:', lastErrorMsg)
   if (lastErrorMsg.includes('API key') || lastErrorMsg.includes('API_KEY')) {
-    throw new Error(`Gemini APIキーエラー: ${lastErrorMsg}`)
+    throw new Error('Gemini APIキーが無効か未設定です。設定画面で正しいGemini APIキーを入力してください。')
   }
 
-  return [
-    { name: 'テレビ（40インチ以上）', quantity: 1, unit: '台', volume: 0.4, unitPrice: 4000 },
-    { name: '家具・大型不用品（写真確認分）', quantity: 1, unit: '点', volume: 1.5, unitPrice: 8000 },
-    { name: '段ボール・可燃不用品', quantity: 5, unit: '箱', volume: 0.1, unitPrice: 800 },
-  ]
+  throw new Error(
+    `Gemini AI解析に失敗しました (${lastErrorMsg || '接続タイムアウトまたはネットワークエラー'})。`
+  )
 }

@@ -32,6 +32,7 @@ export interface QuoteItem {
   unit: string
   volume: number
   unitPrice: number
+  reason?: string
 }
 
 export interface InitialQuoteData {
@@ -48,17 +49,19 @@ interface MobileQuoteModalProps {
   initialData?: InitialQuoteData | null
 }
 
-// AI検出品目を自社の登録単価マスタ(masterItems)と高精度照合し、自社の登録品名・単価・単位・体積を100%優先適用する関数
+// AI検出品目を自社の登録単価マスタ(masterItems)と高精度照合し、自社の登録品名・単価・単位・体積を優先適用する関数
 const matchMasterItem = (
-  aiItem: { name: string; quantity: number; unit?: string; volume?: number; unitPrice?: number },
+  aiItem: { name: string; quantity: number; unit?: string; volume?: number; unitPrice?: number; reason?: string },
   masterList: any[]
 ) => {
+  const reason = aiItem.reason || ''
   if (!masterList || masterList.length === 0) {
     return {
       name: aiItem.name,
       unit: aiItem.unit || '点',
       unitPrice: aiItem.unitPrice || 3000,
       volume: aiItem.volume !== undefined ? aiItem.volume : 0.4,
+      reason,
     }
   }
 
@@ -72,10 +75,11 @@ const matchMasterItem = (
       unit: exactMatch.unit || aiItem.unit || '点',
       unitPrice: exactMatch.price,
       volume: exactMatch.volume !== undefined ? exactMatch.volume : (aiItem.volume || 0.4),
+      reason: reason || '社内マスタ完全一致',
     }
   }
 
-  // 2. 部分一致チェック (マスタ名がAI名に含まれる、またはAI名がマスタ名に含まれる)
+  // 2. 双方向部分一致チェック (マスタ名がAI名に含まれる、またはAI名がマスタ名に含まれる)
   const partialMatch = masterList.find((m) => aiName.includes(m.name) || m.name.includes(aiName))
   if (partialMatch) {
     return {
@@ -83,30 +87,83 @@ const matchMasterItem = (
       unit: partialMatch.unit || aiItem.unit || '点',
       unitPrice: partialMatch.price,
       volume: partialMatch.volume !== undefined ? partialMatch.volume : (aiItem.volume || 0.4),
+      reason: reason || '社内マスタ部分照合',
     }
   }
 
-  // 3. カテゴリ・主要品目キーワード別マッピング
-  const keywords = ['テレビ', '冷蔵庫', '洗濯機', 'エアコン', 'ソファ', 'ベッド', 'タンス', '机', '段ボール', 'タイヤ', '自転車', '布団', '金属', '古紙']
-  for (const kw of keywords) {
-    if (aiName.includes(kw)) {
-      const match = masterList.find((m) => m.name.includes(kw))
-      if (match) {
-        return {
-          name: match.name,
-          unit: match.unit || aiItem.unit || '点',
-          unitPrice: match.price,
-          volume: match.volume !== undefined ? match.volume : (aiItem.volume || 0.4),
+  // 3. 詳細なシノニム・同義語カテゴリ別高精度マッチンググループ
+  const synonymGroups: { keywords: string[]; masterMatchKeywords: string[] }[] = [
+    {
+      keywords: ['除湿機', '衣類乾燥除湿機', '加湿器', '空気清浄機', '扇風機', 'ヒーター', 'ストーブ', '電子レンジ', '炊飯器', '掃除機', '食洗機', '小型家電'],
+      masterMatchKeywords: ['除湿機', '乾燥機', '加湿器', '小型家電', '中型家電', '家電'],
+    },
+    {
+      keywords: ['テレビ', '液晶', 'ブラウン管', 'モニター', 'ディスプレイ'],
+      masterMatchKeywords: ['テレビ', '液晶テレビ', '家電'],
+    },
+    {
+      keywords: ['冷蔵庫', '冷凍庫', 'ワインセラー'],
+      masterMatchKeywords: ['冷蔵庫', '大型冷蔵庫', '小型冷蔵庫', '家電'],
+    },
+    {
+      keywords: ['洗濯機', 'ドラム式', '乾燥機'],
+      masterMatchKeywords: ['洗濯機', '衣類乾燥機', '家電'],
+    },
+    {
+      keywords: ['エアコン', 'クーラー', '室外機'],
+      masterMatchKeywords: ['エアコン', '家電'],
+    },
+    {
+      keywords: ['ソファ', 'ソファー', 'カウチ'],
+      masterMatchKeywords: ['ソファ', 'ソファー', '家具'],
+    },
+    {
+      keywords: ['ベッド', 'マットレス', '布団'],
+      masterMatchKeywords: ['ベッド', 'シングルベッド', 'マットレス', '家具'],
+    },
+    {
+      keywords: ['タンス', 'チェスト', 'キャビネット', '棚', 'ラック', '本棚', '食器棚'],
+      masterMatchKeywords: ['タンス', '棚', 'キャビネット', '家具'],
+    },
+    {
+      keywords: ['段ボール', 'ダンボール', '紙箱', '古紙'],
+      masterMatchKeywords: ['段ボール', 'ダンボール', '古紙', '可燃不用品', '日用品'],
+    },
+    {
+      keywords: ['タイヤ', 'ホイール'],
+      masterMatchKeywords: ['タイヤ'],
+    },
+    {
+      keywords: ['自転車', '原付', 'バイク'],
+      masterMatchKeywords: ['自転車', 'バイク'],
+    },
+  ]
+
+  for (const group of synonymGroups) {
+    const matchedKeyword = group.keywords.find((kw) => aiName.includes(kw))
+    if (matchedKeyword) {
+      for (const masterKw of group.masterMatchKeywords) {
+        const match = masterList.find((m) => m.name.includes(masterKw))
+        if (match) {
+          return {
+            name: match.name,
+            unit: match.unit || aiItem.unit || '点',
+            unitPrice: match.price,
+            volume: match.volume !== undefined ? match.volume : (aiItem.volume || 0.4),
+            reason: reason || `カテゴリ同義語「${matchedKeyword}」より判定`,
+          }
         }
       }
     }
   }
 
+  // 4. マスタに該当品目がない場合は、AIが正しく認識した名前（aiItem.name）をそのまま維持
   return {
     name: aiItem.name,
     unit: aiItem.unit || '点',
     unitPrice: aiItem.unitPrice || 3000,
     volume: aiItem.volume !== undefined ? aiItem.volume : 0.4,
+    reason: reason || 'AI直接検出品目',
   }
 }
 
@@ -151,11 +208,29 @@ export const MobileQuoteModal: React.FC<MobileQuoteModalProps> = ({
 
   const [items, setItems] = useState<QuoteItem[]>([])
 
+  // 作業搬出環境・費用State
+  const [floorLevel, setFloorLevel] = useState<'1F' | '2F' | '3F' | '4F' | '5F'>('1F')
+  const [hasElevator, setHasElevator] = useState<boolean>(true)
+  const [disassemblyFee, setDisassemblyFee] = useState<number>(0)
+  const [applyTruckPack, setApplyTruckPack] = useState<'auto' | 'none' | 'light' | '2t_short' | '2t_long'>('auto')
+
   const [baseFee, setBaseFee] = useState<number>(0)
   const [expenses, setExpenses] = useState<number>(0)
   const [notes, setNotes] = useState('')
   const [isSaving, setIsSaving] = useState(false)
   const [errorMsg, setErrorMsg] = useState<string | null>(null)
+
+  // 階段作業費の自動算出 (エレベーター無しの場合)
+  const autoStairFee = React.useMemo(() => {
+    if (hasElevator) return 0
+    switch (floorLevel) {
+      case '2F': return 3000
+      case '3F': return 6000
+      case '4F': return 9000
+      case '5F': return 12000
+      default: return 0
+    }
+  }, [floorLevel, hasElevator])
 
   // 全データを初期化・クリアするハンドラー
   const handleResetAll = useCallback(() => {
@@ -163,6 +238,10 @@ export const MobileQuoteModal: React.FC<MobileQuoteModalProps> = ({
     setItems([])
     setAiMessage(null)
     setAiDetectedItems([])
+    setFloorLevel('1F')
+    setHasElevator(true)
+    setDisassemblyFee(0)
+    setApplyTruckPack('auto')
     setBaseFee(0)
     setExpenses(0)
     setNotes('')
@@ -301,6 +380,7 @@ export const MobileQuoteModal: React.FC<MobileQuoteModalProps> = ({
           unit: matched.unit,
           volume: matched.volume,
           unitPrice: matched.unitPrice,
+          reason: matched.reason,
         }
       })
 
@@ -333,6 +413,26 @@ export const MobileQuoteModal: React.FC<MobileQuoteModalProps> = ({
     }
   }
 
+  // 1タップで自社マスタの正しい品名・単価・単位に差し替えるハンドラー
+  const handleApplyMasterCorrection = (itemId: string, masterItemName: string) => {
+    const targetMaster = masterItems.find((m) => m.name === masterItemName)
+    if (!targetMaster) return
+
+    setItems((prev) =>
+      prev.map((item) => {
+        if (item.id !== itemId) return item
+        return {
+          ...item,
+          name: targetMaster.name,
+          unitPrice: targetMaster.price,
+          unit: targetMaster.unit || item.unit || '点',
+          volume: targetMaster.volume !== undefined ? targetMaster.volume : item.volume,
+          reason: `自社単価マスタ「${targetMaster.name}」へ1タップ補正`,
+        }
+      })
+    )
+  }
+
   const handleAddItem = (preset?: { name: string; unit?: string; volume?: number; unitPrice: number }) => {
     const firstMaster = masterItems && masterItems.length > 0 ? masterItems[0] : null
     const newItem: QuoteItem = {
@@ -342,6 +442,7 @@ export const MobileQuoteModal: React.FC<MobileQuoteModalProps> = ({
       unit: preset?.unit || (firstMaster?.unit || '点'),
       volume: preset?.volume !== undefined ? preset.volume : (firstMaster?.volume !== undefined ? firstMaster.volume : 0.4),
       unitPrice: preset ? preset.unitPrice : (firstMaster ? firstMaster.price : 3000),
+      reason: '手動追加品目',
     }
     setItems((prev) => [...prev, newItem])
   }
@@ -369,7 +470,44 @@ export const MobileQuoteModal: React.FC<MobileQuoteModalProps> = ({
 
   const totalVolume = items.reduce((sum, item) => sum + calcItemVolume(item), 0)
   const itemsSubtotal = items.reduce((sum, item) => sum + (Number(item.unitPrice) || 0) * (Number(item.quantity) || 1), 0)
-  const grandTotal = itemsSubtotal + (Number(baseFee) || 0) + (Number(expenses) || 0)
+
+  // トラック積載量＆適合シミュレーション計算
+  const truckPackOptions = React.useMemo(() => {
+    const vol = Math.round(totalVolume * 100) / 100
+    // 軽トラパック: 2.5m3 (目安¥18,000)
+    // 2tショートパック: 6.0m3 (目安¥45,000)
+    // 2tロングパック: 10.0m3 (目安¥75,000)
+    let bestPack: 'light' | '2t_short' | '2t_long' | 'multi' = 'light'
+    if (vol <= 2.5) bestPack = 'light'
+    else if (vol <= 6.0) bestPack = '2t_short'
+    else if (vol <= 10.0) bestPack = '2t_long'
+    else bestPack = 'multi'
+
+    return {
+      vol,
+      lightRatio: Math.min(100, Math.round((vol / 2.5) * 100)),
+      shortRatio: Math.min(100, Math.round((vol / 6.0) * 100)),
+      longRatio: Math.min(100, Math.round((vol / 10.0) * 100)),
+      bestPack,
+    }
+  }, [totalVolume])
+
+  // 作業搬出費用（階段料金 ＋ 特殊工賃 ＋ その他実費）
+  const workExpenses = autoStairFee + (Number(disassemblyFee) || 0) + (Number(expenses) || 0)
+
+  // トラックパック適用時のパック価格判定
+  const packPrice = React.useMemo(() => {
+    const activePack = applyTruckPack === 'auto' ? truckPackOptions.bestPack : applyTruckPack
+    if (activePack === 'light') return 18000
+    if (activePack === '2t_short') return 45000
+    if (activePack === '2t_long') return 75000
+    return null
+  }, [applyTruckPack, truckPackOptions.bestPack])
+
+  // 単品積み上げとトラックパックのお得度比較
+  const isPackDiscounted = packPrice !== null && itemsSubtotal > packPrice
+  const effectiveItemsCost = isPackDiscounted ? packPrice : itemsSubtotal
+  const grandTotal = effectiveItemsCost + (Number(baseFee) || 0) + workExpenses
 
   const handleSaveQuote = async () => {
     if (!customerName.trim()) {
@@ -387,6 +525,12 @@ export const MobileQuoteModal: React.FC<MobileQuoteModalProps> = ({
         itemsSubtotal,
         baseFee,
         expenses,
+        workExpenses,
+        floorLevel,
+        hasElevator,
+        autoStairFee,
+        disassemblyFee,
+        appliedPack: isPackDiscounted ? (applyTruckPack === 'auto' ? truckPackOptions.bestPack : applyTruckPack) : 'none',
         totalVolume: Math.round(totalVolume * 100) / 100,
         grandTotal,
         notes,
@@ -715,17 +859,179 @@ export const MobileQuoteModal: React.FC<MobileQuoteModalProps> = ({
                   </div>
                 </div>
               </div>
+
+              {/* STEP 3: 作業・搬出環境＆特殊作業設定 */}
+              <div className="bg-white p-4 rounded-xl border border-border shadow-sm space-y-3">
+                <div className="flex items-center space-x-2">
+                  <span className="w-6 h-6 rounded-full bg-amber-100 text-amber-800 text-xs font-bold flex items-center justify-center">
+                    3
+                  </span>
+                  <h3 className="text-sm font-bold text-main">搬出環境・作業難易度</h3>
+                </div>
+
+                <div className="grid grid-cols-2 gap-2 text-xs">
+                  <div>
+                    <label className="text-[11px] font-semibold text-sub block mb-1">作業階数</label>
+                    <select
+                      value={floorLevel}
+                      onChange={(e) => setFloorLevel(e.target.value as any)}
+                      className="w-full p-2 border border-slate-300 rounded-lg bg-white font-bold text-slate-800"
+                    >
+                      <option value="1F">1階 (戸建て/1F)</option>
+                      <option value="2F">2階</option>
+                      <option value="3F">3階</option>
+                      <option value="4F">4階</option>
+                      <option value="5F">5階以上</option>
+                    </select>
+                  </div>
+
+                  <div>
+                    <label className="text-[11px] font-semibold text-sub block mb-1">エレベーター</label>
+                    <select
+                      value={hasElevator ? 'true' : 'false'}
+                      onChange={(e) => setHasElevator(e.target.value === 'true')}
+                      className="w-full p-2 border border-slate-300 rounded-lg bg-white font-bold text-slate-800"
+                    >
+                      <option value="true">あり (エレベーター使用可)</option>
+                      <option value="false">なし (階段手下ろし作業)</option>
+                    </select>
+                  </div>
+                </div>
+
+                {/* 階段作業費バナー */}
+                {autoStairFee > 0 && (
+                  <div className="p-2.5 bg-amber-50 border border-amber-200 rounded-lg text-xs text-amber-900 flex items-center justify-between font-semibold">
+                    <span>階段手下ろし作業費 ({floorLevel}・エレベーター無):</span>
+                    <span className="font-bold text-amber-700">+¥{autoStairFee.toLocaleString()}</span>
+                  </div>
+                )}
+
+                <div>
+                  <label className="text-[11px] font-semibold text-sub block mb-1">
+                    特殊作業費 (エアコン外し・家具解体工賃等)
+                  </label>
+                  <div className="flex items-center space-x-1">
+                    <span className="text-xs font-bold text-slate-500">¥</span>
+                    <input
+                      type="number"
+                      step="1000"
+                      min="0"
+                      value={disassemblyFee}
+                      onChange={(e) => setDisassemblyFee(parseInt(e.target.value) || 0)}
+                      placeholder="0"
+                      className="w-full px-3 py-1.5 border border-slate-300 rounded-lg text-right font-bold bg-white text-xs text-slate-800"
+                    />
+                  </div>
+                </div>
+              </div>
             </div>
 
             {/* 右カラム (品目明細 & 合計算定) */}
             <div className={isMobileMode ? 'space-y-4' : 'lg:col-span-7 space-y-4'}>
 
-              {/* STEP 3: 品目明細・単価マスタ連携 */}
+              {/* トラック積載量シミュレーター & 定額パック自動診断カード */}
+              <div className="bg-gradient-to-r from-blue-900 to-indigo-900 text-white p-4 rounded-xl shadow-md space-y-3">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center space-x-2">
+                    <span className="text-base">🚚</span>
+                    <h3 className="text-xs font-bold tracking-wide text-blue-100">
+                      トラック積載率シミュレーター & パック判定
+                    </h3>
+                  </div>
+                  <span className="text-xs font-extrabold bg-blue-500/30 text-blue-200 px-2 py-0.5 rounded-full border border-blue-400/40">
+                    合計体積: {truckPackOptions.vol.toFixed(1)} m3
+                  </span>
+                </div>
+
+                {/* 積載率プログレスバー */}
+                <div className="grid grid-cols-3 gap-2 text-[10px]">
+                  <div className="bg-white/10 p-2 rounded-lg border border-white/10 space-y-1">
+                    <div className="flex justify-between font-bold text-slate-200">
+                      <span>軽トラ (〜2.5m3)</span>
+                      <span>{truckPackOptions.lightRatio}%</span>
+                    </div>
+                    <div className="w-full bg-slate-700 h-1.5 rounded-full overflow-hidden">
+                      <div
+                        className={`h-full transition-all ${
+                          truckPackOptions.lightRatio > 100 ? 'bg-rose-500' : 'bg-emerald-400'
+                        }`}
+                        style={{ width: `${Math.min(100, truckPackOptions.lightRatio)}%` }}
+                      />
+                    </div>
+                  </div>
+
+                  <div className="bg-white/10 p-2 rounded-lg border border-white/10 space-y-1">
+                    <div className="flex justify-between font-bold text-slate-200">
+                      <span>2tショート (〜6.0m3)</span>
+                      <span>{truckPackOptions.shortRatio}%</span>
+                    </div>
+                    <div className="w-full bg-slate-700 h-1.5 rounded-full overflow-hidden">
+                      <div
+                        className={`h-full transition-all ${
+                          truckPackOptions.shortRatio > 100 ? 'bg-rose-500' : 'bg-blue-400'
+                        }`}
+                        style={{ width: `${Math.min(100, truckPackOptions.shortRatio)}%` }}
+                      />
+                    </div>
+                  </div>
+
+                  <div className="bg-white/10 p-2 rounded-lg border border-white/10 space-y-1">
+                    <div className="flex justify-between font-bold text-slate-200">
+                      <span>2tロング (〜10.0m3)</span>
+                      <span>{truckPackOptions.longRatio}%</span>
+                    </div>
+                    <div className="w-full bg-slate-700 h-1.5 rounded-full overflow-hidden">
+                      <div
+                        className={`h-full transition-all ${
+                          truckPackOptions.longRatio > 100 ? 'bg-rose-500' : 'bg-indigo-400'
+                        }`}
+                        style={{ width: `${Math.min(100, truckPackOptions.longRatio)}%` }}
+                      />
+                    </div>
+                  </div>
+                </div>
+
+                {/* パックプランお得比較判定バナー */}
+                <div className="flex items-center justify-between bg-white/10 p-2.5 rounded-lg border border-white/15 text-xs">
+                  <div className="flex items-center space-x-2">
+                    <Sparkles className="w-4 h-4 text-amber-300 flex-shrink-0" />
+                    <span>
+                      {isPackDiscounted ? (
+                        <>
+                          <strong className="text-amber-300">
+                            {truckPackOptions.bestPack === 'light' ? '軽トラパック (¥18,000)' :
+                             truckPackOptions.bestPack === '2t_short' ? '2tショートパック (¥45,000)' :
+                             '2tロングパック (¥75,000)'}
+                          </strong> 適用でお得!
+                        </>
+                      ) : (
+                        <span>単品積み上げ料金が最安計算されています</span>
+                      )}
+                    </span>
+                  </div>
+                  <div className="flex items-center space-x-1.5">
+                    <span className="text-[10px] text-slate-300">パック適用:</span>
+                    <select
+                      value={applyTruckPack}
+                      onChange={(e) => setApplyTruckPack(e.target.value as any)}
+                      className="bg-slate-900 text-white text-[11px] font-bold px-2 py-1 rounded border border-slate-700 focus:outline-none"
+                    >
+                      <option value="auto">✨ AI最適自動判定</option>
+                      <option value="none">適用なし (単品積み上げ)</option>
+                      <option value="light">軽トラ (¥18,000)</option>
+                      <option value="2t_short">2tショート (¥45,000)</option>
+                      <option value="2t_long">2tロング (¥75,000)</option>
+                    </select>
+                  </div>
+                </div>
+              </div>
+
+              {/* STEP 4: 品目明細・単価マスタ連携 */}
               <div className="bg-white p-4 rounded-xl border border-border shadow-sm space-y-3">
                 <div className="flex items-center justify-between">
                   <div className="flex items-center space-x-2">
                     <span className="w-6 h-6 rounded-full bg-blue-100 text-blue-700 text-xs font-bold flex items-center justify-center">
-                      3
+                      4
                     </span>
                     <h3 className="text-sm font-bold text-main">品目・単価・体積明細</h3>
                   </div>
@@ -754,58 +1060,71 @@ export const MobileQuoteModal: React.FC<MobileQuoteModalProps> = ({
                       品目がありません。「品目を新規追加」または「AI自動抽出」を行ってください。
                     </div>
                   ) : (
-                    items.map((item) => (
-                      <div
-                        key={item.id}
-                        className="p-3 bg-slate-50 border border-slate-200 rounded-xl space-y-2 relative"
-                      >
-                        <div className="flex items-center justify-between gap-2">
-                          <div className="flex flex-col sm:flex-row gap-1.5 flex-1">
-                            {/* 品目マスタドロップダウン */}
-                            <select
-                              className="text-xs px-2 py-1 border border-slate-300 rounded-lg bg-white font-medium text-slate-800 focus:outline-none focus:ring-1 focus:ring-slate-900"
-                              onChange={(e) => {
-                                const selected = masterItems.find((m) => m.id === e.target.value)
-                                if (selected) {
-                                  handleUpdateItem(item.id, 'name', selected.name)
-                                  handleUpdateItem(item.id, 'unit', selected.unit || '点')
-                                  handleUpdateItem(item.id, 'unitPrice', selected.price)
-                                  if (selected.volume !== undefined) {
-                                    handleUpdateItem(item.id, 'volume', selected.volume)
+                    items.map((item) => {
+                      const isRecycleItem = ['テレビ', '液晶', '冷蔵庫', '洗濯機', 'エアコン'].some((k) =>
+                        item.name.includes(k)
+                      )
+                      return (
+                        <div
+                          key={item.id}
+                          className="p-3 bg-slate-50 border border-slate-200 rounded-xl space-y-2 relative hover:border-blue-300 transition-colors"
+                        >
+                          {/* 品目ヘッダー & マスタ補正 */}
+                          <div className="flex items-center justify-between gap-2">
+                            <div className="flex flex-col sm:flex-row gap-1.5 flex-1">
+                              {/* 品目マスタドロップダウン */}
+                              <select
+                                className="text-xs px-2 py-1 border border-slate-300 rounded-lg bg-white font-medium text-slate-800 focus:outline-none focus:ring-1 focus:ring-slate-900"
+                                onChange={(e) => {
+                                  if (e.target.value) {
+                                    handleApplyMasterCorrection(item.id, e.target.value)
                                   }
-                                }
-                              }}
-                              defaultValue=""
-                            >
-                              <option value="" disabled>
-                                -- マスタから選択 --
-                              </option>
-                              {masterItems.map((mItem) => (
-                                <option key={mItem.id} value={mItem.id}>
-                                  {mItem.name} ({mItem.unit ? `${mItem.unit} / ` : ''}¥{mItem.price.toLocaleString()})
+                                }}
+                                defaultValue=""
+                              >
+                                <option value="" disabled>
+                                  -- マスタから選択・一発補正 --
                                 </option>
-                              ))}
-                            </select>
+                                {masterItems.map((mItem) => (
+                                  <option key={mItem.id} value={mItem.name}>
+                                    {mItem.name} ({mItem.unit ? `${mItem.unit} / ` : ''}¥{mItem.price.toLocaleString()})
+                                  </option>
+                                ))}
+                              </select>
 
-                            {/* 品目名の手入力・微調整 */}
-                            <Input
-                              type="text"
-                              value={item.name}
-                              onChange={(e) => handleUpdateItem(item.id, 'name', e.target.value)}
-                              placeholder="品目名を入力"
-                              className="text-xs font-bold bg-white flex-1"
-                            />
+                              {/* 品目名の手入力・微調整 */}
+                              <Input
+                                type="text"
+                                value={item.name}
+                                onChange={(e) => handleUpdateItem(item.id, 'name', e.target.value)}
+                                placeholder="品目名を入力"
+                                className="text-xs font-bold bg-white flex-1"
+                              />
+                            </div>
+
+                            <button
+                              type="button"
+                              onClick={() => handleRemoveItem(item.id)}
+                              className="p-1.5 text-slate-400 hover:text-rose-600 rounded-lg transition-colors flex-shrink-0"
+                              title="削除"
+                            >
+                              <Trash2 className="w-4 h-4" />
+                            </button>
                           </div>
 
-                          <button
-                            type="button"
-                            onClick={() => handleRemoveItem(item.id)}
-                            className="p-1.5 text-slate-400 hover:text-rose-600 rounded-lg transition-colors flex-shrink-0"
-                            title="削除"
-                          >
-                            <Trash2 className="w-4 h-4" />
-                          </button>
-                        </div>
+                          {/* AI理由メモ & リサイクル法対象品バッジ */}
+                          <div className="flex flex-wrap items-center gap-1.5 text-[10px]">
+                            {isRecycleItem && (
+                              <span className="bg-amber-100 text-amber-900 font-bold px-2 py-0.5 rounded border border-amber-200 flex items-center gap-1">
+                                ♻️ 家電リサイクル対象品
+                              </span>
+                            )}
+                            {item.reason && (
+                              <span className="bg-purple-100/80 text-purple-900 font-semibold px-2 py-0.5 rounded border border-purple-200/60 flex items-center gap-1">
+                                🤖 {item.reason}
+                              </span>
+                            )}
+                          </div>
 
                         {/* 数量・単位・体積・単価入力 */}
                         <div className="grid grid-cols-4 gap-2 text-xs">
@@ -875,8 +1194,8 @@ export const MobileQuoteModal: React.FC<MobileQuoteModalProps> = ({
                           </span>
                         </div>
                       </div>
-                    ))
-                  )}
+                    )
+                  }))}
                 </div>
 
                 {/* 運搬作業費 & 諸経費 */}
@@ -936,19 +1255,42 @@ export const MobileQuoteModal: React.FC<MobileQuoteModalProps> = ({
                   </div>
                 </div>
 
-                <div className="space-y-1 text-xs text-slate-300 bg-slate-800/80 p-2.5 rounded-lg border border-slate-700/60">
-                  <div className="flex justify-between">
-                    <span>品目小計:</span>
+                <div className="space-y-1.5 text-xs text-slate-300 bg-slate-800/80 p-3 rounded-lg border border-slate-700/60">
+                  <div className="flex justify-between items-center">
+                    <span>品目合計積算:</span>
                     <span className="font-semibold text-white">¥{itemsSubtotal.toLocaleString()}</span>
                   </div>
+
+                  {isPackDiscounted && packPrice && (
+                    <div className="flex justify-between items-center text-amber-300 font-bold bg-amber-950/40 p-1.5 rounded border border-amber-500/30">
+                      <span>🚚 定額パック割引適用:</span>
+                      <span>¥{packPrice.toLocaleString()} (差額 -¥{(itemsSubtotal - packPrice).toLocaleString()})</span>
+                    </div>
+                  )}
+
+                  {autoStairFee > 0 && (
+                    <div className="flex justify-between items-center text-amber-200">
+                      <span>🏢 階段作業費 ({floorLevel}):</span>
+                      <span className="font-semibold">+¥{autoStairFee.toLocaleString()}</span>
+                    </div>
+                  )}
+
+                  {disassemblyFee > 0 && (
+                    <div className="flex justify-between items-center text-blue-200">
+                      <span>⚙️ 特殊作業費 (エアコン・解体):</span>
+                      <span className="font-semibold">+¥{disassemblyFee.toLocaleString()}</span>
+                    </div>
+                  )}
+
                   {baseFee > 0 && (
-                    <div className="flex justify-between">
-                      <span>運搬作業費:</span>
+                    <div className="flex justify-between items-center">
+                      <span>運搬作業基本費:</span>
                       <span className="font-semibold text-white">¥{baseFee.toLocaleString()}</span>
                     </div>
                   )}
+
                   {expenses > 0 && (
-                    <div className="flex justify-between text-amber-300">
+                    <div className="flex justify-between items-center text-amber-300">
                       <span>諸経費:</span>
                       <span className="font-semibold">¥{expenses.toLocaleString()}</span>
                     </div>
