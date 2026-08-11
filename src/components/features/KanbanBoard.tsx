@@ -1,4 +1,6 @@
 import React, { useState, useMemo } from 'react'
+import { Calculator } from 'lucide-react'
+import { InitialQuoteData } from './MobileQuoteModal'
 import {
   DndContext,
   DragEndEvent,
@@ -233,9 +235,10 @@ interface TaskCardProps {
   task: ProcessTask
   isOverlay?: boolean
   onClick?: (task: ProcessTask) => void
+  onOpenQuoteWithData?: (data: InitialQuoteData) => void
 }
 
-const TaskCard: React.FC<TaskCardProps> = ({ task, isOverlay, onClick }) => {
+const TaskCard: React.FC<TaskCardProps> = ({ task, isOverlay, onClick, onOpenQuoteWithData }) => {
   const { attributes, listeners, setNodeRef, transform, isDragging } =
     useDraggable({
       id: task.id,
@@ -257,6 +260,22 @@ const TaskCard: React.FC<TaskCardProps> = ({ task, isOverlay, onClick }) => {
   const displayDate = task.updatedAt
     ? formatDateForDisplay(parseDateSafely(task.updatedAt))
     : '-'
+
+  const handleOpenQuote = (e: React.MouseEvent) => {
+    e.stopPropagation()
+    if (onOpenQuoteWithData) {
+      onOpenQuoteWithData({
+        jobId: task.id,
+        customerName: task.customer,
+        customerPhone: task.tel,
+        customerAddress: task.address,
+      })
+    }
+  }
+
+  const showQuoteBtn =
+    onOpenQuoteWithData &&
+    (task.status === '未着手' || task.status === '顧客検討')
 
   return (
     <div
@@ -285,9 +304,22 @@ const TaskCard: React.FC<TaskCardProps> = ({ task, isOverlay, onClick }) => {
           </div>
         </div>
 
-        {/* 中段: 案件内容 / 依頼内容 */}
-        <div className="text-xs font-medium text-slate-700 mb-2 truncate">
-          {task.taskType}
+        {/* 中段: 案件内容 / 依頼内容 + 見積作成アクション（未着手・顧客検討のみ） */}
+        <div className="flex items-center justify-between gap-1 mb-2">
+          <div className="text-xs font-medium text-slate-700 truncate flex-1">
+            {task.taskType}
+          </div>
+          {showQuoteBtn && (
+            <button
+              type="button"
+              onClick={handleOpenQuote}
+              className="px-2 py-0.5 bg-blue-600 hover:bg-blue-700 active:scale-95 text-white text-[10px] font-bold rounded shadow-sm flex items-center space-x-1 flex-shrink-0 transition-all"
+              title="この案件の見積書を作成"
+            >
+              <Calculator className="w-3 h-3" />
+              <span>見積作成</span>
+            </button>
+          )}
         </div>
 
         {/* 下部 (フッター): 受付日・更新・担当者 + 右端に控えめな管理ID */}
@@ -314,9 +346,10 @@ interface ColumnProps {
   lane: ProcessLane
   tasks: ProcessTask[]
   onCardClick?: (task: ProcessTask) => void
+  onOpenQuoteWithData?: (data: InitialQuoteData) => void
 }
 
-const KanbanColumn: React.FC<ColumnProps> = ({ lane, tasks, onCardClick }) => {
+const KanbanColumn: React.FC<ColumnProps> = ({ lane, tasks, onCardClick, onOpenQuoteWithData }) => {
   const { setNodeRef, isOver } = useDroppable({
     id: lane,
   })
@@ -333,7 +366,7 @@ const KanbanColumn: React.FC<ColumnProps> = ({ lane, tasks, onCardClick }) => {
       </div>
       <div className="lane-tasks">
         {tasks.map((task) => (
-          <TaskCard key={task.id} task={task} onClick={onCardClick} />
+          <TaskCard key={task.id} task={task} onClick={onCardClick} onOpenQuoteWithData={onOpenQuoteWithData} />
         ))}
       </div>
     </div>
@@ -345,6 +378,7 @@ export interface KanbanBoardProps {
   tasks?: ProcessTask[]
   onTaskMove?: (taskId: string, newStatus: ProcessLane) => void
   onTaskClick?: (task: ProcessTask) => void
+  onOpenQuoteWithData?: (data: InitialQuoteData) => void
 }
 
 export const KanbanBoard: React.FC<KanbanBoardProps> = ({
@@ -352,6 +386,7 @@ export const KanbanBoard: React.FC<KanbanBoardProps> = ({
   tasks: externalTasks,
   onTaskMove,
   onTaskClick,
+  onOpenQuoteWithData,
 }) => {
   const [internalTasks] = useState<ProcessTask[]>(initialDummyTasks)
   const [activeTask, setActiveTask] = useState<ProcessTask | null>(null)
@@ -422,6 +457,7 @@ export const KanbanBoard: React.FC<KanbanBoardProps> = ({
               lane={lane}
               tasks={tasksInLane}
               onCardClick={onTaskClick}
+              onOpenQuoteWithData={onOpenQuoteWithData}
             />
           )
         })}

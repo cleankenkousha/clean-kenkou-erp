@@ -290,6 +290,10 @@ export const Dashboard: React.FC = () => {
           viewFilter={viewFilter}
           onTaskMove={handleTaskMove}
           onTaskClick={handleCardClick}
+          onOpenQuoteWithData={(data) => {
+            setQuoteInitialData(data)
+            setIsQuoteOpen(true)
+          }}
         />
       </main>
 

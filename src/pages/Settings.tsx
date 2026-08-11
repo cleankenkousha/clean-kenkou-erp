@@ -39,7 +39,7 @@ export const Settings: React.FC = () => {
   )
 
   const [geminiApiKey, setGeminiApiKey] = useState<string>(() => {
-    return import.meta.env.VITE_GEMINI_API_KEY || localStorage.getItem('clean_kenkou_gemini_api_key') || ''
+    return localStorage.getItem('clean_kenkou_gemini_api_key') || import.meta.env.VITE_GEMINI_API_KEY || ''
   })
 
   // 1. 自社情報（クラウド保存対応フック）

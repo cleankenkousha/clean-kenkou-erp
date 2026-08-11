@@ -363,6 +363,29 @@ export const TaskDetailModal: React.FC<TaskDetailModalProps> = ({
             </div>
           </div>
 
+          {/* 見積作成アクションバー (未着手・顧客検討・日程調整フェーズのみ表示) */}
+          {onOpenQuoteWithData && (currentStatus === '未着手' || currentStatus === '顧客検討' || currentStatus === '作業日程調整') && (
+            <div className="bg-blue-50 border border-blue-200 rounded-xl p-3 mb-4 flex items-center justify-between gap-2 shadow-sm">
+              <div className="flex items-center space-x-2 min-w-0">
+                <div className="p-2 bg-blue-600 text-white rounded-lg flex-shrink-0">
+                  <Calculator className="w-5 h-5" />
+                </div>
+                <div className="min-w-0">
+                  <p className="text-xs font-bold text-blue-900 leading-tight">AI概算見積 & 写真撮影</p>
+                  <p className="text-[11px] text-blue-700 truncate">この案件の情報（顧客名・住所等）を引き継いで見積作成画面を開きます</p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={handleOpenQuoteForThisTask}
+                className="px-3.5 py-2 bg-blue-600 hover:bg-blue-700 active:scale-95 text-white font-bold text-xs rounded-lg shadow flex items-center space-x-1.5 transition-all flex-shrink-0"
+              >
+                <Camera className="w-4 h-4" />
+                <span>見積作成を開く</span>
+              </button>
+            </div>
+          )}
+
           <h3 className="timeline-title">工程チェックリスト & 伝言</h3>
 
           <div className="timeline">
@@ -422,8 +445,8 @@ export const TaskDetailModal: React.FC<TaskDetailModalProps> = ({
                       className="timeline-input"
                     />
 
-                    {/* 見積実施 (estimate_do) ステップ時に「カメラ撮影・概算見積作成」ボタンを表示 */}
-                    {(step.id === 'estimate_do' || step.id === 'estimate_schedule') && onOpenQuoteWithData && (
+                    {/* 見積実施・見積調整など見積関連ステップ時に「カメラ撮影・概算見積作成」ボタンを表示 */}
+                    {(step.id === 'estimate_do' || step.id === 'estimate_schedule' || step.id === 'estimate_submit' || step.id === 'reception') && onOpenQuoteWithData && (
                       <div className="mt-2 pt-2 border-t border-slate-200/60 flex items-center justify-between">
                         <span className="text-[11px] text-slate-500 font-semibold flex items-center gap-1">
                           <Calculator className="w-3.5 h-3.5 text-blue-600" />

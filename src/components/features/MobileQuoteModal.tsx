@@ -23,7 +23,7 @@ import { Button, Input } from '../ui'
 import { supabase } from '../../lib/supabase'
 import { usePriceMaster } from '../../hooks/usePriceMaster'
 import { useViewMode } from '../../hooks/useViewMode'
-import { analyzeQuoteImagesWithGemini } from '../../lib/gemini'
+import { analyzeQuoteImagesWithGemini, validateGeminiApiKey } from '../../lib/gemini'
 
 export interface QuoteItem {
   id: string
@@ -308,9 +308,6 @@ export const MobileQuoteModal: React.FC<MobileQuoteModalProps> = ({
     }
   }, [isOpen, addImagesFromFiles])
 
-  // モーダルが非表示の場合はレンダリングしない
-  if (!isOpen) return null
-
   const handleImageCapture = (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = e.target.files
     if (!files || files.length === 0) return
@@ -362,9 +359,10 @@ export const MobileQuoteModal: React.FC<MobileQuoteModalProps> = ({
     setAiDetectedItems([])
 
     try {
+      const activeApiKey = localStorage.getItem('clean_kenkou_gemini_api_key') || undefined
       const detected = await analyzeQuoteImagesWithGemini(
         capturedImages,
-        undefined,
+        activeApiKey,
         (progressStatus) => {
           setAiMessage(progressStatus)
         },
@@ -398,16 +396,7 @@ export const MobileQuoteModal: React.FC<MobileQuoteModalProps> = ({
     } catch (err: any) {
       console.warn('Gemini API Analysis notice:', err)
       const errText = err.message || String(err)
-      if (errText.includes('APIキー')) {
-        const inputKey = prompt(
-          '【Google Gemini APIキーが必要です】\n\nGoogle AI Studioで作成した無料APIキーを入力すると、AI自動写真解析が利用できます。\n(1日1,500回まで完全無料)\n\n取得URL: https://aistudio.google.com/app/apikey\n\nAPIキーを入力してください:'
-        )
-        if (inputKey && inputKey.trim()) {
-          localStorage.setItem('clean_kenkou_gemini_api_key', inputKey.trim())
-          alert('APIキーを登録しました！もう一度「AI自動抽出」ボタンを押してください。')
-        }
-      }
-      setAiMessage(`AI画像読み込み通知: ${errText}`)
+      setAiMessage(errText)
     } finally {
       setIsAiAnalyzing(false)
     }
@@ -583,6 +572,9 @@ export const MobileQuoteModal: React.FC<MobileQuoteModalProps> = ({
     }
   }
 
+  // モーダルが非表示の場合はレンダリングしない (全Hook定義後に配置)
+  if (!isOpen) return null
+
   return (
     <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/60 backdrop-blur-sm p-0 sm:p-4 overflow-y-auto">
       <div
@@ -725,9 +717,45 @@ export const MobileQuoteModal: React.FC<MobileQuoteModalProps> = ({
                 </div>
 
                 {aiMessage && (
-                  <div className="p-2.5 bg-purple-50 border border-purple-200 rounded-lg text-xs text-purple-800 flex items-center space-x-2">
-                    <Sparkles className="w-4 h-4 text-purple-600 flex-shrink-0 animate-pulse" />
-                    <span className="font-semibold">{aiMessage}</span>
+                  <div className="p-3 bg-purple-50 border border-purple-200 rounded-lg text-xs text-purple-900 flex flex-col sm:flex-row sm:items-center justify-between gap-2 shadow-sm">
+                    <div className="flex items-center space-x-2 min-w-0">
+                      <Sparkles className="w-4 h-4 text-purple-600 flex-shrink-0 animate-pulse" />
+                      <span className="font-semibold leading-relaxed break-all">{aiMessage}</span>
+                    </div>
+                    {aiMessage.includes('APIキー') && (
+                      <button
+                        type="button"
+                        onClick={async () => {
+                          const currentKey = localStorage.getItem('clean_kenkou_gemini_api_key') || ''
+                          const newKey = prompt(
+                            '【Gemini APIキーの更新・再登録】\n\nGoogle AI Studioで作成した無料APIキー(AI Studio API Key)を入力してください:\n\n取得URL: https://aistudio.google.com/app/apikey',
+                            currentKey
+                          )
+                          if (newKey !== null) {
+                            const trimmed = newKey.trim()
+                            if (!trimmed) {
+                              localStorage.removeItem('clean_kenkou_gemini_api_key')
+                              setAiMessage('APIキーを削除しました。')
+                              return
+                            }
+                            setAiMessage('キーの有効性をGoogle APIで診断テスト中...')
+                            const testResult = await validateGeminiApiKey(trimmed)
+                            if (testResult.valid) {
+                              localStorage.setItem('clean_kenkou_gemini_api_key', trimmed)
+                              alert(`${testResult.message}\n\nAPIキーを正常に保存しました！もう一度「✨ AI自動抽出」を押してください。`)
+                              setAiMessage('✅ APIキーの正常稼働を確認しました。写真選択後「✨ AI自動抽出」を押してください。')
+                            } else {
+                              alert(`【APIキー診断結果】\n${testResult.message}\n\n入力されたキーはGoogle APIによって拒否されました。Google AI Studioで正しいキーを再作成してください。`)
+                              setAiMessage(`キー診断警告: ${testResult.message}`)
+                            }
+                          }
+                        }}
+                        className="px-2.5 py-1 bg-purple-700 hover:bg-purple-800 text-white font-bold text-[11px] rounded shadow-sm flex items-center space-x-1 flex-shrink-0 transition-all"
+                      >
+                        <Settings className="w-3.5 h-3.5" />
+                        <span>🔑 APIキーを更新・診断</span>
+                      </button>
+                    )}
                   </div>
                 )}
 
