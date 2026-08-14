@@ -4,7 +4,6 @@ import {
   KanbanBoard,
   ProcessTask,
   ProcessLane,
-  initialDummyTasks,
   isTaskCompleted,
 } from '../components/features/KanbanBoard'
 import {
@@ -18,36 +17,18 @@ import { ExcelImportModal } from '../components/features/ExcelImportModal'
 import { MobileQuoteModal, InitialQuoteData } from '../components/features/MobileQuoteModal'
 import { PrintArea, PrintTaskData } from '../components/features/PrintArea'
 import { useJobs } from '../hooks/useJobs'
+import { useProfiles } from '../hooks/useProfiles'
 import { useViewMode } from '../hooks/useViewMode'
-
-
-// SupabaseのJobStatus -> KanbanBoardのProcessLaneへの変換
-const mapJobStatusToLane = (status: string): ProcessLane => {
-  switch (status) {
-    case 'received':
-      return '未着手'
-    case 'quoting':
-    case 'pending':
-      return '顧客検討'
-    case 'arranged':
-      return '作業日程調整'
-    case 'collected':
-      return '作業実施'
-    case 'billed':
-    case 'completed':
-      return '請求書送付'
-    case 'cancelled':
-      return '失注・キャンセル'
-    default:
-      return '未着手'
-  }
-}
+import { supabase } from '../lib/supabase'
+import { JobStatus } from '../types'
+import { mapJobStatusToLane, mapLaneToJobStatus } from '../lib/statusMapping'
 
 export const Dashboard: React.FC = () => {
   const navigate = useNavigate()
   const { isMobileMode } = useViewMode()
-  const { jobs, refetch, updateJobStatus } = useJobs()
-  const [tasks, setTasks] = useState<ProcessTask[]>(initialDummyTasks)
+  const { jobs, refetch, updateJobStatus, updateJobDetails } = useJobs()
+  const { profiles, addStaff } = useProfiles()
+  const [tasks, setTasks] = useState<ProcessTask[]>([])
   const [viewFilter, setViewFilter] = useState<'active' | 'archived' | 'all'>('active')
 
   // モバイルモードの場合は案件一覧画面 (/jobs) へリダイレクト
@@ -56,7 +37,6 @@ export const Dashboard: React.FC = () => {
       navigate('/jobs', { replace: true })
     }
   }, [isMobileMode, navigate])
-
 
   // モーダル状態
   const [selectedTask, setSelectedTask] = useState<ProcessTask | null>(null)
@@ -67,27 +47,43 @@ export const Dashboard: React.FC = () => {
   const [isQuoteOpen, setIsQuoteOpen] = useState(false)
   const [quoteInitialData, setQuoteInitialData] = useState<InitialQuoteData | null>(null)
 
-
   // 印刷データ
   const [printTask, setPrintTask] = useState<PrintTaskData | null>(null)
 
-  // Supabaseからの案件データ (jobs) が存在する場合は ProcessTask[] へ同期
+  // Supabaseからの案件データ (jobs) を ProcessTask[] へ同期
   useEffect(() => {
-    if (jobs && jobs.length > 0) {
-      const convertedTasks: ProcessTask[] = jobs.map((job) => ({
-        id: job.id,
-        receptionNo: `#${job.id.slice(0, 4)}`,
-        customer: job.customers?.name || '名称未設定',
-        tel: job.customers?.phone || '',
-        address: job.customers?.address || '',
-        taskType: job.title || '臨時収集',
-        status: mapJobStatusToLane(job.status),
-        receptionDate: job.created_at
-          ? new Date(job.created_at).toLocaleDateString('ja-JP')
-          : '',
-        updatedAt: job.updated_at || job.created_at || new Date().toISOString(),
-        stepsData: {},
-      }))
+    if (jobs) {
+      const convertedTasks: ProcessTask[] = jobs.map((job) => {
+        let stepsData = {}
+        if (job.notes) {
+          try {
+            const parsed = JSON.parse(job.notes)
+            if (parsed && typeof parsed === 'object' && parsed.stepsData) {
+              stepsData = parsed.stepsData
+            } else if (job.notes.startsWith('{')) {
+              stepsData = JSON.parse(job.notes)
+            }
+          } catch (e) {
+            // ignore
+          }
+        }
+
+        return {
+          id: job.id,
+          receptionNo: `#${job.id.slice(0, 4)}`,
+          customer: job.customers?.name || '名称未設定',
+          tel: job.customers?.phone || '',
+          address: job.customers?.address || '',
+          taskType: job.title || '臨時収集',
+          status: mapJobStatusToLane(job.status),
+          receptionDate: job.created_at
+            ? new Date(job.created_at).toLocaleDateString('ja-JP')
+            : '',
+          updatedAt: job.updated_at || job.created_at || new Date().toISOString(),
+          updater: job.profiles?.display_name || '',
+          stepsData,
+        }
+      })
       setTasks(convertedTasks)
     }
   }, [jobs])
@@ -101,7 +97,7 @@ export const Dashboard: React.FC = () => {
   }, [tasks])
 
   // ドラッグ＆ドロップでステータス更新
-  const handleTaskMove = (taskId: string, newStatus: ProcessLane) => {
+  const handleTaskMove = async (taskId: string, newStatus: ProcessLane) => {
     const nowStr = new Date().toISOString()
     setTasks((prev) =>
       prev.map((t) => {
@@ -126,15 +122,8 @@ export const Dashboard: React.FC = () => {
     // DB側へも連動更新 (UUID形式のIDであれば)
     const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(taskId)
     if (isUuid) {
-      let dbStatus: any = 'received'
-      if (newStatus === '未着手') dbStatus = 'received'
-      else if (newStatus === '顧客検討') dbStatus = 'quoting'
-      else if (newStatus === '作業日程調整' || newStatus === '日程確定') dbStatus = 'arranged'
-      else if (newStatus === '作業実施') dbStatus = 'collected'
-      else if (newStatus === '請求書送付') dbStatus = 'billed'
-      else if (newStatus === '失注・キャンセル') dbStatus = 'cancelled'
-
-      updateJobStatus(taskId, dbStatus)
+      const dbStatus = mapLaneToJobStatus(newStatus)
+      await updateJobStatus(taskId, dbStatus)
     }
   }
 
@@ -145,11 +134,46 @@ export const Dashboard: React.FC = () => {
   }
 
   // 詳細モーダル保存
-  const handleSaveTaskDetail = (updatedTask: ProcessTask) => {
+  const handleSaveTaskDetail = async (updatedTask: ProcessTask) => {
     setTasks((prev) =>
       prev.map((t) => (t.id === updatedTask.id ? updatedTask : t))
     )
     setSelectedTask(updatedTask)
+
+    const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(updatedTask.id)
+    if (isUuid) {
+      const dbStatus: JobStatus = mapLaneToJobStatus(updatedTask.status)
+
+      let notesVal: string | undefined = undefined
+      if (updatedTask.stepsData && Object.keys(updatedTask.stepsData).length > 0) {
+        notesVal = JSON.stringify(updatedTask.stepsData)
+      }
+
+      // 担当スタッフの特定および自動プロファイル登録
+      let assignedUuid: string | null = null
+      const updaterName = updatedTask.updater?.trim()
+      if (updaterName) {
+        const matchProfile = profiles.find(
+          (p) => (p.display_name || '').trim() === updaterName || p.id === updaterName
+        )
+        if (matchProfile) {
+          assignedUuid = matchProfile.id
+        } else {
+          const newStaff = await addStaff(updaterName)
+          if (newStaff) {
+            assignedUuid = newStaff.id
+          }
+        }
+      }
+
+      await updateJobDetails(updatedTask.id, {
+        title: updatedTask.taskType,
+        status: dbStatus,
+        notes: notesVal,
+        assigned_to: assignedUuid,
+      })
+      refetch()
+    }
   }
 
   // タスクのキャンセル処理（データは消さずにキャンセルステータスへ更新）
@@ -190,31 +214,94 @@ export const Dashboard: React.FC = () => {
     })
   }
 
-  // 新規タスク登録
-  const handleCreateNewTask = (
+  // 新規タスク登録（Supabase DB への確実な保存連携）
+  const handleCreateNewTask = async (
     newTaskData: Omit<ProcessTask, 'id' | 'updatedAt'>,
     shouldPrint = false
   ) => {
-    const existingIds = tasks.map((t) => parseInt(t.id)).filter((id) => !isNaN(id))
-    const maxId = existingIds.length > 0 ? Math.max(...existingIds) : 1000
-    const newId = (maxId + 1).toString()
-    const nowStr = new Date().toISOString()
+    try {
+      if (!newTaskData.customer.trim()) {
+        alert('顧客名を入力してください。')
+        return
+      }
 
-    const newTask: ProcessTask = {
-      ...newTaskData,
-      id: newId,
-      receptionNo: `#${newId}`,
-      updatedAt: nowStr,
-    }
+      // 1. 顧客の作成
+      const { data: customerData, error: customerErr } = await supabase
+        .from('customers')
+        .insert([
+          {
+            name: newTaskData.customer.trim(),
+            phone: newTaskData.tel?.trim() || null,
+            address: newTaskData.address?.trim() || null,
+          },
+        ])
+        .select()
+        .single()
 
-    setTasks((prev) => [...prev, newTask])
+      if (customerErr || !customerData) {
+        console.error('顧客登録エラー:', customerErr)
+        alert(`顧客の登録に失敗しました: ${customerErr?.message || '不明なエラー'}`)
+        return
+      }
 
-    if (shouldPrint) {
-      handlePrintTask(newTask)
+      // 2. 担当スタッフの特定および自動プロファイル登録
+      let assignedUuid: string | null = null
+      const updaterName = newTaskData.updater?.trim()
+      if (updaterName) {
+        const matchProfile = profiles.find(
+          (p) => (p.display_name || '').trim() === updaterName || p.id === updaterName
+        )
+        if (matchProfile) {
+          assignedUuid = matchProfile.id
+        } else {
+          const newStaff = await addStaff(updaterName)
+          if (newStaff) {
+            assignedUuid = newStaff.id
+          }
+        }
+      }
+
+      // 3. 案件の作成
+      const { data: jobData, error: jobErr } = await supabase
+        .from('jobs')
+        .insert([
+          {
+            customer_id: customerData.id,
+            title: newTaskData.taskType.trim() || '臨時収集',
+            status: 'received',
+            assigned_to: assignedUuid,
+            notes: null,
+          },
+        ])
+        .select()
+        .single()
+
+      if (jobErr) {
+        console.error('新規受付保存エラー:', jobErr)
+        alert(`案件の作成に失敗しました: ${jobErr.message}`)
+        return
+      }
+
+      const createdTask: ProcessTask = {
+        ...newTaskData,
+        id: jobData ? jobData.id : crypto.randomUUID(),
+        receptionNo: jobData ? `#${jobData.id.slice(0, 4)}` : '#新',
+        updatedAt: new Date().toISOString(),
+      }
+
+      setTasks((prev) => [createdTask, ...prev])
+
+      if (shouldPrint) {
+        handlePrintTask(createdTask)
+      }
+
+      setIsNewTaskOpen(false)
+      refetch()
+    } catch (err: any) {
+      console.error('新規受付登録時例外:', err)
+      alert(`登録処理中にエラーが発生しました: ${err.message || String(err)}`)
     }
   }
-
-
 
   return (
     <div className="app-container">

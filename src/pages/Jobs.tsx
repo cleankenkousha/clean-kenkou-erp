@@ -24,12 +24,13 @@ import { useProfiles, getRoleInfo } from '../hooks/useProfiles'
 import { useViewMode } from '../hooks/useViewMode'
 import { Job, JobStatus } from '../types'
 import { TaskDetailModal } from '../components/features/TaskDetailModal'
-import { ProcessTask, ProcessLane } from '../components/features/KanbanBoard'
+import { ProcessTask } from '../components/features/KanbanBoard'
 import { ExcelImportModal } from '../components/features/ExcelImportModal'
 import { MobileQuoteModal, InitialQuoteData } from '../components/features/MobileQuoteModal'
 import { NewTaskModal } from '../components/features/NewTaskModal'
 import { PrintArea, PrintTaskData } from '../components/features/PrintArea'
 import { Input, Button, MapLink } from '../components/ui'
+import { mapJobStatusToLane, mapLaneToJobStatus } from '../lib/statusMapping'
 
 const statusBadgeConfig: Record<JobStatus, { label: string; style: string }> = {
   received: { label: '新規受付済', style: 'bg-amber-100 text-amber-800 border-amber-200' },
@@ -40,21 +41,6 @@ const statusBadgeConfig: Record<JobStatus, { label: string; style: string }> = {
   billed: { label: '請求済', style: 'bg-teal-100 text-teal-800 border-teal-200' },
   completed: { label: '完了済', style: 'bg-emerald-200 text-emerald-900 border-emerald-300' },
   cancelled: { label: 'キャンセル', style: 'bg-slate-100 text-slate-600 border-slate-200' },
-}
-
-// JobStatus -> ProcessLane マッピング
-const mapJobStatusToLane = (status: string): ProcessLane => {
-  switch (status) {
-    case 'received': return '未着手'
-    case 'quoting':
-    case 'pending': return '顧客検討'
-    case 'arranged': return '作業日程調整'
-    case 'collected': return '作業実施'
-    case 'billed':
-    case 'completed': return '請求書送付'
-    case 'cancelled': return '失注・キャンセル'
-    default: return '未着手'
-  }
 }
 
 // Job -> ProcessTask 変換ヘルパー
@@ -91,7 +77,7 @@ const mapJobToProcessTask = (job: Job): ProcessTask => {
 export const Jobs: React.FC = () => {
   const location = useLocation()
   const { jobs, isLoading, error, refetch, updateJobDetails } = useJobs()
-  const { profiles } = useProfiles()
+  const { profiles, addStaff } = useProfiles()
   const { isMobileMode } = useViewMode()
 
   const [searchQuery, setSearchQuery] = useState('')
@@ -112,39 +98,56 @@ export const Jobs: React.FC = () => {
     shouldPrint = false
   ) => {
     try {
-      let customerId: string | null = null
-      if (newTaskData.customer) {
-        const { data: customerData } = await supabase
-          .from('customers')
-          .insert([
-            {
-              name: newTaskData.customer,
-              phone: newTaskData.tel || null,
-              address: newTaskData.address || null,
-            },
-          ])
-          .select()
-          .single()
-
-        if (customerData) {
-          customerId = customerData.id
-        }
+      if (!newTaskData.customer.trim()) {
+        alert('顧客名を入力してください。')
+        return
       }
 
+      // 1. 顧客の作成または取得
+      let customerId: string | null = null
+      const { data: customerData, error: customerErr } = await supabase
+        .from('customers')
+        .insert([
+          {
+            name: newTaskData.customer.trim(),
+            phone: newTaskData.tel?.trim() || null,
+            address: newTaskData.address?.trim() || null,
+          },
+        ])
+        .select()
+        .single()
+
+      if (customerErr || !customerData) {
+        console.error('顧客登録エラー:', customerErr)
+        alert(`顧客の登録に失敗しました: ${customerErr?.message || '不明なエラー'}`)
+        return
+      }
+      customerId = customerData.id
+
+      // 2. 担当スタッフのUUID特定（未登録の場合は新規プロファイル作成）
       let assignedUuid: string | null = null
-      if (newTaskData.updater) {
-        const matchProfile = profiles.find((p) => p.display_name === newTaskData.updater)
+      const updaterName = newTaskData.updater?.trim()
+      if (updaterName) {
+        const matchProfile = profiles.find(
+          (p) => (p.display_name || '').trim() === updaterName || p.id === updaterName
+        )
         if (matchProfile) {
           assignedUuid = matchProfile.id
+        } else {
+          const newStaff = await addStaff(updaterName)
+          if (newStaff) {
+            assignedUuid = newStaff.id
+          }
         }
       }
 
+      // 3. 案件の作成
       const { data: jobData, error: jobErr } = await supabase
         .from('jobs')
         .insert([
           {
             customer_id: customerId,
-            title: newTaskData.taskType,
+            title: newTaskData.taskType.trim() || '臨時収集',
             status: 'received',
             assigned_to: assignedUuid,
             notes: null,
@@ -155,6 +158,8 @@ export const Jobs: React.FC = () => {
 
       if (jobErr) {
         console.error('新規受付保存エラー:', jobErr)
+        alert(`案件の作成に失敗しました: ${jobErr.message}`)
+        return
       }
 
       if (shouldPrint) {
@@ -172,8 +177,9 @@ export const Jobs: React.FC = () => {
 
       setIsNewTaskOpen(false)
       refetch()
-    } catch (err) {
+    } catch (err: any) {
       console.error('新規受付登録時例外:', err)
+      alert(`登録処理中にエラーが発生しました: ${err.message || String(err)}`)
     }
   }
 
@@ -248,26 +254,27 @@ export const Jobs: React.FC = () => {
   }
 
   const handleSaveProcessTask = async (updatedTask: ProcessTask) => {
-    let dbStatus: JobStatus = 'received'
-    if (updatedTask.status === '未着手') dbStatus = 'received'
-    else if (updatedTask.status === '顧客検討') dbStatus = 'quoting'
-    else if (updatedTask.status === '作業日程調整' || updatedTask.status === '日程確定') dbStatus = 'arranged'
-    else if (updatedTask.status === '作業実施') dbStatus = 'collected'
-    else if (updatedTask.status === '請求書送付') dbStatus = 'billed'
-    else if (updatedTask.status === '失注・キャンセル') dbStatus = 'cancelled'
+    const dbStatus: JobStatus = mapLaneToJobStatus(updatedTask.status)
 
     let notesVal: string | undefined = undefined
     if (updatedTask.stepsData && Object.keys(updatedTask.stepsData).length > 0) {
       notesVal = JSON.stringify(updatedTask.stepsData)
     }
 
-    // 担当スタッフ名のUUID検索試行
-    let assignedUuid: string | null | undefined = undefined
+    // 担当スタッフ（表示名・ID・自由記述）の保持検索および自動登録
+    let assignedUuid: string | null = null
     const updaterName = updatedTask.updater?.trim()
     if (updaterName) {
-      const matchProfile = profiles.find((p) => p.display_name === updaterName)
+      const matchProfile = profiles.find(
+        (p) => (p.display_name || '').trim() === updaterName || p.id === updaterName
+      )
       if (matchProfile) {
         assignedUuid = matchProfile.id
+      } else {
+        const newStaff = await addStaff(updaterName)
+        if (newStaff) {
+          assignedUuid = newStaff.id
+        }
       }
     }
 

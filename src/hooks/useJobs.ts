@@ -107,18 +107,21 @@ export const useJobs = (): UseJobsReturn => {
         const allowedKeys = ['title', 'status', 'scheduled_date', 'notes', 'assigned_to', 'received_at']
         const cleanUpdates: Record<string, any> = {}
 
+        const isUuid = (str: string) =>
+          /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(str)
+
         for (const key of Object.keys(updates)) {
           if (allowedKeys.includes(key)) {
             const val = (updates as any)[key]
             if (val === undefined) continue // undefined の項目は上書きスキップ
 
-            // assigned_to が UUID パターンでない文字列の場合は null に設定して DB エラーを防止
+            // assigned_to の設定 (有効なUUIDの場合のみセット、それ以外はnullにしてDBのFK制約エラーを防止)
             if (key === 'assigned_to') {
               if (val === null || val === '') {
                 cleanUpdates[key] = null
               } else if (typeof val === 'string') {
-                const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(val)
-                cleanUpdates[key] = isUuid ? val : null
+                const trimmed = val.trim()
+                cleanUpdates[key] = isUuid(trimmed) ? trimmed : null
               }
             } else if (key === 'scheduled_date') {
               if (val === null || val === '') {
@@ -171,7 +174,7 @@ export const useJobs = (): UseJobsReturn => {
     fetchJobs(true)
 
     // インスタンスごとにユニークなチャンネル名を設定し重複衝突を防止
-    const channelId = `jobs_realtime_${Math.random().toString(36).substring(2, 9)}`
+    const channelId = `jobs_realtime_${crypto.randomUUID()}`
     let channel: ReturnType<typeof supabase.channel> | null = null
 
     try {

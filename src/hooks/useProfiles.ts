@@ -29,18 +29,21 @@ export interface UseProfilesReturn {
   error: string | null
   refetch: () => Promise<void>
   updateProfile: (id: string, updates: Partial<Profile>) => Promise<boolean>
-  addStaff: (displayName: string, role?: StaffRole) => Promise<boolean>
+  addStaff: (displayName: string, role?: StaffRole) => Promise<Profile | null>
   deleteStaff: (id: string) => Promise<boolean>
 }
 
 const LOCAL_STORAGE_KEY = 'clean_kenkou_erp_custom_profiles'
 
+const isUuid = (str: string) =>
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(str)
+
 const DEFAULT_PROFILES: Profile[] = [
-  { id: 'profile-default-1', display_name: '山田 太郎', role: 'admin' },
-  { id: 'profile-default-2', display_name: '田中 次郎', role: 'dispatcher' },
-  { id: 'profile-default-3', display_name: '佐藤 花子', role: 'sales' },
-  { id: 'profile-default-4', display_name: '鈴木 一郎', role: 'operator' },
-  { id: 'profile-default-5', display_name: '高橋 美咲', role: 'clerk' },
+  { id: '00000000-0000-4000-8000-000000000001', display_name: '山田 太郎', role: 'admin' },
+  { id: '00000000-0000-4000-8000-000000000002', display_name: '田中 次郎', role: 'dispatcher' },
+  { id: '00000000-0000-4000-8000-000000000003', display_name: '佐藤 花子', role: 'sales' },
+  { id: '00000000-0000-4000-8000-000000000004', display_name: '鈴木 一郎', role: 'operator' },
+  { id: '00000000-0000-4000-8000-000000000005', display_name: '高橋 美咲', role: 'clerk' },
 ]
 
 export const useProfiles = (): UseProfilesReturn => {
@@ -56,7 +59,20 @@ export const useProfiles = (): UseProfilesReturn => {
     let localSaved: Profile[] = []
     try {
       const stored = localStorage.getItem(LOCAL_STORAGE_KEY)
-      if (stored) localSaved = JSON.parse(stored)
+      if (stored) {
+        const raw = JSON.parse(stored) as Profile[]
+        // 旧 profile-default-X 形式のIDを新しい有効UUIDにマイグレーション
+        localSaved = raw.map((p) => {
+          if (!isUuid(p.id)) {
+            const defMatch = DEFAULT_PROFILES.find((dp) => dp.display_name === p.display_name)
+            return {
+              ...p,
+              id: defMatch ? defMatch.id : crypto.randomUUID(),
+            }
+          }
+          return p
+        })
+      }
     } catch (e) {
       // ignore
     }
@@ -71,21 +87,29 @@ export const useProfiles = (): UseProfilesReturn => {
 
       const dbProfiles = (data as Profile[]) || []
 
-      // DBプロファイル + ローカルプロファイル（重複除外）の統合
-      const combined = [...dbProfiles]
-      const existingIds = new Set(dbProfiles.map((p) => p.id))
-      const existingNames = new Set(dbProfiles.map((p) => (p.display_name || '').trim()))
+      // DBプロファイル + ローカル保存プロファイル + デフォルトプロファイルの統合
+      const profileMap = new Map<string, Profile>()
 
-      // デフォルトおよびローカル保存プロファイルをマージ
-      for (const p of [...localSaved, ...DEFAULT_PROFILES]) {
-        if (!existingIds.has(p.id) && !existingNames.has((p.display_name || '').trim())) {
-          combined.push(p)
-          existingIds.add(p.id)
-          if (p.display_name) existingNames.add(p.display_name.trim())
+      // 1. デフォルトプロファイルをまず登録
+      for (const p of DEFAULT_PROFILES) {
+        profileMap.set(p.id, p)
+      }
+
+      // 2. ローカル保存プロファイルで上書き・追加
+      for (const p of localSaved) {
+        profileMap.set(p.id, p)
+      }
+
+      // 3. Supabase DB のプロファイルで最新化・追加
+      for (const p of dbProfiles) {
+        if (p.id && isUuid(p.id)) {
+          profileMap.set(p.id, p)
         }
       }
 
+      const combined = Array.from(profileMap.values())
       setProfiles(combined)
+      saveLocalProfiles(combined)
     } catch (err: any) {
       console.warn('Supabase profiles fetch warning, using local/default profiles:', err)
       if (localSaved.length > 0) {
@@ -108,27 +132,42 @@ export const useProfiles = (): UseProfilesReturn => {
 
   const updateProfile = useCallback(
     async (id: string, updates: Partial<Profile>): Promise<boolean> => {
-      try {
-        const { error: updateErr } = await supabase
-          .from('profiles')
-          .update(updates)
-          .eq('id', id)
+      let targetProfile: Profile | null = null
 
-        if (updateErr) console.warn('Supabase update warning:', updateErr.message)
-
-        setProfiles((prev) => {
-          const next = prev.map((p) => (p.id === id ? { ...p, ...updates } : p))
-          saveLocalProfiles(next)
-          return next
+      setProfiles((prev) => {
+        const next = prev.map((p) => {
+          if (p.id === id) {
+            targetProfile = { ...p, ...updates }
+            return targetProfile
+          }
+          return p
         })
+        saveLocalProfiles(next)
+        return next
+      })
+
+      try {
+        if (targetProfile) {
+          const profileToSave = targetProfile as Profile
+          // 有効なUUIDであることを確認してupsert
+          if (isUuid(profileToSave.id)) {
+            const { error: upsertErr } = await supabase
+              .from('profiles')
+              .upsert([
+                {
+                  id: profileToSave.id,
+                  display_name: profileToSave.display_name,
+                  role: profileToSave.role,
+                  updated_at: new Date().toISOString(),
+                },
+              ])
+
+            if (upsertErr) console.warn('Supabase upsert profile warning:', upsertErr.message)
+          }
+        }
         return true
       } catch (err: any) {
         console.error('Failed to update profile:', err)
-        setProfiles((prev) => {
-          const next = prev.map((p) => (p.id === id ? { ...p, ...updates } : p))
-          saveLocalProfiles(next)
-          return next
-        })
         return true
       }
     },
@@ -136,9 +175,9 @@ export const useProfiles = (): UseProfilesReturn => {
   )
 
   const addStaff = useCallback(
-    async (displayName: string, role: StaffRole = 'operator'): Promise<boolean> => {
+    async (displayName: string, role: StaffRole = 'operator'): Promise<Profile | null> => {
       const trimmedName = displayName.trim()
-      if (!trimmedName) return false
+      if (!trimmedName) return null
 
       const newId = crypto.randomUUID()
       const newStaff: Profile = {
@@ -168,10 +207,10 @@ export const useProfiles = (): UseProfilesReturn => {
         if (insertErr) {
           console.warn('Supabase insert profile warning (saved locally):', insertErr.message)
         }
-        return true
+        return newStaff
       } catch (err: any) {
         console.warn('Supabase addStaff network fallback (saved locally):', err)
-        return true
+        return newStaff
       }
     },
     []
@@ -186,7 +225,9 @@ export const useProfiles = (): UseProfilesReturn => {
       })
 
       try {
-        await supabase.from('profiles').delete().eq('id', id)
+        if (isUuid(id)) {
+          await supabase.from('profiles').delete().eq('id', id)
+        }
         return true
       } catch (err: any) {
         return true
@@ -209,3 +250,4 @@ export const useProfiles = (): UseProfilesReturn => {
     deleteStaff,
   }
 }
+

@@ -58,7 +58,6 @@ export const useCompanySettings = (): UseCompanySettingsReturn => {
         .maybeSingle()
 
       if (fetchErr) {
-        // テーブル未作成等のエラー時はローカルストレージを使用
         console.warn('Company settings table sync notice (using local fallback if unavailable):', fetchErr.message)
       } else if (data) {
         const fetchedInfo: CompanyInfo = {
@@ -79,6 +78,7 @@ export const useCompanySettings = (): UseCompanySettingsReturn => {
       }
     } catch (err: any) {
       console.warn('Failed to sync company settings with Supabase:', err)
+      setError(err.message || '自社情報の取得に失敗しました')
     } finally {
       if (showLoading) setIsLoading(false)
     }

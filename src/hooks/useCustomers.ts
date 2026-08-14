@@ -92,7 +92,7 @@ export const useCustomers = (): UseCustomersReturn => {
           job_count: 0,
         }
 
-        setCustomers((prev) => [newCustomer, ...prev])
+        setCustomers((prev) => [newCustomer, ...prev.filter((c) => c.id !== newCustomer.id)])
         return newCustomer
       } catch (err: any) {
         console.error('Failed to add customer:', err)

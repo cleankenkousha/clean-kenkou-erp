@@ -101,7 +101,7 @@ export const TaskDetailModal: React.FC<TaskDetailModalProps> = ({
   useEffect(() => {
     if (task) {
       setCurrentStatus(task.status)
-      setUpdater(task.updater || '')
+      setUpdater(task.updater || task.assignedTo || '')
       setStepsData(task.stepsData || {})
     }
   }, [task])

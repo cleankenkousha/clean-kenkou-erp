@@ -59,17 +59,31 @@ export const usePriceMaster = (): UsePriceMasterReturn => {
       const { data, error: fetchErr } = await supabase
         .from('price_master')
         .select('*')
-        .order('id', { ascending: true })
+        .order('created_at', { ascending: true })
 
       if (fetchErr) {
         console.warn('Price master table sync notice (using local fallback if unavailable):', fetchErr.message)
       } else if (data && data.length > 0) {
+        // 既存のローカル情報から volume を引き継ぐマップ
+        const savedRaw = localStorage.getItem('clean_kenkou_price_master')
+        const currentSaved: ItemPriceMaster[] = savedRaw ? JSON.parse(savedRaw) : DEFAULT_ITEMS
+        const volumeMap = new Map<string, number>()
+        currentSaved.forEach((item) => {
+          if (item.volume !== undefined) volumeMap.set(item.name, item.volume)
+        })
+        DEFAULT_ITEMS.forEach((item) => {
+          if (item.volume !== undefined && !volumeMap.has(item.name)) {
+            volumeMap.set(item.name, item.volume)
+          }
+        })
+
         const fetchedItems: ItemPriceMaster[] = data.map((d: any) => ({
           id: String(d.id),
           category: d.category || '',
           name: d.name || '',
           unit: d.unit || 'kg',
           price: Number(d.price) || 0,
+          volume: volumeMap.get(d.name) || 0.5,
         }))
         saveLocalAndState(fetchedItems)
       }
@@ -86,8 +100,12 @@ export const usePriceMaster = (): UsePriceMasterReturn => {
       id: crypto.randomUUID(),
       ...itemData,
     }
-    const updated = [...items, newItem]
-    saveLocalAndState(updated)
+
+    setItems((prev) => {
+      const updated = [...prev, newItem]
+      localStorage.setItem('clean_kenkou_price_master', JSON.stringify(updated))
+      return updated
+    })
 
     try {
       const { error: insertErr } = await supabase
@@ -110,24 +128,29 @@ export const usePriceMaster = (): UsePriceMasterReturn => {
     } finally {
       setIsSyncing(false)
     }
-  }, [items])
+  }, [])
 
   const updateItemPrice = useCallback(async (id: string, newPrice: number): Promise<boolean> => {
     setIsSyncing(true)
-    const updated = items.map((item) => (item.id === id ? { ...item, price: newPrice } : item))
-    saveLocalAndState(updated)
+    let targetItem: ItemPriceMaster | undefined
+
+    setItems((prev) => {
+      const updated = prev.map((item) => (item.id === id ? { ...item, price: newPrice } : item))
+      targetItem = updated.find((item) => item.id === id)
+      localStorage.setItem('clean_kenkou_price_master', JSON.stringify(updated))
+      return updated
+    })
 
     try {
-      const targetItem = updated.find((item) => item.id === id)
       if (targetItem) {
         const { error: updateErr } = await supabase
           .from('price_master')
           .upsert([{
-            id: targetItem.id,
-            category: targetItem.category,
-            name: targetItem.name,
-            unit: targetItem.unit,
-            price: targetItem.price,
+            id: (targetItem as ItemPriceMaster).id,
+            category: (targetItem as ItemPriceMaster).category,
+            name: (targetItem as ItemPriceMaster).name,
+            unit: (targetItem as ItemPriceMaster).unit,
+            price: (targetItem as ItemPriceMaster).price,
             updated_at: new Date().toISOString(),
           }])
 
@@ -142,12 +165,15 @@ export const usePriceMaster = (): UsePriceMasterReturn => {
     } finally {
       setIsSyncing(false)
     }
-  }, [items])
+  }, [])
 
   const deleteItem = useCallback(async (id: string): Promise<boolean> => {
     setIsSyncing(true)
-    const updated = items.filter((item) => item.id !== id)
-    saveLocalAndState(updated)
+    setItems((prev) => {
+      const updated = prev.filter((item) => item.id !== id)
+      localStorage.setItem('clean_kenkou_price_master', JSON.stringify(updated))
+      return updated
+    })
 
     try {
       const { error: deleteErr } = await supabase
@@ -165,27 +191,37 @@ export const usePriceMaster = (): UsePriceMasterReturn => {
     } finally {
       setIsSyncing(false)
     }
-  }, [items])
+  }, [])
 
   const moveItemUp = useCallback(async (index: number): Promise<boolean> => {
-    if (index <= 0 || index >= items.length) return false
-    const newItems = [...items]
-    const temp = newItems[index - 1]
-    newItems[index - 1] = newItems[index]
-    newItems[index] = temp
-    saveLocalAndState(newItems)
-    return true
-  }, [items])
+    let success = false
+    setItems((prev) => {
+      if (index <= 0 || index >= prev.length) return prev
+      const newItems = [...prev]
+      const temp = newItems[index - 1]
+      newItems[index - 1] = newItems[index]
+      newItems[index] = temp
+      localStorage.setItem('clean_kenkou_price_master', JSON.stringify(newItems))
+      success = true
+      return newItems
+    })
+    return success
+  }, [])
 
   const moveItemDown = useCallback(async (index: number): Promise<boolean> => {
-    if (index < 0 || index >= items.length - 1) return false
-    const newItems = [...items]
-    const temp = newItems[index + 1]
-    newItems[index + 1] = newItems[index]
-    newItems[index] = temp
-    saveLocalAndState(newItems)
-    return true
-  }, [items])
+    let success = false
+    setItems((prev) => {
+      if (index < 0 || index >= prev.length - 1) return prev
+      const newItems = [...prev]
+      const temp = newItems[index + 1]
+      newItems[index + 1] = newItems[index]
+      newItems[index] = temp
+      localStorage.setItem('clean_kenkou_price_master', JSON.stringify(newItems))
+      success = true
+      return newItems
+    })
+    return success
+  }, [])
 
   const resetToDefaults = useCallback(async (): Promise<boolean> => {
     setIsSyncing(true)
