@@ -5,6 +5,7 @@ import {
   Search,
   Calendar,
   Phone,
+  Plus,
   MapPin,
   Clock,
   CheckCircle2,
@@ -17,7 +18,7 @@ import {
   ChevronRight,
 } from 'lucide-react'
 
-
+import { supabase } from '../lib/supabase'
 import { useJobs } from '../hooks/useJobs'
 import { useProfiles, getRoleInfo } from '../hooks/useProfiles'
 import { useViewMode } from '../hooks/useViewMode'
@@ -26,10 +27,9 @@ import { TaskDetailModal } from '../components/features/TaskDetailModal'
 import { ProcessTask, ProcessLane } from '../components/features/KanbanBoard'
 import { ExcelImportModal } from '../components/features/ExcelImportModal'
 import { MobileQuoteModal, InitialQuoteData } from '../components/features/MobileQuoteModal'
+import { NewTaskModal } from '../components/features/NewTaskModal'
 import { PrintArea, PrintTaskData } from '../components/features/PrintArea'
 import { Input, Button, MapLink } from '../components/ui'
-
-
 
 const statusBadgeConfig: Record<JobStatus, { label: string; style: string }> = {
   received: { label: '新規受付済', style: 'bg-amber-100 text-amber-800 border-amber-200' },
@@ -102,8 +102,80 @@ export const Jobs: React.FC = () => {
   const [isDetailModalOpen, setIsDetailModalOpen] = useState(false)
   const [isExcelImportOpen, setIsExcelImportOpen] = useState(false)
   const [isMobileQuoteOpen, setIsMobileQuoteOpen] = useState(false)
+  const [isNewTaskOpen, setIsNewTaskOpen] = useState(false)
   const [quoteInitialData, setQuoteInitialData] = useState<InitialQuoteData | null>(null)
   const [printTask, setPrintTask] = useState<PrintTaskData | null>(null)
+
+  // 新規受付 (NewTaskModal) 保存ハンドラー
+  const handleCreateNewTask = async (
+    newTaskData: Omit<ProcessTask, 'id' | 'updatedAt'>,
+    shouldPrint = false
+  ) => {
+    try {
+      let customerId: string | null = null
+      if (newTaskData.customer) {
+        const { data: customerData } = await supabase
+          .from('customers')
+          .insert([
+            {
+              name: newTaskData.customer,
+              phone: newTaskData.tel || null,
+              address: newTaskData.address || null,
+            },
+          ])
+          .select()
+          .single()
+
+        if (customerData) {
+          customerId = customerData.id
+        }
+      }
+
+      let assignedUuid: string | null = null
+      if (newTaskData.updater) {
+        const matchProfile = profiles.find((p) => p.display_name === newTaskData.updater)
+        if (matchProfile) {
+          assignedUuid = matchProfile.id
+        }
+      }
+
+      const { data: jobData, error: jobErr } = await supabase
+        .from('jobs')
+        .insert([
+          {
+            customer_id: customerId,
+            title: newTaskData.taskType,
+            status: 'received',
+            assigned_to: assignedUuid,
+            notes: null,
+          },
+        ])
+        .select()
+        .single()
+
+      if (jobErr) {
+        console.error('新規受付保存エラー:', jobErr)
+      }
+
+      if (shouldPrint) {
+        setPrintTask({
+          receptionNo: jobData ? `#${jobData.id.slice(0, 4)}` : '#新',
+          customer: newTaskData.customer,
+          tel: newTaskData.tel,
+          address: newTaskData.address,
+          taskType: newTaskData.taskType,
+          receptionDate: newTaskData.receptionDate,
+          updater: newTaskData.updater || '未指定',
+          stepsData: newTaskData.stepsData,
+        })
+      }
+
+      setIsNewTaskOpen(false)
+      refetch()
+    } catch (err) {
+      console.error('新規受付登録時例外:', err)
+    }
+  }
 
   // 設定画面からの復帰時に見積作成モーダルを自動で展開
   useEffect(() => {
@@ -298,7 +370,17 @@ export const Jobs: React.FC = () => {
         </div>
 
         {/* アクションボタン群 */}
-        <div className="flex items-center space-x-2">
+        <div className="flex items-center space-x-2 flex-wrap gap-y-2">
+          {/* 新規受付ボタン (出先・携帯対応: 前のグリーンカラー) */}
+          <Button
+            type="button"
+            className="bg-[#10b981] hover:bg-[#059669] text-white font-bold py-2 px-3 text-xs shadow-md flex items-center space-x-1 transition-all"
+            onClick={() => setIsNewTaskOpen(true)}
+          >
+            <Plus className="w-4 h-4 mr-0.5 stroke-[2.5]" />
+            <span>新規受付</span>
+          </Button>
+
           {/* モバイルモード・携帯時は目立つ「見積作成」ボタンを表示 */}
           <Button
             type="button"
@@ -309,7 +391,7 @@ export const Jobs: React.FC = () => {
             }}
           >
             <Calculator className="w-4 h-4 mr-1.5" />
-            <span>+ 見積作成 (カメラ撮影)</span>
+            <span>+ 見積作成</span>
           </Button>
 
 
@@ -744,6 +826,13 @@ export const Jobs: React.FC = () => {
         }}
       />
 
+
+      {/* 修正前の新規受付入力モーダル (NewTaskModal) */}
+      <NewTaskModal
+        isOpen={isNewTaskOpen}
+        onClose={() => setIsNewTaskOpen(false)}
+        onSubmit={handleCreateNewTask}
+      />
 
       {/* Excelインポートモーダル */}
       <ExcelImportModal
