@@ -34,6 +34,7 @@ export interface UseProfilesReturn {
 }
 
 const LOCAL_STORAGE_KEY = 'clean_kenkou_erp_custom_profiles'
+const INITIALIZED_KEY = 'clean_kenkou_erp_profiles_initialized'
 
 const isUuid = (str: string) =>
   /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(str)
@@ -51,17 +52,27 @@ export const useProfiles = (): UseProfilesReturn => {
   const [isLoading, setIsLoading] = useState<boolean>(true)
   const [error, setError] = useState<string | null>(null)
 
+  const saveLocalProfiles = (updatedProfiles: Profile[]) => {
+    try {
+      localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(updatedProfiles))
+      localStorage.setItem(INITIALIZED_KEY, 'true')
+    } catch (e) {
+      console.error('Failed to save profiles to localStorage:', e)
+    }
+  }
+
   const fetchProfiles = useCallback(async (showLoading = true) => {
     if (showLoading) setIsLoading(true)
     setError(null)
 
-    // ローカルストレージの保存済みカスタムスタッフ
-    let localSaved: Profile[] = []
+    const isInitialized = localStorage.getItem(INITIALIZED_KEY) === 'true'
+
+    // ローカルストレージの保存済みプロファイル
+    let localSaved: Profile[] | null = null
     try {
       const stored = localStorage.getItem(LOCAL_STORAGE_KEY)
       if (stored) {
         const raw = JSON.parse(stored) as Profile[]
-        // 旧 profile-default-X 形式のIDを新しい有効UUIDにマイグレーション
         localSaved = raw.map((p) => {
           if (!isUuid(p.id)) {
             const defMatch = DEFAULT_PROFILES.find((dp) => dp.display_name === p.display_name)
@@ -87,48 +98,50 @@ export const useProfiles = (): UseProfilesReturn => {
 
       const dbProfiles = (data as Profile[]) || []
 
-      // DBプロファイル + ローカル保存プロファイル + デフォルトプロファイルの統合
-      const profileMap = new Map<string, Profile>()
-
-      // 1. デフォルトプロファイルをまず登録
-      for (const p of DEFAULT_PROFILES) {
-        profileMap.set(p.id, p)
+      // 1. Supabase DB にデータが存在する場合: DBデータを正として使用
+      if (dbProfiles.length > 0) {
+        const validDbProfiles = dbProfiles.filter((p) => isUuid(p.id))
+        setProfiles(validDbProfiles)
+        saveLocalProfiles(validDbProfiles)
+        return
       }
 
-      // 2. ローカル保存プロファイルで上書き・追加
-      for (const p of localSaved) {
-        profileMap.set(p.id, p)
-      }
-
-      // 3. Supabase DB のプロファイルで最新化・追加
-      for (const p of dbProfiles) {
-        if (p.id && isUuid(p.id)) {
-          profileMap.set(p.id, p)
-        }
-      }
-
-      const combined = Array.from(profileMap.values())
-      setProfiles(combined)
-      saveLocalProfiles(combined)
-    } catch (err: any) {
-      console.warn('Supabase profiles fetch warning, using local/default profiles:', err)
-      if (localSaved.length > 0) {
-        setProfiles(localSaved)
-      } else {
+      // 2. DBが空で、かつ一度も初期化されたことがない初回起動時のみ初期サンプルを投入
+      if (!isInitialized && localSaved === null) {
         setProfiles(DEFAULT_PROFILES)
+        saveLocalProfiles(DEFAULT_PROFILES)
+        // 初期サンプルをSupabaseへシード保存
+        try {
+          await supabase.from('profiles').upsert(
+            DEFAULT_PROFILES.map((p) => ({
+              id: p.id,
+              display_name: p.display_name,
+              role: p.role,
+            }))
+          )
+        } catch (e) {
+          // ignore
+        }
+        return
+      }
+
+      // 3. ユーザーが全削除などでDBもローカルも空の場合、空配列を尊重（復元しない）
+      const resultProfiles = localSaved || []
+      setProfiles(resultProfiles)
+      saveLocalProfiles(resultProfiles)
+    } catch (err: any) {
+      console.warn('Supabase profiles fetch warning, using local state:', err)
+      if (localSaved !== null) {
+        setProfiles(localSaved)
+      } else if (!isInitialized) {
+        setProfiles(DEFAULT_PROFILES)
+      } else {
+        setProfiles([])
       }
     } finally {
       if (showLoading) setIsLoading(false)
     }
   }, [])
-
-  const saveLocalProfiles = (updatedProfiles: Profile[]) => {
-    try {
-      localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(updatedProfiles))
-    } catch (e) {
-      console.error('Failed to save profiles to localStorage:', e)
-    }
-  }
 
   const updateProfile = useCallback(
     async (id: string, updates: Partial<Profile>): Promise<boolean> => {
