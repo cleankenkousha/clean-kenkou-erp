@@ -178,30 +178,57 @@ export const useProfiles = (): UseProfilesReturn => {
 
   const syncAllProfiles = useCallback(async (): Promise<{ success: boolean; message: string }> => {
     try {
-      if (profiles.length === 0) return { success: true, message: '同期対象のスタッフがいません。' }
+      // 1. 社内基本8名をベースにプロファイルマップを構築
+      const profileMap = new Map<string, Profile>()
 
-      // DB の既存プロファイルを全件取得して ID の競合を回避
-      const { data: dbData } = await supabase.from('profiles').select('*')
-      const dbList = (dbData as Profile[]) || []
+      for (const p of DEFAULT_PROFILES) {
+        profileMap.set(p.display_name!, { ...p })
+      }
 
-      const dbIdMap = new Map<string, string>()
-      for (const item of dbList) {
-        if (item.display_name && item.id) {
-          dbIdMap.set(item.display_name, item.id)
+      // 2. 現在の profiles ステートに存在するプロファイルで上書き・追加
+      for (const p of profiles) {
+        if (p.display_name) {
+          const existing = profileMap.get(p.display_name)
+          const validId = isUuid(p.id) ? p.id : existing?.id || crypto.randomUUID()
+          const validRole = VALID_ROLES.includes(p.role) ? p.role : 'operator'
+          profileMap.set(p.display_name, {
+            id: validId,
+            display_name: p.display_name,
+            role: validRole,
+          })
         }
       }
 
-      const toUpsert = profiles.map((p) => {
-        const existingDbId = p.display_name ? dbIdMap.get(p.display_name) : null
-        const targetId = existingDbId || (isUuid(p.id) ? p.id : crypto.randomUUID())
-        const validRole = VALID_ROLES.includes(p.role) ? p.role : 'operator'
-        return {
-          id: targetId,
-          display_name: p.display_name || '名前未設定',
-          role: validRole,
-          updated_at: new Date().toISOString(),
+      // 3. Supabase DB に既に存在するデータ（中原知美の既存ID等）があれば優先統合
+      try {
+        const { data: dbData } = await supabase.from('profiles').select('*')
+        const dbList = (dbData as Profile[]) || []
+        for (const item of dbList) {
+          if (item.display_name && item.id) {
+            const current = profileMap.get(item.display_name)
+            if (current) {
+              current.id = isUuid(item.id) ? item.id : current.id
+            } else {
+              profileMap.set(item.display_name, {
+                id: item.id,
+                display_name: item.display_name,
+                role: VALID_ROLES.includes(item.role) ? item.role : 'operator',
+              })
+            }
+          }
         }
-      })
+      } catch (e) {
+        // ignore
+      }
+
+      const targetProfiles = Array.from(profileMap.values())
+
+      const toUpsert = targetProfiles.map((p) => ({
+        id: isUuid(p.id) ? p.id : crypto.randomUUID(),
+        display_name: p.display_name || '名前未設定',
+        role: VALID_ROLES.includes(p.role) ? p.role : 'operator',
+        updated_at: new Date().toISOString(),
+      }))
 
       let successCount = 0
       let lastErr = ''
@@ -220,7 +247,8 @@ export const useProfiles = (): UseProfilesReturn => {
       }
 
       if (successCount > 0) {
-        fetchProfiles(false)
+        setProfiles(targetProfiles)
+        saveLocalProfiles(targetProfiles)
         return {
           success: true,
           message: `✅ ${successCount}名のスタッフ情報をSupabaseへ同期保存しました！`,
@@ -235,7 +263,7 @@ export const useProfiles = (): UseProfilesReturn => {
       console.error('Error syncing all profiles:', err)
       return { success: false, message: `同期例外エラー: ${err.message || String(err)}` }
     }
-  }, [profiles, fetchProfiles])
+  }, [profiles])
 
   const updateProfile = useCallback(
     async (id: string, updates: Partial<Profile>): Promise<boolean> => {

@@ -58,13 +58,6 @@ export const Settings: React.FC = () => {
   const [isSavedStaff, setIsSavedStaff] = useState(false)
   const [isSyncingStaff, setIsSyncingStaff] = useState(false)
 
-  // 画面表示時に自動で全スタッフを Supabase へ同期
-  useEffect(() => {
-    if (profiles.length > 0) {
-      syncAllProfiles()
-    }
-  }, [profiles.length, syncAllProfiles])
-
   // 3. 単価マスタ（クラウド保存対応フック）
   const {
     items,
