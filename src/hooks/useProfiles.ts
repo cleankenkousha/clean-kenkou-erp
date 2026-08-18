@@ -98,40 +98,62 @@ export const useProfiles = (): UseProfilesReturn => {
 
       const dbProfiles = (data as Profile[]) || []
 
-      // 1. Supabase DB にデータが存在する場合: DBデータを正として使用
-      if (dbProfiles.length > 0) {
-        const validDbProfiles = dbProfiles.filter((p) => isUuid(p.id))
-        setProfiles(validDbProfiles)
-        saveLocalProfiles(validDbProfiles)
-        return
-      }
+      // ローカル保存プロファイルと Supabase DB プロファイルの安全な統合
+      const profileMap = new Map<string, Profile>()
 
-      // 2. DBが空で、かつ一度も初期化されたことがない初回起動時のみ初期サンプルを投入
-      if (!isInitialized && localSaved === null) {
-        setProfiles(DEFAULT_PROFILES)
-        saveLocalProfiles(DEFAULT_PROFILES)
-        // 初期サンプルをSupabaseへシード保存
-        try {
-          await supabase.from('profiles').upsert(
-            DEFAULT_PROFILES.map((p) => ({
-              id: p.id,
-              display_name: p.display_name,
-              role: p.role,
-            }))
-          )
-        } catch (e) {
-          // ignore
+      // 1. ローカルに保存されているカスタムプロファイルを追加
+      if (localSaved && localSaved.length > 0) {
+        for (const p of localSaved) {
+          if (p.id && isUuid(p.id) && p.display_name) {
+            profileMap.set(p.id, p)
+          }
         }
-        return
       }
 
-      // 3. ユーザーが全削除などでDBもローカルも空の場合、空配列を尊重（復元しない）
-      const resultProfiles = localSaved || []
-      setProfiles(resultProfiles)
-      saveLocalProfiles(resultProfiles)
+      // 2. Supabase DB のプロファイル（中原 等）で最新化・追加
+      for (const p of dbProfiles) {
+        if (p.id && isUuid(p.id) && p.display_name) {
+          // 同名でIDが異なるローカルプロファイルがある場合はDB側を優先統合
+          const existingLocal = Array.from(profileMap.values()).find(
+            (lp) => lp.display_name === p.display_name
+          )
+          if (existingLocal) {
+            profileMap.delete(existingLocal.id)
+          }
+          profileMap.set(p.id, p)
+        }
+      }
+
+      // 3. 一度も初期化されておらず全プロファイルが完全に空の場合のみ初期データ
+      if (profileMap.size === 0 && !isInitialized) {
+        for (const p of DEFAULT_PROFILES) {
+          profileMap.set(p.id, p)
+        }
+      }
+
+      const combined = Array.from(profileMap.values())
+      setProfiles(combined)
+      saveLocalProfiles(combined)
+
+      // ローカルにあったが DB 未反映のプロファイルがあれば Supabase へ一括同期(upsert)
+      if (combined.length > 0) {
+        const toUpsert = combined.map((p) => ({
+          id: p.id,
+          display_name: p.display_name,
+          role: p.role,
+        }))
+        supabase
+          .from('profiles')
+          .upsert(toUpsert)
+          .then(({ error: syncErr }) => {
+            if (syncErr) {
+              console.warn('Background sync profiles to Supabase notice:', syncErr.message)
+            }
+          })
+      }
     } catch (err: any) {
       console.warn('Supabase profiles fetch warning, using local state:', err)
-      if (localSaved !== null) {
+      if (localSaved !== null && localSaved.length > 0) {
         setProfiles(localSaved)
       } else if (!isInitialized) {
         setProfiles(DEFAULT_PROFILES)
