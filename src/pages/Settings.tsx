@@ -52,10 +52,18 @@ export const Settings: React.FC = () => {
   }, [companyInfo])
 
   // 2. スタッフ・担当者
-  const { profiles, isLoading: isLoadingProfiles, updateProfile, addStaff, deleteStaff } = useProfiles()
+  const { profiles, isLoading: isLoadingProfiles, updateProfile, addStaff, deleteStaff, syncAllProfiles } = useProfiles()
   const [newStaffName, setNewStaffName] = useState('')
   const [newStaffRole, setNewStaffRole] = useState<StaffRole>('operator')
   const [isSavedStaff, setIsSavedStaff] = useState(false)
+  const [isSyncingStaff, setIsSyncingStaff] = useState(false)
+
+  // 画面表示時に自動で全スタッフを Supabase へ同期
+  useEffect(() => {
+    if (profiles.length > 0) {
+      syncAllProfiles()
+    }
+  }, [profiles.length, syncAllProfiles])
 
   // 3. 単価マスタ（クラウド保存対応フック）
   const {
@@ -460,30 +468,54 @@ export const Settings: React.FC = () => {
               <p className="text-xs text-sub">受付担当者やドライバーの表示名および権限を設定します</p>
             </div>
 
-            <form onSubmit={handleAddStaff} className="flex items-center space-x-2">
-              <select
-                value={newStaffRole}
-                onChange={(e) => setNewStaffRole(e.target.value as StaffRole)}
-                className="p-2 border border-border rounded-lg text-xs bg-white text-main font-medium focus:outline-none focus:ring-2 focus:ring-slate-900"
+            <div className="flex items-center space-x-3">
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                disabled={isSyncingStaff}
+                onClick={async () => {
+                  setIsSyncingStaff(true)
+                  const success = await syncAllProfiles()
+                  setIsSyncingStaff(false)
+                  if (success) {
+                    setIsSavedStaff(true)
+                    setTimeout(() => setIsSavedStaff(false), 4000)
+                  } else {
+                    alert('Supabaseへの同期中に注意が発生しました。画面を再読み込みしてお試しください。')
+                  }
+                }}
+                className="bg-purple-50 text-purple-700 border-purple-200 hover:bg-purple-100 font-semibold"
               >
-                <option value="operator">現場作業員</option>
-                <option value="dispatcher">配車担当</option>
-                <option value="sales">営業担当</option>
-                <option value="clerk">事務担当</option>
-                <option value="admin">管理者</option>
-              </select>
-              <Input
-                type="text"
-                placeholder="新しいスタッフ名を入力..."
-                value={newStaffName}
-                onChange={(e) => setNewStaffName(e.target.value)}
-                className="text-xs max-w-xs"
-              />
-              <Button type="submit" variant="primary" size="sm">
-                <Plus className="w-4 h-4 mr-1" />
-                追加
+                <Cloud className={`w-3.5 h-3.5 mr-1 text-purple-600 ${isSyncingStaff ? 'animate-spin' : ''}`} />
+                {isSyncingStaff ? 'Supabase同期中...' : 'Supabaseへ全件同期'}
               </Button>
-            </form>
+
+              <form onSubmit={handleAddStaff} className="flex items-center space-x-2">
+                <select
+                  value={newStaffRole}
+                  onChange={(e) => setNewStaffRole(e.target.value as StaffRole)}
+                  className="p-2 border border-border rounded-lg text-xs bg-white text-main font-medium focus:outline-none focus:ring-2 focus:ring-slate-900"
+                >
+                  <option value="operator">現場作業員</option>
+                  <option value="dispatcher">配車担当</option>
+                  <option value="sales">営業担当</option>
+                  <option value="clerk">事務担当</option>
+                  <option value="admin">管理者</option>
+                </select>
+                <Input
+                  type="text"
+                  placeholder="新しいスタッフ名を入力..."
+                  value={newStaffName}
+                  onChange={(e) => setNewStaffName(e.target.value)}
+                  className="text-xs max-w-xs"
+                />
+                <Button type="submit" variant="primary" size="sm">
+                  <Plus className="w-4 h-4 mr-1" />
+                  追加
+                </Button>
+              </form>
+            </div>
           </div>
 
           {isSavedStaff && (

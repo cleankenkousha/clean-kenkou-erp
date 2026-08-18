@@ -31,6 +31,7 @@ export interface UseProfilesReturn {
   updateProfile: (id: string, updates: Partial<Profile>) => Promise<boolean>
   addStaff: (displayName: string, role?: StaffRole) => Promise<Profile | null>
   deleteStaff: (id: string) => Promise<boolean>
+  syncAllProfiles: () => Promise<boolean>
 }
 
 const LOCAL_STORAGE_KEY = 'clean_kenkou_erp_custom_profiles'
@@ -38,6 +39,8 @@ const INITIALIZED_KEY = 'clean_kenkou_erp_profiles_initialized'
 
 const isUuid = (str: string) =>
   /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(str)
+
+const VALID_ROLES = ['admin', 'sales', 'dispatcher', 'operator', 'clerk']
 
 const DEFAULT_PROFILES: Profile[] = [
   { id: '00000000-0000-4000-8000-000000000001', display_name: '山田 太郎', role: 'admin' },
@@ -68,20 +71,22 @@ export const useProfiles = (): UseProfilesReturn => {
     const isInitialized = localStorage.getItem(INITIALIZED_KEY) === 'true'
 
     // ローカルストレージの保存済みプロファイル
-    let localSaved: Profile[] | null = null
+    let localSaved: Profile[] = []
     try {
       const stored = localStorage.getItem(LOCAL_STORAGE_KEY)
       if (stored) {
         const raw = JSON.parse(stored) as Profile[]
         localSaved = raw.map((p) => {
+          const validRole = VALID_ROLES.includes(p.role) ? p.role : 'operator'
           if (!isUuid(p.id)) {
             const defMatch = DEFAULT_PROFILES.find((dp) => dp.display_name === p.display_name)
             return {
               ...p,
               id: defMatch ? defMatch.id : crypto.randomUUID(),
+              role: validRole,
             }
           }
-          return p
+          return { ...p, role: validRole }
         })
       }
     } catch (e) {
@@ -98,36 +103,39 @@ export const useProfiles = (): UseProfilesReturn => {
 
       const dbProfiles = (data as Profile[]) || []
 
-      // ローカル保存プロファイルと Supabase DB プロファイルの安全な統合
+      // ローカルプロファイルと Supabase DB プロファイルの統合 Map
       const profileMap = new Map<string, Profile>()
 
-      // 1. ローカルに保存されているカスタムプロファイルを追加
-      if (localSaved && localSaved.length > 0) {
-        for (const p of localSaved) {
-          if (p.id && isUuid(p.id) && p.display_name) {
-            profileMap.set(p.id, p)
-          }
+      // 1. ローカルに存在するプロファイル（千葉正和、川上大輝など8名）を登録
+      for (const p of localSaved) {
+        if (p.display_name) {
+          const validId = isUuid(p.id) ? p.id : crypto.randomUUID()
+          const validRole = VALID_ROLES.includes(p.role) ? p.role : 'operator'
+          profileMap.set(p.display_name, {
+            id: validId,
+            display_name: p.display_name,
+            role: validRole,
+          })
         }
       }
 
-      // 2. Supabase DB のプロファイル（中原 等）で最新化・追加
+      // 2. Supabase DB のプロファイル（中原知美 など）を上書き・統合
       for (const p of dbProfiles) {
-        if (p.id && isUuid(p.id) && p.display_name) {
-          // 同名でIDが異なるローカルプロファイルがある場合はDB側を優先統合
-          const existingLocal = Array.from(profileMap.values()).find(
-            (lp) => lp.display_name === p.display_name
-          )
-          if (existingLocal) {
-            profileMap.delete(existingLocal.id)
-          }
-          profileMap.set(p.id, p)
+        if (p.display_name) {
+          const validId = isUuid(p.id) ? p.id : crypto.randomUUID()
+          const validRole = VALID_ROLES.includes(p.role) ? p.role : 'operator'
+          profileMap.set(p.display_name, {
+            id: validId,
+            display_name: p.display_name,
+            role: validRole,
+          })
         }
       }
 
-      // 3. 一度も初期化されておらず全プロファイルが完全に空の場合のみ初期データ
+      // 3. 一度も初期化されたことがない場合のみデフォルトサンプル
       if (profileMap.size === 0 && !isInitialized) {
         for (const p of DEFAULT_PROFILES) {
-          profileMap.set(p.id, p)
+          profileMap.set(p.display_name!, p)
         }
       }
 
@@ -135,35 +143,57 @@ export const useProfiles = (): UseProfilesReturn => {
       setProfiles(combined)
       saveLocalProfiles(combined)
 
-      // ローカルにあったが DB 未反映のプロファイルがあれば Supabase へ一括同期(upsert)
+      // 全プロファイルを Supabase DB へ確実に一括 upsert 保存
       if (combined.length > 0) {
         const toUpsert = combined.map((p) => ({
           id: p.id,
           display_name: p.display_name,
-          role: p.role,
+          role: VALID_ROLES.includes(p.role) ? p.role : 'operator',
+          updated_at: new Date().toISOString(),
         }))
-        supabase
+
+        const { error: upsertErr } = await supabase
           .from('profiles')
-          .upsert(toUpsert)
-          .then(({ error: syncErr }) => {
-            if (syncErr) {
-              console.warn('Background sync profiles to Supabase notice:', syncErr.message)
-            }
-          })
+          .upsert(toUpsert, { onConflict: 'id' })
+
+        if (upsertErr) {
+          console.warn('Supabase profile sync warning:', upsertErr.message)
+        } else {
+          console.log(`✅ Successfully synced ${toUpsert.length} profiles to Supabase DB!`)
+        }
       }
     } catch (err: any) {
       console.warn('Supabase profiles fetch warning, using local state:', err)
-      if (localSaved !== null && localSaved.length > 0) {
-        setProfiles(localSaved)
-      } else if (!isInitialized) {
-        setProfiles(DEFAULT_PROFILES)
-      } else {
-        setProfiles([])
-      }
+      setProfiles(localSaved)
     } finally {
       if (showLoading) setIsLoading(false)
     }
   }, [])
+
+  const syncAllProfiles = useCallback(async (): Promise<boolean> => {
+    try {
+      if (profiles.length === 0) return true
+      const toUpsert = profiles.map((p) => ({
+        id: isUuid(p.id) ? p.id : crypto.randomUUID(),
+        display_name: p.display_name || '名前未設定',
+        role: VALID_ROLES.includes(p.role) ? p.role : 'operator',
+        updated_at: new Date().toISOString(),
+      }))
+
+      const { error: upsertErr } = await supabase
+        .from('profiles')
+        .upsert(toUpsert, { onConflict: 'id' })
+
+      if (upsertErr) {
+        console.error('Failed to sync all profiles to Supabase:', upsertErr.message)
+        return false
+      }
+      return true
+    } catch (err) {
+      console.error('Error syncing all profiles:', err)
+      return false
+    }
+  }, [profiles])
 
   const updateProfile = useCallback(
     async (id: string, updates: Partial<Profile>): Promise<boolean> => {
@@ -183,25 +213,28 @@ export const useProfiles = (): UseProfilesReturn => {
 
       if (targetToSave) {
         const profileToSave = targetToSave as Profile
-        if (isUuid(profileToSave.id)) {
-          try {
-            const { error: upsertErr } = await supabase
-              .from('profiles')
-              .upsert([
-                {
-                  id: profileToSave.id,
-                  display_name: profileToSave.display_name,
-                  role: profileToSave.role,
-                  updated_at: new Date().toISOString(),
-                },
-              ])
+        const validId = isUuid(profileToSave.id) ? profileToSave.id : crypto.randomUUID()
+        const validRole = VALID_ROLES.includes(profileToSave.role) ? profileToSave.role : 'operator'
 
-            if (upsertErr) {
-              console.warn('Supabase upsert profile warning:', upsertErr.message)
-            }
-          } catch (err: any) {
-            console.error('Failed to update profile on Supabase:', err)
+        try {
+          const { error: upsertErr } = await supabase
+            .from('profiles')
+            .upsert([
+              {
+                id: validId,
+                display_name: profileToSave.display_name,
+                role: validRole,
+                updated_at: new Date().toISOString(),
+              },
+            ])
+
+          if (upsertErr) {
+            console.warn('Supabase upsert profile warning:', upsertErr.message)
+          } else {
+            console.log(`✅ Profile updated on Supabase: ${profileToSave.display_name}`)
           }
+        } catch (err: any) {
+          console.error('Failed to update profile on Supabase:', err)
         }
       }
       return true
@@ -215,10 +248,11 @@ export const useProfiles = (): UseProfilesReturn => {
       if (!trimmedName) return null
 
       const newId = crypto.randomUUID()
+      const validRole = VALID_ROLES.includes(role) ? role : 'operator'
       const newStaff: Profile = {
         id: newId,
         display_name: trimmedName,
-        role,
+        role: validRole,
         created_at: new Date().toISOString(),
       }
 
@@ -231,20 +265,23 @@ export const useProfiles = (): UseProfilesReturn => {
       try {
         const { error: insertErr } = await supabase
           .from('profiles')
-          .insert([
+          .upsert([
             {
               id: newId,
               display_name: trimmedName,
-              role,
+              role: validRole,
+              updated_at: new Date().toISOString(),
             },
           ])
 
         if (insertErr) {
-          console.warn('Supabase insert profile warning (saved locally):', insertErr.message)
+          console.warn('Supabase insert profile warning:', insertErr.message)
+        } else {
+          console.log(`✅ Staff added to Supabase: ${trimmedName}`)
         }
         return newStaff
       } catch (err: any) {
-        console.warn('Supabase addStaff network fallback (saved locally):', err)
+        console.warn('Supabase addStaff network error:', err)
         return newStaff
       }
     },
@@ -261,7 +298,10 @@ export const useProfiles = (): UseProfilesReturn => {
 
       try {
         if (isUuid(id)) {
-          await supabase.from('profiles').delete().eq('id', id)
+          const { error: deleteErr } = await supabase.from('profiles').delete().eq('id', id)
+          if (deleteErr) {
+            console.warn('Supabase delete profile warning:', deleteErr.message)
+          }
         }
         return true
       } catch (err: any) {
@@ -283,6 +323,7 @@ export const useProfiles = (): UseProfilesReturn => {
     updateProfile,
     addStaff,
     deleteStaff,
+    syncAllProfiles,
   }
 }
 
