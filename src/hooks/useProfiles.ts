@@ -43,11 +43,14 @@ const isUuid = (str: string) =>
 const VALID_ROLES = ['admin', 'sales', 'dispatcher', 'operator', 'clerk']
 
 const DEFAULT_PROFILES: Profile[] = [
-  { id: '00000000-0000-4000-8000-000000000001', display_name: '山田 太郎', role: 'admin' },
-  { id: '00000000-0000-4000-8000-000000000002', display_name: '田中 次郎', role: 'dispatcher' },
-  { id: '00000000-0000-4000-8000-000000000003', display_name: '佐藤 花子', role: 'sales' },
-  { id: '00000000-0000-4000-8000-000000000004', display_name: '鈴木 一郎', role: 'operator' },
-  { id: '00000000-0000-4000-8000-000000000005', display_name: '高橋 美咲', role: 'clerk' },
+  { id: '00000000-0000-4000-8000-000000000001', display_name: '千葉正和', role: 'admin' },
+  { id: '00000000-0000-4000-8000-000000000002', display_name: '川上大輝', role: 'dispatcher' },
+  { id: '00000000-0000-4000-8000-000000000003', display_name: '廣田龍之介', role: 'sales' },
+  { id: '00000000-0000-4000-8000-000000000004', display_name: '原口真治', role: 'sales' },
+  { id: '00000000-0000-4000-8000-000000000005', display_name: '古川有佐', role: 'clerk' },
+  { id: '00000000-0000-4000-8000-000000000006', display_name: '木下りな', role: 'clerk' },
+  { id: '00000000-0000-4000-8000-000000000007', display_name: '矢部川麻衣子', role: 'clerk' },
+  { id: '00000000-0000-4000-8000-000000000008', display_name: '中原知美', role: 'operator' },
 ]
 
 export const useProfiles = (): UseProfilesReturn => {
@@ -67,8 +70,6 @@ export const useProfiles = (): UseProfilesReturn => {
   const fetchProfiles = useCallback(async (showLoading = true) => {
     if (showLoading) setIsLoading(true)
     setError(null)
-
-    const isInitialized = localStorage.getItem(INITIALIZED_KEY) === 'true'
 
     // ローカルストレージの保存済みプロファイル
     let localSaved: Profile[] = []
@@ -103,10 +104,15 @@ export const useProfiles = (): UseProfilesReturn => {
 
       const dbProfiles = (data as Profile[]) || []
 
-      // ローカルプロファイルと Supabase DB プロファイルの統合 Map
+      // デフォルト8名 + ローカル保存 + Supabase DB の完全統合 Map
       const profileMap = new Map<string, Profile>()
 
-      // 1. ローカルに存在するプロファイル（千葉正和、川上大輝など8名）を登録
+      // 1. 社内基本8名をまず登録
+      for (const p of DEFAULT_PROFILES) {
+        profileMap.set(p.display_name!, p)
+      }
+
+      // 2. ローカルに保存されているカスタムプロファイルで上書き・追加
       for (const p of localSaved) {
         if (p.display_name) {
           const validId = isUuid(p.id) ? p.id : crypto.randomUUID()
@@ -119,7 +125,7 @@ export const useProfiles = (): UseProfilesReturn => {
         }
       }
 
-      // 2. Supabase DB のプロファイル（中原知美 など）を上書き・統合
+      // 3. Supabase DB のプロファイル（中原知美 など）で最新化・統合
       for (const p of dbProfiles) {
         if (p.display_name) {
           const validId = isUuid(p.id) ? p.id : crypto.randomUUID()
@@ -132,18 +138,11 @@ export const useProfiles = (): UseProfilesReturn => {
         }
       }
 
-      // 3. 一度も初期化されたことがない場合のみデフォルトサンプル
-      if (profileMap.size === 0 && !isInitialized) {
-        for (const p of DEFAULT_PROFILES) {
-          profileMap.set(p.display_name!, p)
-        }
-      }
-
       const combined = Array.from(profileMap.values())
       setProfiles(combined)
       saveLocalProfiles(combined)
 
-      // 全プロファイルを Supabase DB へ確実に一括 upsert 保存
+      // 全8名以上のプロファイルを Supabase DB へ自動保存・同期(upsert)
       if (combined.length > 0) {
         const toUpsert = combined.map((p) => ({
           id: p.id,
@@ -157,14 +156,21 @@ export const useProfiles = (): UseProfilesReturn => {
           .upsert(toUpsert, { onConflict: 'id' })
 
         if (upsertErr) {
-          console.warn('Supabase profile sync warning:', upsertErr.message)
+          console.warn('Supabase profile auto-sync notice:', upsertErr.message)
         } else {
-          console.log(`✅ Successfully synced ${toUpsert.length} profiles to Supabase DB!`)
+          console.log(`✅ Auto-synced ${toUpsert.length} company profiles to Supabase DB!`)
         }
       }
     } catch (err: any) {
-      console.warn('Supabase profiles fetch warning, using local state:', err)
-      setProfiles(localSaved)
+      console.warn('Supabase profiles fetch warning, using default/local state:', err)
+      const fallbackMap = new Map<string, Profile>()
+      for (const p of DEFAULT_PROFILES) {
+        fallbackMap.set(p.display_name!, p)
+      }
+      for (const p of localSaved) {
+        if (p.display_name) fallbackMap.set(p.display_name, p)
+      }
+      setProfiles(Array.from(fallbackMap.values()))
     } finally {
       if (showLoading) setIsLoading(false)
     }
