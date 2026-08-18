@@ -162,47 +162,79 @@ ALTER TABLE public.company_settings ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.price_master ENABLE ROW LEVEL SECURITY;
 
 -- -----------------------------------------------------------------
--- 5. 基本的な RLS ポリシーの作成 (全アクセス可に統一)
+-- 5. RLS ポリシーの作成 (認証ユーザー限定および管理者制御)
 -- -----------------------------------------------------------------
 
--- profiles ポリシー
+-- profiles ポリシー (認証ユーザー限定)
 DROP POLICY IF EXISTS "Allow authenticated users to select profiles" ON public.profiles;
 DROP POLICY IF EXISTS "Allow users to update their own profile" ON public.profiles;
 DROP POLICY IF EXISTS "Allow users to insert their own profile" ON public.profiles;
 DROP POLICY IF EXISTS "Allow access to profiles" ON public.profiles;
+DROP POLICY IF EXISTS "Allow authenticated access to profiles" ON public.profiles;
 
-CREATE POLICY "Allow access to profiles"
-    ON public.profiles FOR ALL USING (true) WITH CHECK (true);
+CREATE POLICY "Allow authenticated access to profiles"
+    ON public.profiles FOR ALL TO authenticated
+    USING (auth.role() = 'authenticated')
+    WITH CHECK (auth.role() = 'authenticated');
 
--- customers ポリシー
+-- customers ポリシー (認証ユーザー限定)
 DROP POLICY IF EXISTS "Allow authenticated access to customers" ON public.customers;
 CREATE POLICY "Allow authenticated access to customers"
-    ON public.customers FOR ALL USING (true) WITH CHECK (true);
+    ON public.customers FOR ALL TO authenticated
+    USING (auth.role() = 'authenticated')
+    WITH CHECK (auth.role() = 'authenticated');
 
--- jobs ポリシー
+-- jobs ポリシー (認証ユーザー限定)
 DROP POLICY IF EXISTS "Allow authenticated access to jobs" ON public.jobs;
 CREATE POLICY "Allow authenticated access to jobs"
-    ON public.jobs FOR ALL USING (true) WITH CHECK (true);
+    ON public.jobs FOR ALL TO authenticated
+    USING (auth.role() = 'authenticated')
+    WITH CHECK (auth.role() = 'authenticated');
 
--- spot_collections ポリシー
+-- spot_collections ポリシー (認証ユーザー限定)
 DROP POLICY IF EXISTS "Allow authenticated access to spot_collections" ON public.spot_collections;
 CREATE POLICY "Allow authenticated access to spot_collections"
-    ON public.spot_collections FOR ALL USING (true) WITH CHECK (true);
+    ON public.spot_collections FOR ALL TO authenticated
+    USING (auth.role() = 'authenticated')
+    WITH CHECK (auth.role() = 'authenticated');
 
--- invoices ポリシー
+-- invoices ポリシー (認証ユーザー限定)
 DROP POLICY IF EXISTS "Allow authenticated access to invoices" ON public.invoices;
 CREATE POLICY "Allow authenticated access to invoices"
-    ON public.invoices FOR ALL USING (true) WITH CHECK (true);
+    ON public.invoices FOR ALL TO authenticated
+    USING (auth.role() = 'authenticated')
+    WITH CHECK (auth.role() = 'authenticated');
 
--- company_settings ポリシー
+-- company_settings ポリシー (参照: 認証ユーザー限定 / 変更: admin限定)
 DROP POLICY IF EXISTS "Allow authenticated access to company_settings" ON public.company_settings;
-CREATE POLICY "Allow authenticated access to company_settings"
-    ON public.company_settings FOR ALL USING (true) WITH CHECK (true);
+DROP POLICY IF EXISTS "Allow authenticated select company_settings" ON public.company_settings;
+DROP POLICY IF EXISTS "Allow admin modify company_settings" ON public.company_settings;
 
--- price_master ポリシー
+CREATE POLICY "Allow authenticated select company_settings"
+    ON public.company_settings FOR SELECT TO authenticated
+    USING (auth.role() = 'authenticated');
+
+CREATE POLICY "Allow admin modify company_settings"
+    ON public.company_settings FOR ALL TO authenticated
+    USING (
+        auth.role() = 'authenticated' AND EXISTS (
+            SELECT 1 FROM public.profiles
+            WHERE user_id = auth.uid() AND role = 'admin'
+        )
+    )
+    WITH CHECK (
+        auth.role() = 'authenticated' AND EXISTS (
+            SELECT 1 FROM public.profiles
+            WHERE user_id = auth.uid() AND role = 'admin'
+        )
+    );
+
+-- price_master ポリシー (認証ユーザー限定)
 DROP POLICY IF EXISTS "Allow authenticated access to price_master" ON public.price_master;
 CREATE POLICY "Allow authenticated access to price_master"
-    ON public.price_master FOR ALL USING (true) WITH CHECK (true);
+    ON public.price_master FOR ALL TO authenticated
+    USING (auth.role() = 'authenticated')
+    WITH CHECK (auth.role() = 'authenticated');
 
 -- -----------------------------------------------------------------
 -- 6. 新規ユーザー登録時に profiles テーブルへ自動同期するトリガー関数

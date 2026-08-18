@@ -1,50 +1,41 @@
 # Clean KENKOU ERP - 作業進捗および次回残課題ログ
 
-**最終更新日時**: 2026-08-14
-**ステータス**: システム全体バグ調査および全16件の不具合修正・DB連携整合性強化完了
+**最終更新日時**: 2026-08-18  
+**ステータス**: セキュリティ改修（Task C-1 および C-3）実装完了・ビルドパス済み
 
 ---
 
 ## 1. 本日完了した作業・進捗サマリー
 
-### ① 担当者・スタッフ更新機能の改善・UUID制約対応
-- **スタッフID・プロファイル同期の正常化**: `useProfiles.ts` での Supabase `upsert` 連携および ID の UUID 形式正規化を実施。
-- **手入力スタッフの自動プロファイル登録**: 担当者名にドロップダウンに存在しない新しい名前が手入力された場合、自動的に `profiles` テーブルへ登録した上で有効な UUID を `jobs.assigned_to` に紐付けるよう改修（Supabase FK制約エラーの完全解消）。
+### ① Task C-1: RLSポリシーを認証ユーザー限定に修正
+- **Supabase DB Row Level Security の適正化**: [schema.sql](file:///c:/Users/有限会社山鹿健康社/Desktop/ちばG/AI/Clean%20KENKOU%20ERP/supabase/schema.sql) における全7テーブルの全アクセス可 `USING (true) WITH CHECK (true)` ポリシーを撤去。
+- **認証ユーザーアクセス制限**: `profiles`, `customers`, `jobs`, `spot_collections`, `invoices`, `price_master` に `auth.role() = 'authenticated'` のポリシーを適用。
+- **自社設定 (`company_settings`) の権限分離**: SELECT（参照）は全認証ユーザーに許可し、INSERT/UPDATE/DELETE（作成・更新・削除）は `admin` ロールを持つ認証ユーザー限定にアクセス制限。
 
-### ② システム全体の網羅的コード調査（約30ファイル精査）
-- **全機能・連携の調査レポート作成**: 重大バグ4件、中程度バグ6件、軽微な問題6件の合計16件のバグ・連携ミスを発見・分類し、レポート（`bug_report.md`）および実装計画（`implementation_plan.md`）として整理。
+### ② Task C-3: Gemini APIキーのサーバーサイドプロキシ化
+- **Supabase Edge Function の新設**: [index.ts](file:///c:/Users/有限会社山鹿健康社/Desktop/ちばG/AI/Clean%20KENKOU%20ERP/supabase/functions/gemini-analyze/index.ts) を作成し、環境変数 `GEMINI_API_KEY` によるセキュア通信プロキシを構築。
+- **クライアント側APIキー完全非表示・非保持化**: [gemini.ts](file:///c:/Users/有限会社山鹿健康社/Desktop/ちばG/AI/Clean%20KENKOU%20ERP/src/lib/gemini.ts) 内の `localStorage` 取得・保存処理を完全撤去し、`supabase.functions.invoke('gemini-analyze', ...)` 経由へ移行。
+- **設定画面 UI の更新**: [Settings.tsx](file:///c:/Users/有限会社山鹿健康社/Desktop/ちばG/AI/Clean%20KENKOU%20ERP/src/pages/Settings.tsx) からブラウザ用 API キー入力フォームを撤去し、サーバー保護状況を示すステータス表示へ刷新。
+- **二重フォールバック維持**: Edge Function 未配置時や接続障害時でも概算見積機能が中断しないよう、スマートAI画像認識エンジンへの自動フォールバック構造を確保。
 
-### ③ システム全体バグ・連携ミスの包括的改修
-- **新規受付・案件登録のDB整合性確保（BUG-01 & BUG-02）**:
-  - `Jobs.tsx` における顧客登録失敗時のエラーハンドリング強化と、null による案件作成失敗の連鎖を防止。
-  - `Dashboard.tsx`（PCダッシュボード）の新規受付ボタンから Supabase への顧客・案件 INSERT 連携を実装（リロードでデータが消える問題を解消）。
-  - 詳細モーダル保存時も `updateJobDetails` 経由で Supabase に確実に同期。
-- **ステータスマッピングの一元化（BUG-10）**:
-  - `src/lib/statusMapping.ts` を新設し、`Dashboard.tsx` と `Jobs.tsx` で重複していたマッピング関数を一元管理。
-- **単価マスタ・顧客集計・Realtime購読の安定化（BUG-05, 06, 07, 08, 12, 16）**:
-  - `usePriceMaster.ts`: 体積（`volume`）情報の保持、`setItems(prev => ...)` による stale closure 対策、並び順の永続化。
-  - `useCustomers.ts`: 重複防止を含む安全な関数型ステート更新。
-  - `useJobs.ts`: Realtime チャンネル名を `crypto.randomUUID()` で一意化し、重複購読エラーを防止。
-  - `useCompanySettings.ts`: エラーハンドリングの適正化。
-
-### ④ 品質検証・ビルド確認
+### ③ 品質検証・ビルド確認
 - **型チェック**: `npx tsc --noEmit` エラー 0 件（Exit Code: 0）。
-- **プロダクションビルド**: `npm run build` による本番ビルドが正常に完了することを確認済み。
+- **プロダクションビルド**: `npm run build` による本番ビルドが正常完了（Exit Code: 0）。
 
 ---
 
-## 2. システムの安定性および動作検証結果
+## 2. 次回以降の残課題・今後の実装計画
 
-- **Supabase DB連携**: 顧客・案件・プロファイル・品目マスタ・自社設定の各テーブルに対する読み書きが型安全かつ一貫して動作。
-- **UI/UXの整合性**: PC表示（ダッシュボード・カンバン）とモバイル表示（現場用案件一覧）の両方で新規受付・ステータス更新・担当者割り当てが連動。
+### 1. セキュリティ改修（優先項目）
+- **C-4: `handle_new_user()` 関数の SECURITY DEFINER 見直し**
+  - 新規ユーザー登録トリガー関数の実行権限精査および安全化。
+- **H-1: ロールベースアクセス制御 (RBAC) の強化**
+  - `AuthContext` によるロール管理一元化、`ProtectedRoute` への権限判定追加、設定ページの権限制限。
+- **H-2: ロール変更の admin 限定制限**
+  - フロントエンドおよび DB RLS 側での自他ロール変更制限。
+- **H-5 / H-8: Netlify セキュリティヘッダー設定**
+  - `netlify.toml` に `X-Frame-Options`, `X-Content-Type-Options`, `HSTS`, `CSP` を設定。
 
----
-
-## 3. 次回以降の残課題・今後の推奨検討事項
-
-1. **実現場・複数端末での実機動作・同期確認**:
-   - PC・スマートフォン（モバイル表示）双方からの新規受付登録、ステータス更新、担当者割り当てがリアルタイムに正しく同期されるかの実機テスト。
-2. **AI概算見積機能（Gemini API連携）の実環境テスト**:
-   - 現場写真撮影・アップロードからの品目認識・体積算定・概算見積もり出力の精度およびレスポンス検証。
-3. **指示書・見積書等の帳票印刷レイアウト実機確認**:
-   - 登録された新規受付・案件データから出力される作業指示書（表面・裏面）や各種帳票のプリンタ出力・用紙フィット具合の確認。
+### 2. 実環境・運用検証
+- **Supabase Edge Function の本番デプロイと環境変数設定**: `supabase secrets set GEMINI_API_KEY=...` による実環境テスト。
+- **実現場・複数端末での同期確認**: PC・モバイル間でのリアルタイム同期・新規受付動作テスト。

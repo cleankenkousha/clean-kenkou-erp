@@ -38,9 +38,6 @@ export const Settings: React.FC = () => {
     isReturnFromQuote ? 'items' : 'company'
   )
 
-  const [geminiApiKey, setGeminiApiKey] = useState<string>(() => {
-    return localStorage.getItem('clean_kenkou_gemini_api_key') || import.meta.env.VITE_GEMINI_API_KEY || ''
-  })
 
   // 1. 自社情報（クラウド保存対応フック）
 
@@ -647,32 +644,13 @@ export const Settings: React.FC = () => {
               </a>
             </div>
             <p className="text-[11px] text-slate-600">
-              Google AI Studioで作成した無料APIキー（1日1,500リクエスト完全無料）を入力すると、不用品写真の現場撮影・貼り付けから超高速なAI品目・体積自動算定が有効になります。
+              Gemini APIキーはSupabase Edge Functionサーバーサイド環境変数（`GEMINI_API_KEY`）で全社一括かつ安全に保護されています。
             </p>
             <div className="flex items-center space-x-2 pt-1">
-              <Input
-                type="password"
-                placeholder="AIzaSy... (無料APIキー)"
-                value={geminiApiKey}
-                onChange={(e) => setGeminiApiKey(e.target.value)}
-                className="text-xs font-mono bg-white flex-1"
-              />
-              <Button
-                type="button"
-                variant="primary"
-                size="sm"
-                onClick={() => {
-                  if (!geminiApiKey.trim()) {
-                    localStorage.removeItem('clean_kenkou_gemini_api_key')
-                    alert('APIキーの登録をクリアしました。')
-                  } else {
-                    localStorage.setItem('clean_kenkou_gemini_api_key', geminiApiKey.trim())
-                    alert('Gemini APIキー（無料枠）を正常に保存しました！見積作成画面で本物のAI解析が利用できます。')
-                  }
-                }}
-              >
-                APIキーを保存
-              </Button>
+              <div className="text-xs font-medium text-emerald-800 bg-emerald-100 border border-emerald-300 px-3 py-1.5 rounded-md flex items-center gap-2">
+                <ShieldCheck className="w-4 h-4 text-emerald-600" />
+                <span>サーバーサイドプロキシ構成（APIキー完全保護中）</span>
+              </div>
             </div>
           </div>
 
