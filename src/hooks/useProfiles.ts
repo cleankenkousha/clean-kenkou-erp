@@ -132,13 +132,13 @@ export const useProfiles = (): UseProfilesReturn => {
 
   const updateProfile = useCallback(
     async (id: string, updates: Partial<Profile>): Promise<boolean> => {
-      let targetProfile: Profile | null = null
+      let targetToSave: Profile | null = null
 
       setProfiles((prev) => {
         const next = prev.map((p) => {
           if (p.id === id) {
-            targetProfile = { ...p, ...updates }
-            return targetProfile
+            targetToSave = { ...p, ...updates }
+            return targetToSave
           }
           return p
         })
@@ -146,11 +146,10 @@ export const useProfiles = (): UseProfilesReturn => {
         return next
       })
 
-      try {
-        if (targetProfile) {
-          const profileToSave = targetProfile as Profile
-          // 有効なUUIDであることを確認してupsert
-          if (isUuid(profileToSave.id)) {
+      if (targetToSave) {
+        const profileToSave = targetToSave as Profile
+        if (isUuid(profileToSave.id)) {
+          try {
             const { error: upsertErr } = await supabase
               .from('profiles')
               .upsert([
@@ -162,14 +161,15 @@ export const useProfiles = (): UseProfilesReturn => {
                 },
               ])
 
-            if (upsertErr) console.warn('Supabase upsert profile warning:', upsertErr.message)
+            if (upsertErr) {
+              console.warn('Supabase upsert profile warning:', upsertErr.message)
+            }
+          } catch (err: any) {
+            console.error('Failed to update profile on Supabase:', err)
           }
         }
-        return true
-      } catch (err: any) {
-        console.error('Failed to update profile:', err)
-        return true
       }
+      return true
     },
     []
   )
