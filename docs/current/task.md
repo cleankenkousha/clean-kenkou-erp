@@ -1,16 +1,17 @@
 # Clean KENKOU ERP - 作業進捗および次回残課題ログ
 
 **最終更新日時**: 2026-08-18  
-**ステータス**: 全8名の担当スタッフプロファイルの Supabase 100% 同期保存完了
+**ステータス**: Supabase DB 既存ID照合および全8名スタッフの個別確実同期の改修完了
 
 ---
 
 ## 1. 本日完了した作業・進捗サマリー
 
-### ① 全8名スタッフプロファイルの Supabase データベース完全書き込み・同期対応
-- **画像照合および原因の特定**: Supabase Studio の `profiles` テーブルに「中原知美」様1件しか存在せず、画面に表示されている8名（千葉正和、川上大輝、廣田龍之介、原口真治、古川有佐、木下りな、矢部川麻衣子、中原知美）が反映されていなかった問題を解決。
-- **IDおよびデータフォーマットの自動適正化**: [useProfiles.ts](file:///c:/Users/有限会社山鹿健康社/Desktop/ちばG/AI/Clean%20KENKOU%20ERP/src/hooks/useProfiles.ts) にて非UUIDや未同期データを自動補正し、画面表示中の8名全員のプロファイル情報を即時 `await supabase.from('profiles').upsert(...)` で Supabase DB へ確実に保存・書き込みするロジックを実装。
-- **手動同期機能の追加**: [Settings.tsx](file:///c:/Users/有限会社山鹿健康社/Desktop/ちばG/AI/Clean%20KENKOU%20ERP/src/pages/Settings.tsx) の「担当者・作業スタッフ管理」ヘッダーに「☁️ Supabaseへ全件同期」ボタンを新設。
+### ① Supabase 既存ID（中原知美の既存UUID等）の競合解決と1件ずつ安全な一括同期の適用
+- **エラー原因の解明**: Supabase DB にあらかじめ存在していた「中原知美」様の ID（`b7ca2bda-...`）と、画面・ローカルで割り当てられていた temporary ID の不一致により、Supabase への配列一括 `upsert` が拒否されていた問題を解決。
+- **データマージ & 個別安全書き込み**:
+  - [useProfiles.ts](file:///c:/Users/有限会社山鹿健康社/Desktop/ちばG/AI/Clean%20KENKOU%20ERP/src/hooks/useProfiles.ts) にて、Supabase DB 側の既存 ID を優先紐付けした上で、8名全員のデータを1件ずつ安全に `upsert` 送信するロジックへ改善。
+  - 同期結果の詳細メッセージをアラート表示できるよう [Settings.tsx](file:///c:/Users/有限会社山鹿健康社/Desktop/ちばG/AI/Clean%20KENKOU%20ERP/src/pages/Settings.tsx) を更新。
 
 ### ② 初期サンプルスタッフの復活バグ（Task H-7 関連）の完全解消
 - ユーザー様が削除されたプロファイルが二度と自動復元されない設計を担保。

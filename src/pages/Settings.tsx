@@ -476,13 +476,12 @@ export const Settings: React.FC = () => {
                 disabled={isSyncingStaff}
                 onClick={async () => {
                   setIsSyncingStaff(true)
-                  const success = await syncAllProfiles()
+                  const res = await syncAllProfiles()
                   setIsSyncingStaff(false)
-                  if (success) {
+                  alert(res.message)
+                  if (res.success) {
                     setIsSavedStaff(true)
                     setTimeout(() => setIsSavedStaff(false), 4000)
-                  } else {
-                    alert('Supabaseへの同期中に注意が発生しました。画面を再読み込みしてお試しください。')
                   }
                 }}
                 className="bg-purple-50 text-purple-700 border-purple-200 hover:bg-purple-100 font-semibold"

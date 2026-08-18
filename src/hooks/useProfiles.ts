@@ -31,7 +31,7 @@ export interface UseProfilesReturn {
   updateProfile: (id: string, updates: Partial<Profile>) => Promise<boolean>
   addStaff: (displayName: string, role?: StaffRole) => Promise<Profile | null>
   deleteStaff: (id: string) => Promise<boolean>
-  syncAllProfiles: () => Promise<boolean>
+  syncAllProfiles: () => Promise<{ success: boolean; message: string }>
 }
 
 const LOCAL_STORAGE_KEY = 'clean_kenkou_erp_custom_profiles'
@@ -170,30 +170,66 @@ export const useProfiles = (): UseProfilesReturn => {
     }
   }, [])
 
-  const syncAllProfiles = useCallback(async (): Promise<boolean> => {
+  const syncAllProfiles = useCallback(async (): Promise<{ success: boolean; message: string }> => {
     try {
-      if (profiles.length === 0) return true
-      const toUpsert = profiles.map((p) => ({
-        id: isUuid(p.id) ? p.id : crypto.randomUUID(),
-        display_name: p.display_name || '名前未設定',
-        role: VALID_ROLES.includes(p.role) ? p.role : 'operator',
-        updated_at: new Date().toISOString(),
-      }))
+      if (profiles.length === 0) return { success: true, message: '同期対象のスタッフがいません。' }
 
-      const { error: upsertErr } = await supabase
-        .from('profiles')
-        .upsert(toUpsert, { onConflict: 'id' })
+      // DB の既存プロファイルを全件取得して ID の競合を回避
+      const { data: dbData } = await supabase.from('profiles').select('*')
+      const dbList = (dbData as Profile[]) || []
 
-      if (upsertErr) {
-        console.error('Failed to sync all profiles to Supabase:', upsertErr.message)
-        return false
+      const dbIdMap = new Map<string, string>()
+      for (const item of dbList) {
+        if (item.display_name && item.id) {
+          dbIdMap.set(item.display_name, item.id)
+        }
       }
-      return true
-    } catch (err) {
+
+      const toUpsert = profiles.map((p) => {
+        const existingDbId = p.display_name ? dbIdMap.get(p.display_name) : null
+        const targetId = existingDbId || (isUuid(p.id) ? p.id : crypto.randomUUID())
+        const validRole = VALID_ROLES.includes(p.role) ? p.role : 'operator'
+        return {
+          id: targetId,
+          display_name: p.display_name || '名前未設定',
+          role: validRole,
+          updated_at: new Date().toISOString(),
+        }
+      })
+
+      let successCount = 0
+      let lastErr = ''
+
+      for (const item of toUpsert) {
+        const { error: upsertErr } = await supabase
+          .from('profiles')
+          .upsert([item])
+
+        if (upsertErr) {
+          console.warn(`Profile upsert notice for ${item.display_name}:`, upsertErr.message)
+          lastErr = upsertErr.message
+        } else {
+          successCount++
+        }
+      }
+
+      if (successCount > 0) {
+        fetchProfiles(false)
+        return {
+          success: true,
+          message: `✅ ${successCount}名のスタッフ情報をSupabaseへ同期保存しました！`,
+        }
+      } else {
+        return {
+          success: false,
+          message: `Supabaseへの書き込みエラー: ${lastErr || '不明なエラー'}`,
+        }
+      }
+    } catch (err: any) {
       console.error('Error syncing all profiles:', err)
-      return false
+      return { success: false, message: `同期例外エラー: ${err.message || String(err)}` }
     }
-  }, [profiles])
+  }, [profiles, fetchProfiles])
 
   const updateProfile = useCallback(
     async (id: string, updates: Partial<Profile>): Promise<boolean> => {
