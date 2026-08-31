@@ -869,6 +869,7 @@ body {
     /* 印刷コンテナのみを確実に表示 */
     #print-root,
     #printArea,
+    #quotePrintArea,
     .print-container {
         display: block !important;
         position: static !important;
@@ -886,7 +887,8 @@ body {
     }
 
     #print-root *,
-    #printArea * {
+    #printArea *,
+    #quotePrintArea * {
         visibility: visible !important;
         color: #000000 !important;
     }

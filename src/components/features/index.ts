@@ -6,6 +6,7 @@ export * from './TaskDetailModal'
 export * from './NewTaskModal'
 export * from './ExportModal'
 export * from './PrintArea'
+export * from './PrintQuoteArea'
 export * from './CustomerModal'
 export * from './MobileQuoteModal'
 

@@ -23,6 +23,7 @@ import { Button, Input } from '../ui'
 import { supabase } from '../../lib/supabase'
 import { usePriceMaster } from '../../hooks/usePriceMaster'
 import { useViewMode } from '../../hooks/useViewMode'
+import { PrintQuoteArea, PrintQuoteData } from './PrintQuoteArea'
 import { analyzeQuoteImagesWithGemini, validateGeminiApiKey } from '../../lib/gemini'
 
 export interface QuoteItem {
@@ -498,6 +499,18 @@ export const MobileQuoteModal: React.FC<MobileQuoteModalProps> = ({
   const effectiveItemsCost = isPackDiscounted ? packPrice : itemsSubtotal
   const grandTotal = effectiveItemsCost + (Number(baseFee) || 0) + workExpenses
 
+  const [printQuoteData, setPrintQuoteData] = useState<PrintQuoteData | null>(null)
+
+  // 概算見積書 印刷発火用エフェクト (指示書印刷と100%同一)
+  useEffect(() => {
+    if (printQuoteData) {
+      const timer = setTimeout(() => {
+        window.print()
+      }, 250)
+      return () => clearTimeout(timer)
+    }
+  }, [printQuoteData])
+
   const handleSaveQuote = async () => {
     if (!customerName.trim()) {
       setErrorMsg('顧客名を入力してください。')
@@ -508,6 +521,10 @@ export const MobileQuoteModal: React.FC<MobileQuoteModalProps> = ({
     setErrorMsg(null)
 
     try {
+      const activePackName = isPackDiscounted
+        ? (applyTruckPack === 'auto' ? truckPackOptions.bestPack : applyTruckPack)
+        : 'none'
+
       const quoteDetailsNote = {
         quoteType: 'mobile_ai_quote',
         items,
@@ -519,12 +536,14 @@ export const MobileQuoteModal: React.FC<MobileQuoteModalProps> = ({
         hasElevator,
         autoStairFee,
         disassemblyFee,
-        appliedPack: isPackDiscounted ? (applyTruckPack === 'auto' ? truckPackOptions.bestPack : applyTruckPack) : 'none',
+        appliedPack: activePackName,
         totalVolume: Math.round(totalVolume * 100) / 100,
         grandTotal,
         notes,
         imagesCount: capturedImages.length,
       }
+
+      let savedJobId = initialData?.jobId
 
       if (initialData?.jobId) {
         // 既存案件の更新
@@ -551,19 +570,49 @@ export const MobileQuoteModal: React.FC<MobileQuoteModalProps> = ({
 
         if (customerErr) throw customerErr
 
-        const { error: jobErr } = await supabase.from('jobs').insert({
-          customer_id: customerData.id,
-          title: `【概算見積】${customerName.trim()}様（約${totalVolume.toFixed(1)}m3 / ¥${grandTotal.toLocaleString()}）`,
-          status: 'quoting',
-          notes: JSON.stringify(quoteDetailsNote),
-        })
+        const { data: jobData, error: jobErr } = await supabase
+          .from('jobs')
+          .insert({
+            customer_id: customerData.id,
+            title: `【概算見積】${customerName.trim()}様（約${totalVolume.toFixed(1)}m3 / ¥${grandTotal.toLocaleString()}）`,
+            status: 'quoting',
+            notes: JSON.stringify(quoteDetailsNote),
+          })
+          .select('id')
+          .single()
 
         if (jobErr) throw jobErr
+        if (jobData) savedJobId = jobData.id
       }
 
-      alert(`概算見積の作成が完了しました。\n合計金額: ¥${grandTotal.toLocaleString()} (約 ${totalVolume.toFixed(1)} m3)`)
+      // 見積印刷用データの構築
+      const printData: PrintQuoteData = {
+        jobId: savedJobId,
+        customerName: customerName.trim(),
+        customerPhone: customerPhone.trim(),
+        customerAddress: customerAddress.trim(),
+        items: items.map((it) => ({
+          name: it.name,
+          price: it.unitPrice,
+          quantity: it.quantity,
+          volume: it.volume,
+        })),
+        itemsSubtotal,
+        baseFee: Number(baseFee) || 0,
+        expenses: Number(expenses) || 0,
+        workExpenses,
+        floorLevel,
+        hasElevator,
+        autoStairFee,
+        disassemblyFee: Number(disassemblyFee) || 0,
+        appliedPack: activePackName,
+        totalVolume,
+        grandTotal,
+        notes,
+      }
+
+      setPrintQuoteData(printData)
       if (onSuccess) onSuccess()
-      onClose()
     } catch (err: any) {
       console.error('Save quote error:', err)
       setErrorMsg(err.message || '見積保存中にエラーが発生しました。')
@@ -1341,13 +1390,48 @@ export const MobileQuoteModal: React.FC<MobileQuoteModalProps> = ({
         </div>
 
         {/* Footer */}
-        <div className="p-4 bg-white border-t border-border flex items-center space-x-3 justify-end">
-          <Button type="button" variant="outline" className="px-6 py-2.5 text-xs font-bold" onClick={onClose}>
+        <div className="p-4 bg-white border-t border-border flex items-center space-x-2 sm:space-x-3 justify-end flex-wrap gap-y-2">
+          <Button type="button" variant="outline" className="px-4 sm:px-6 py-2.5 text-xs font-bold" onClick={onClose}>
             キャンセル
           </Button>
           <Button
             type="button"
-            className="px-8 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs shadow-lg"
+            variant="outline"
+            className="px-4 py-2.5 text-xs font-bold text-slate-700 border-slate-300 hover:bg-slate-50 flex items-center space-x-1"
+            onClick={() => {
+              const activePackName = isPackDiscounted
+                ? (applyTruckPack === 'auto' ? truckPackOptions.bestPack : applyTruckPack)
+                : 'none'
+              setPrintQuoteData({
+                customerName: customerName.trim() || '名称未設定',
+                customerPhone: customerPhone.trim(),
+                customerAddress: customerAddress.trim(),
+                items: items.map((it) => ({
+                  name: it.name,
+                  price: it.unitPrice,
+                  quantity: it.quantity,
+                  volume: it.volume,
+                })),
+                itemsSubtotal,
+                baseFee: Number(baseFee) || 0,
+                expenses: Number(expenses) || 0,
+                workExpenses,
+                floorLevel,
+                hasElevator,
+                autoStairFee,
+                disassemblyFee: Number(disassemblyFee) || 0,
+                appliedPack: activePackName,
+                totalVolume,
+                grandTotal,
+                notes,
+              })
+            }}
+          >
+            <span>印刷プレビュー</span>
+          </Button>
+          <Button
+            type="button"
+            className="px-6 sm:px-8 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs shadow-lg"
             onClick={handleSaveQuote}
             disabled={isSaving}
           >
@@ -1365,6 +1449,9 @@ export const MobileQuoteModal: React.FC<MobileQuoteModalProps> = ({
           </Button>
         </div>
       </div>
+
+      {/* 概算見積書 印刷ポータル領域 (指示書印刷と100%同一) */}
+      <PrintQuoteArea quote={printQuoteData} />
     </div>
   )
 }

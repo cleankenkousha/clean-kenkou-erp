@@ -13,7 +13,7 @@ const statusLabelMap: Record<string, string> = {
   received: '新規受付済',
   quoting: '見積中',
   arranged: '手配済 / 作業日程調整',
-  collected: '回収完了',
+  collected: '作業実施',
   billed: '請求済',
   completed: '完了済',
   pending: '保留中',
