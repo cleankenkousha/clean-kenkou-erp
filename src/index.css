@@ -905,6 +905,14 @@ body {
         break-after: page !important;
     }
 
+    /* 概算御見積書ページでは無用な改ページを抑止し1ページに収める */
+    #quotePrintArea .print-page-front,
+    #printQuoteArea .print-page-front,
+    .print-quote-page {
+        page-break-after: avoid !important;
+        break-after: avoid !important;
+    }
+
     .print-page-back {
         page-break-before: always !important;
         break-before: page !important;

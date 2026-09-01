@@ -504,10 +504,15 @@ export const MobileQuoteModal: React.FC<MobileQuoteModalProps> = ({
   // 概算見積書 印刷発火用エフェクト (指示書印刷と100%同一)
   useEffect(() => {
     if (printQuoteData) {
+      const handleAfterPrint = () => setPrintQuoteData(null)
+      window.addEventListener('afterprint', handleAfterPrint)
       const timer = setTimeout(() => {
         window.print()
       }, 250)
-      return () => clearTimeout(timer)
+      return () => {
+        clearTimeout(timer)
+        window.removeEventListener('afterprint', handleAfterPrint)
+      }
     }
   }, [printQuoteData])
 

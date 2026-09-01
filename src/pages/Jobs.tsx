@@ -371,20 +371,30 @@ export const Jobs: React.FC = () => {
   // 指示書印刷データ発火用エフェクト
   useEffect(() => {
     if (printTask) {
+      const handleAfterPrint = () => setPrintTask(null)
+      window.addEventListener('afterprint', handleAfterPrint)
       const timer = setTimeout(() => {
         window.print()
       }, 250)
-      return () => clearTimeout(timer)
+      return () => {
+        clearTimeout(timer)
+        window.removeEventListener('afterprint', handleAfterPrint)
+      }
     }
   }, [printTask])
 
   // 概算見積書印刷データ発火用エフェクト (指示書印刷と100%同一)
   useEffect(() => {
     if (printQuoteData) {
+      const handleAfterPrint = () => setPrintQuoteData(null)
+      window.addEventListener('afterprint', handleAfterPrint)
       const timer = setTimeout(() => {
         window.print()
       }, 250)
-      return () => clearTimeout(timer)
+      return () => {
+        clearTimeout(timer)
+        window.removeEventListener('afterprint', handleAfterPrint)
+      }
     }
   }, [printQuoteData])
 

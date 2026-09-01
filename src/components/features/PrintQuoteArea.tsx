@@ -70,7 +70,7 @@ export const PrintQuoteArea: React.FC<PrintQuoteAreaProps> = ({ quote }) => {
 
   return ReactDOM.createPortal(
     <div id="printQuoteArea" className="print-container">
-      <div className="print-page print-page-front">
+      <div className="print-page print-quote-page">
         {/* 見積書ヘッダー */}
         <div className="print-header-row border-b-2 border-slate-900 pb-3 mb-4 flex justify-between items-start">
           <div>
