@@ -34,6 +34,7 @@ export interface UsePriceMasterReturn {
   moveItemUp: (index: number) => Promise<boolean>
   moveItemDown: (index: number) => Promise<boolean>
   resetToDefaults: () => Promise<boolean>
+  syncAllItemsToCloud: () => Promise<{ success: boolean; count: number; message: string }>
   refetch: () => Promise<void>
 }
 
@@ -246,6 +247,50 @@ export const usePriceMaster = (): UsePriceMasterReturn => {
     }
   }, [])
 
+  const syncAllItemsToCloud = useCallback(async (): Promise<{ success: boolean; count: number; message: string }> => {
+    setIsSyncing(true)
+    setError(null)
+    try {
+      if (items.length === 0) {
+        return { success: false, count: 0, message: '同期対象の品目データがありません。' }
+      }
+
+      // 現在画面に表示・保持されている全品目を price_master テーブルへ一括 upsert
+      const payload = items.map((item) => ({
+        id: item.id,
+        category: item.category,
+        name: item.name,
+        unit: item.unit,
+        price: item.price,
+        updated_at: new Date().toISOString(),
+      }))
+
+      const { error: upsertErr } = await supabase
+        .from('price_master')
+        .upsert(payload)
+
+      if (upsertErr) {
+        throw new Error(upsertErr.message)
+      }
+
+      return {
+        success: true,
+        count: items.length,
+        message: `現在ローカルにある全${items.length}件の単価品目をクラウド（Supabase）へ同期しました！Netlify本番環境および全端末に反映されます。`,
+      }
+    } catch (err: any) {
+      console.error('Failed to sync all price items to cloud:', err)
+      setError(err.message || 'クラウド同期に失敗しました')
+      return {
+        success: false,
+        count: 0,
+        message: `クラウド同期エラー: ${err.message || 'Supabaseへの保存に失敗しました'}`,
+      }
+    } finally {
+      setIsSyncing(false)
+    }
+  }, [items])
+
   useEffect(() => {
     fetchPriceMaster(true)
   }, [fetchPriceMaster])
@@ -261,6 +306,7 @@ export const usePriceMaster = (): UsePriceMasterReturn => {
     moveItemUp,
     moveItemDown,
     resetToDefaults,
+    syncAllItemsToCloud,
     refetch: () => fetchPriceMaster(true),
   }
 }

@@ -5,7 +5,6 @@ import {
   Building2,
   Users,
   Package,
-  Save,
   Plus,
   CheckCircle2,
   Download,
@@ -67,6 +66,7 @@ export const Settings: React.FC = () => {
     moveItemUp,
     moveItemDown,
     resetToDefaults,
+    syncAllItemsToCloud,
     isSyncing: isSyncingItems,
   } = usePriceMaster()
 
@@ -444,9 +444,9 @@ export const Settings: React.FC = () => {
               {isSyncingCompany ? (
                 <RefreshCw className="w-4 h-4 mr-1.5 animate-spin" />
               ) : (
-                <Save className="w-4 h-4 mr-1.5" />
+                <Cloud className="w-4 h-4 mr-1.5 text-blue-400" />
               )}
-              {isSyncingCompany ? 'クラウド保存中...' : '自社情報を保存する'}
+              {isSyncingCompany ? 'クラウド保存中...' : 'クラウド（Supabase）へ保存・同期する'}
             </Button>
           </div>
         </form>
@@ -625,6 +625,26 @@ export const Settings: React.FC = () => {
             </div>
 
             <div className="flex items-center space-x-2">
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                disabled={isSyncingItems}
+                onClick={async () => {
+                  const res = await syncAllItemsToCloud()
+                  alert(res.message)
+                  if (res.success) {
+                    setIsSavedItems(true)
+                    setTimeout(() => setIsSavedItems(false), 4000)
+                  }
+                }}
+                className="bg-purple-50 text-purple-700 border-purple-200 hover:bg-purple-100 font-semibold"
+                title="現在表示されている全単価品目をSupabaseクラウドへ一括同期・保存します"
+              >
+                <Cloud className={`w-3.5 h-3.5 mr-1 text-purple-600 ${isSyncingItems ? 'animate-spin' : ''}`} />
+                {isSyncingItems ? 'クラウド同期中...' : 'クラウドへ全件同期'}
+              </Button>
+
               <Button
                 type="button"
                 variant="outline"
