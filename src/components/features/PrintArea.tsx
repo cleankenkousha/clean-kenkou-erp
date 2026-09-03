@@ -22,6 +22,7 @@ export interface PrintTaskData {
   receptionDate: string
   updater: string
   stepsData?: StepsData
+  signature?: string | null
 }
 
 interface PrintAreaProps {
@@ -87,6 +88,12 @@ export const PrintArea: React.FC<PrintAreaProps> = ({ task }) => {
               <div className="sig-title">作業責任者</div>
               <div className="sig-name">（　{workWorker}　）</div>
             </div>
+            {task.signature && (
+              <div className="sig-box" style={{ width: '130px', borderColor: '#059669', background: '#f0fdf4' }}>
+                <div className="sig-title" style={{ color: '#047857' }}>お客様受領サイン</div>
+                <img src={task.signature} alt="お客様サイン" style={{ height: '36px', margin: '0 auto', display: 'block', objectFit: 'contain' }} />
+              </div>
+            )}
           </div>
         </div>
 

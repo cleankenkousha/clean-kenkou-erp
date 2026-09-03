@@ -1,10 +1,11 @@
 import React, { useState, useEffect } from 'react'
-import { Camera, Calculator } from 'lucide-react'
+import { Camera, Calculator, PenTool, CheckCircle2, RotateCcw, Trash2 } from 'lucide-react'
 import { ProcessTask, ProcessLane, STEP_DEFINITIONS } from './KanbanBoard'
 import { StepsData } from './PrintArea'
 import { useProfiles } from '../../hooks/useProfiles'
 import { MapLink } from '../ui/MapLink'
 import { InitialQuoteData } from './MobileQuoteModal'
+import { SignaturePadModal } from './SignaturePadModal'
 
 interface TaskDetailModalProps {
   task: ProcessTask | null
@@ -97,12 +98,15 @@ export const TaskDetailModal: React.FC<TaskDetailModalProps> = ({
   const [currentStatus, setCurrentStatus] = useState<ProcessLane>('未着手')
   const [updater, setUpdater] = useState('')
   const [stepsData, setStepsData] = useState<StepsData>({})
+  const [signature, setSignature] = useState<string | null>(null)
+  const [isSignatureModalOpen, setIsSignatureModalOpen] = useState(false)
 
   useEffect(() => {
     if (task) {
       setCurrentStatus(task.status)
       setUpdater(task.updater || task.assignedTo || '')
       setStepsData(task.stepsData || {})
+      setSignature(task.signature || null)
     }
   }, [task])
 
@@ -251,6 +255,7 @@ export const TaskDetailModal: React.FC<TaskDetailModalProps> = ({
       updatedAt: nowStr,
       stepsData,
       assignedTo: updater.trim(),
+      signature,
     }
 
     onSave(updatedTask)
@@ -361,6 +366,73 @@ export const TaskDetailModal: React.FC<TaskDetailModalProps> = ({
                 )}
               </div>
             </div>
+          </div>
+
+          {/* 電子サイン（お客様受領署名）セクション */}
+          <div className="bg-slate-50 border border-slate-200 rounded-xl p-3 mb-4 shadow-sm">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center space-x-2">
+                <div className="p-1.5 bg-emerald-100 text-emerald-700 rounded-lg">
+                  <PenTool className="w-4 h-4" />
+                </div>
+                <div>
+                  <h4 className="text-xs font-bold text-slate-800">お客様サイン（電子署名・受領印）</h4>
+                  <p className="text-[11px] text-slate-500">現場でタブレットやスマートフォン上で直接サインをいただけます</p>
+                </div>
+              </div>
+
+              {signature ? (
+                <div className="flex items-center space-x-2">
+                  <span className="text-[11px] font-bold text-emerald-700 bg-emerald-50 border border-emerald-200 px-2 py-0.5 rounded flex items-center gap-1">
+                    <CheckCircle2 className="w-3 h-3 text-emerald-600" />
+                    署名受領済
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => setIsSignatureModalOpen(true)}
+                    className="px-2.5 py-1 text-[11px] font-semibold text-slate-600 border border-slate-300 rounded-lg hover:bg-slate-100 flex items-center gap-1 transition-colors"
+                  >
+                    <RotateCcw className="w-3 h-3" />
+                    再署名
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      if (confirm('受領サインを消去しますか？')) {
+                        setSignature(null)
+                      }
+                    }}
+                    className="p-1 text-slate-400 hover:text-rose-600 transition-colors"
+                    title="サインを削除"
+                  >
+                    <Trash2 className="w-3.5 h-3.5" />
+                  </button>
+                </div>
+              ) : (
+                <button
+                  type="button"
+                  onClick={() => setIsSignatureModalOpen(true)}
+                  className="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 active:scale-95 text-white font-bold text-xs rounded-lg shadow-sm flex items-center space-x-1.5 transition-all"
+                >
+                  <PenTool className="w-3.5 h-3.5" />
+                  <span>サインを受領する</span>
+                </button>
+              )}
+            </div>
+
+            {signature && (
+              <div className="mt-2.5 pt-2.5 border-t border-slate-200 flex items-center space-x-3 bg-white p-2 rounded-lg border border-slate-200">
+                <img
+                  src={signature}
+                  alt="お客様受領サイン"
+                  className="h-12 max-w-[200px] object-contain border border-slate-200 rounded px-2 bg-slate-50"
+                />
+                <div className="text-[11px] text-slate-500 space-y-0.5">
+                  <p className="font-semibold text-slate-700">署名者: {task.customer || 'ご依頼者'} 様</p>
+                  <p className="text-[10px] text-slate-400">※ 印刷指示書の「お客様受領サイン」枠にも自動印字されます</p>
+                </div>
+              </div>
+            )}
           </div>
 
           {/* 見積作成アクションバー (未着手・顧客検討・日程調整フェーズのみ表示) */}
@@ -482,7 +554,7 @@ export const TaskDetailModal: React.FC<TaskDetailModalProps> = ({
 
           <button
             type="button"
-            onClick={() => onPrint(task)}
+            onClick={() => onPrint({ ...task, status: currentStatus, updater, stepsData, signature })}
             className="btn-secondary"
             style={{ background: '#0284c7', color: 'white', borderColor: '#0284c7' }}
           >
@@ -506,6 +578,17 @@ export const TaskDetailModal: React.FC<TaskDetailModalProps> = ({
           </button>
         </div>
       </div>
+
+      {/* 電子サイン受領モーダル */}
+      <SignaturePadModal
+        isOpen={isSignatureModalOpen}
+        onClose={() => setIsSignatureModalOpen(false)}
+        onSave={(dataUrl) => {
+          setSignature(dataUrl)
+        }}
+        customerName={task.customer}
+        existingSignature={signature}
+      />
     </div>
   )
 }

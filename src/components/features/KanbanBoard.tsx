@@ -39,6 +39,7 @@ export interface ProcessTask {
   updatedAt: string
   isArchived?: boolean
   stepsData?: StepsData
+  signature?: string | null
 }
 
 export const STEP_DEFINITIONS = [

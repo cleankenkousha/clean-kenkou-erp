@@ -16,6 +16,7 @@ import {
   Upload,
   FileImage,
   Clipboard,
+  PenTool,
 } from 'lucide-react'
 
 import { useNavigate } from 'react-router-dom'
@@ -25,6 +26,7 @@ import { usePriceMaster } from '../../hooks/usePriceMaster'
 import { useViewMode } from '../../hooks/useViewMode'
 import { PrintQuoteArea, PrintQuoteData } from './PrintQuoteArea'
 import { analyzeQuoteImagesWithGemini, validateGeminiApiKey } from '../../lib/gemini'
+import { SignaturePadModal } from './SignaturePadModal'
 
 export interface QuoteItem {
   id: string
@@ -218,6 +220,8 @@ export const MobileQuoteModal: React.FC<MobileQuoteModalProps> = ({
   const [baseFee, setBaseFee] = useState<number>(0)
   const [expenses, setExpenses] = useState<number>(0)
   const [notes, setNotes] = useState('')
+  const [signature, setSignature] = useState<string | null>(null)
+  const [isSignatureModalOpen, setIsSignatureModalOpen] = useState(false)
   const [isSaving, setIsSaving] = useState(false)
   const [errorMsg, setErrorMsg] = useState<string | null>(null)
 
@@ -246,6 +250,7 @@ export const MobileQuoteModal: React.FC<MobileQuoteModalProps> = ({
     setBaseFee(0)
     setExpenses(0)
     setNotes('')
+    setSignature(null)
     setErrorMsg(null)
     if (initialData) {
       setCustomerName(initialData.customerName || '')
@@ -1399,6 +1404,36 @@ export const MobileQuoteModal: React.FC<MobileQuoteModalProps> = ({
           <Button type="button" variant="outline" className="px-4 sm:px-6 py-2.5 text-xs font-bold" onClick={onClose}>
             キャンセル
           </Button>
+
+          {/* お客様サインボタン */}
+          {signature ? (
+            <div className="flex items-center space-x-1.5 bg-emerald-50 border border-emerald-200 rounded-lg px-2.5 py-1.5 text-xs">
+              <img
+                src={signature}
+                alt="お客様サイン"
+                className="h-6 max-w-[70px] object-contain bg-white border border-slate-200 rounded px-1"
+              />
+              <span className="text-[11px] font-bold text-emerald-700">署名済</span>
+              <button
+                type="button"
+                onClick={() => setIsSignatureModalOpen(true)}
+                className="text-[11px] font-bold text-emerald-800 hover:underline ml-1"
+              >
+                再署名
+              </button>
+            </div>
+          ) : (
+            <Button
+              type="button"
+              variant="outline"
+              className="px-3.5 py-2.5 text-xs font-bold text-emerald-700 border-emerald-300 bg-emerald-50 hover:bg-emerald-100 flex items-center space-x-1"
+              onClick={() => setIsSignatureModalOpen(true)}
+            >
+              <PenTool className="w-3.5 h-3.5 mr-1" />
+              <span>お客様サイン</span>
+            </Button>
+          )}
+
           <Button
             type="button"
             variant="outline"
@@ -1429,6 +1464,7 @@ export const MobileQuoteModal: React.FC<MobileQuoteModalProps> = ({
                 totalVolume,
                 grandTotal,
                 notes,
+                signature,
               })
             }}
           >
@@ -1457,6 +1493,17 @@ export const MobileQuoteModal: React.FC<MobileQuoteModalProps> = ({
 
       {/* 概算見積書 印刷ポータル領域 (指示書印刷と100%同一) */}
       <PrintQuoteArea quote={printQuoteData} />
+
+      {/* 電子サイン受領モーダル */}
+      <SignaturePadModal
+        isOpen={isSignatureModalOpen}
+        onClose={() => setIsSignatureModalOpen(false)}
+        onSave={(dataUrl) => {
+          setSignature(dataUrl)
+        }}
+        customerName={customerName}
+        existingSignature={signature}
+      />
     </div>
   )
 }

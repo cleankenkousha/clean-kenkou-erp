@@ -31,6 +31,7 @@ export interface PrintQuoteData {
   totalVolume: number
   grandTotal: number
   notes?: string
+  signature?: string | null
 }
 
 interface PrintQuoteAreaProps {
@@ -182,11 +183,23 @@ export const PrintQuoteArea: React.FC<PrintQuoteAreaProps> = ({ quote }) => {
             </p>
           </div>
 
-          <div className="bg-slate-50 p-2.5 rounded border border-slate-300 space-y-1">
-            <p className="font-bold border-b border-slate-300 pb-0.5 text-slate-900">備考・特記事項</p>
-            <p className="text-[11px] text-slate-700 whitespace-pre-wrap leading-tight">
-              {quote.notes || '指定なし'}
-            </p>
+          <div className="bg-slate-50 p-2.5 rounded border border-slate-300 space-y-1 flex flex-col justify-between">
+            <div>
+              <p className="font-bold border-b border-slate-300 pb-0.5 text-slate-900">備考・特記事項</p>
+              <p className="text-[11px] text-slate-700 whitespace-pre-wrap leading-tight">
+                {quote.notes || '指定なし'}
+              </p>
+            </div>
+            {quote.signature && (
+              <div className="border-t border-slate-200 pt-1.5 flex items-center justify-between">
+                <span className="text-[10px] font-bold text-slate-600">お客様ご承諾サイン:</span>
+                <img
+                  src={quote.signature}
+                  alt="お客様サイン"
+                  className="h-9 max-w-[140px] object-contain border border-slate-300 bg-white rounded px-1"
+                />
+              </div>
+            )}
           </div>
         </div>
 
