@@ -1408,30 +1408,64 @@ export const MobileQuoteModal: React.FC<MobileQuoteModalProps> = ({
           {/* お客様サインボタン */}
           {signature ? (
             <div className="flex items-center space-x-1.5 bg-emerald-50 border border-emerald-200 rounded-lg px-2.5 py-1.5 text-xs">
-              <img
-                src={signature}
-                alt="お客様サイン"
-                className="h-6 max-w-[70px] object-contain bg-white border border-slate-200 rounded px-1"
-              />
-              <span className="text-[11px] font-bold text-emerald-700">署名済</span>
+              {signature.startsWith('data:image/') ? (
+                <img
+                  src={signature}
+                  alt="お客様サイン"
+                  className="h-6 max-w-[70px] object-contain bg-white border border-slate-200 rounded px-1"
+                />
+              ) : (
+                <span className="font-bold text-amber-900 bg-amber-100 px-1.5 py-0.5 rounded text-[11px]">{signature}</span>
+              )}
+              <span className="text-[11px] font-bold text-emerald-700">
+                {signature.startsWith('data:image/') ? '署名済' : '記録済'}
+              </span>
               <button
                 type="button"
                 onClick={() => setIsSignatureModalOpen(true)}
                 className="text-[11px] font-bold text-emerald-800 hover:underline ml-1"
               >
-                再署名
+                {signature.startsWith('data:image/') ? '再署名' : '署名に変更'}
+              </button>
+              <button
+                type="button"
+                onClick={() => setSignature(null)}
+                className="text-slate-400 hover:text-rose-600 text-[11px] font-bold ml-1"
+                title="解除"
+              >
+                ✕
               </button>
             </div>
           ) : (
-            <Button
-              type="button"
-              variant="outline"
-              className="px-3.5 py-2.5 text-xs font-bold text-emerald-700 border-emerald-300 bg-emerald-50 hover:bg-emerald-100 flex items-center space-x-1"
-              onClick={() => setIsSignatureModalOpen(true)}
-            >
-              <PenTool className="w-3.5 h-3.5 mr-1" />
-              <span>お客様サイン</span>
-            </Button>
+            <div className="flex items-center space-x-1">
+              <Button
+                type="button"
+                variant="outline"
+                className="px-3 py-2 text-xs font-bold text-emerald-700 border-emerald-300 bg-emerald-50 hover:bg-emerald-100 flex items-center space-x-1"
+                onClick={() => setIsSignatureModalOpen(true)}
+              >
+                <PenTool className="w-3.5 h-3.5 mr-0.5" />
+                <span>サイン</span>
+              </Button>
+              <Button
+                type="button"
+                variant="outline"
+                className="px-2.5 py-2 text-xs font-bold text-amber-800 border-amber-300 bg-amber-50 hover:bg-amber-100"
+                onClick={() => setSignature('立ち会い無し（不在回収）')}
+                title="お客様不在時の回収"
+              >
+                立ち会い無し
+              </Button>
+              <Button
+                type="button"
+                variant="outline"
+                className="px-2.5 py-2 text-xs font-bold text-slate-700 border-slate-300 bg-slate-50 hover:bg-slate-100"
+                onClick={() => setSignature('サイン不要（事前承諾済）')}
+                title="見積提示のみ・サイン不要案件"
+              >
+                不要
+              </Button>
+            </div>
           )}
 
           <Button

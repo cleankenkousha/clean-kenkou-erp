@@ -91,7 +91,13 @@ export const PrintArea: React.FC<PrintAreaProps> = ({ task }) => {
             {task.signature && (
               <div className="sig-box" style={{ width: '130px', borderColor: '#059669', background: '#f0fdf4' }}>
                 <div className="sig-title" style={{ color: '#047857' }}>お客様受領サイン</div>
-                <img src={task.signature} alt="お客様サイン" style={{ height: '36px', margin: '0 auto', display: 'block', objectFit: 'contain' }} />
+                {task.signature.startsWith('data:image/') ? (
+                  <img src={task.signature} alt="お客様サイン" style={{ height: '36px', margin: '0 auto', display: 'block', objectFit: 'contain' }} />
+                ) : (
+                  <div style={{ fontSize: '11px', fontWeight: 'bold', color: '#047857', textAlign: 'center', lineHeight: '36px' }}>
+                    {task.signature}
+                  </div>
+                )}
               </div>
             )}
           </div>

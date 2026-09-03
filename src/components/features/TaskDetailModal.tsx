@@ -382,54 +382,88 @@ export const TaskDetailModal: React.FC<TaskDetailModalProps> = ({
               </div>
 
               {signature ? (
-                <div className="flex items-center space-x-2">
-                  <span className="text-[11px] font-bold text-emerald-700 bg-emerald-50 border border-emerald-200 px-2 py-0.5 rounded flex items-center gap-1">
-                    <CheckCircle2 className="w-3 h-3 text-emerald-600" />
-                    署名受領済
-                  </span>
+                <div className="flex items-center space-x-2 flex-wrap gap-y-1">
+                  {signature.startsWith('data:image/') ? (
+                    <span className="text-[11px] font-bold text-emerald-700 bg-emerald-50 border border-emerald-200 px-2 py-0.5 rounded flex items-center gap-1">
+                      <CheckCircle2 className="w-3 h-3 text-emerald-600" />
+                      署名受領済
+                    </span>
+                  ) : (
+                    <span className="text-[11px] font-bold text-amber-800 bg-amber-50 border border-amber-300 px-2 py-0.5 rounded flex items-center gap-1">
+                      {signature}
+                    </span>
+                  )}
                   <button
                     type="button"
                     onClick={() => setIsSignatureModalOpen(true)}
                     className="px-2.5 py-1 text-[11px] font-semibold text-slate-600 border border-slate-300 rounded-lg hover:bg-slate-100 flex items-center gap-1 transition-colors"
                   >
                     <RotateCcw className="w-3 h-3" />
-                    再署名
+                    {signature.startsWith('data:image/') ? '再署名' : '手書き署名する'}
                   </button>
                   <button
                     type="button"
                     onClick={() => {
-                      if (confirm('受領サインを消去しますか？')) {
+                      if (confirm('サイン・署名設定を解除しますか？')) {
                         setSignature(null)
                       }
                     }}
                     className="p-1 text-slate-400 hover:text-rose-600 transition-colors"
-                    title="サインを削除"
+                    title="解除する"
                   >
                     <Trash2 className="w-3.5 h-3.5" />
                   </button>
                 </div>
               ) : (
-                <button
-                  type="button"
-                  onClick={() => setIsSignatureModalOpen(true)}
-                  className="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 active:scale-95 text-white font-bold text-xs rounded-lg shadow-sm flex items-center space-x-1.5 transition-all"
-                >
-                  <PenTool className="w-3.5 h-3.5" />
-                  <span>サインを受領する</span>
-                </button>
+                <div className="flex items-center space-x-1.5 flex-wrap gap-y-1">
+                  <button
+                    type="button"
+                    onClick={() => setIsSignatureModalOpen(true)}
+                    className="px-2.5 py-1.5 bg-emerald-600 hover:bg-emerald-700 active:scale-95 text-white font-bold text-xs rounded-lg shadow-sm flex items-center space-x-1 transition-all"
+                  >
+                    <PenTool className="w-3.5 h-3.5" />
+                    <span>サイン受領</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setSignature('立ち会い無し（不在回収）')}
+                    className="px-2.5 py-1.5 bg-amber-50 hover:bg-amber-100 text-amber-800 border border-amber-300 font-bold text-xs rounded-lg transition-colors"
+                    title="お客様不在時の回収・立ち会い無し作業"
+                  >
+                    立ち会い無し
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setSignature('サイン不要（事前承諾済）')}
+                    className="px-2.5 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 border border-slate-300 font-bold text-xs rounded-lg transition-colors"
+                    title="電話等で事前確認済みまたはサイン不要案件"
+                  >
+                    サイン不要
+                  </button>
+                </div>
               )}
             </div>
 
             {signature && (
               <div className="mt-2.5 pt-2.5 border-t border-slate-200 flex items-center space-x-3 bg-white p-2 rounded-lg border border-slate-200">
-                <img
-                  src={signature}
-                  alt="お客様受領サイン"
-                  className="h-12 max-w-[200px] object-contain border border-slate-200 rounded px-2 bg-slate-50"
-                />
+                {signature.startsWith('data:image/') ? (
+                  <img
+                    src={signature}
+                    alt="お客様受領サイン"
+                    className="h-12 max-w-[200px] object-contain border border-slate-200 rounded px-2 bg-slate-50"
+                  />
+                ) : (
+                  <div className="px-3 py-2 bg-amber-50 border border-amber-200 rounded text-amber-900 font-bold text-xs">
+                    {signature}
+                  </div>
+                )}
                 <div className="text-[11px] text-slate-500 space-y-0.5">
-                  <p className="font-semibold text-slate-700">署名者: {task.customer || 'ご依頼者'} 様</p>
-                  <p className="text-[10px] text-slate-400">※ 印刷指示書の「お客様受領サイン」枠にも自動印字されます</p>
+                  <p className="font-semibold text-slate-700">
+                    {signature.startsWith('data:image/')
+                      ? `署名者: ${task.customer || 'ご依頼者'} 様`
+                      : `記録: ${signature}`}
+                  </p>
+                  <p className="text-[10px] text-slate-400">※ 印刷指示書にもこのサイン状況が自動印字されます</p>
                 </div>
               </div>
             )}

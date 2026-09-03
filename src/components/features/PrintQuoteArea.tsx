@@ -193,11 +193,17 @@ export const PrintQuoteArea: React.FC<PrintQuoteAreaProps> = ({ quote }) => {
             {quote.signature && (
               <div className="border-t border-slate-200 pt-1.5 flex items-center justify-between">
                 <span className="text-[10px] font-bold text-slate-600">お客様ご承諾サイン:</span>
-                <img
-                  src={quote.signature}
-                  alt="お客様サイン"
-                  className="h-9 max-w-[140px] object-contain border border-slate-300 bg-white rounded px-1"
-                />
+                {quote.signature.startsWith('data:image/') ? (
+                  <img
+                    src={quote.signature}
+                    alt="お客様サイン"
+                    className="h-9 max-w-[140px] object-contain border border-slate-300 bg-white rounded px-1"
+                  />
+                ) : (
+                  <span className="text-xs font-bold text-amber-900 bg-amber-50 border border-amber-300 px-2 py-0.5 rounded">
+                    {quote.signature}
+                  </span>
+                )}
               </div>
             )}
           </div>
