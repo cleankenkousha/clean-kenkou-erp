@@ -16,6 +16,7 @@ import {
   UserCheck,
   Calculator,
   ChevronRight,
+  Receipt,
 } from 'lucide-react'
 
 import { supabase } from '../lib/supabase'
@@ -30,6 +31,7 @@ import { MobileQuoteModal, InitialQuoteData } from '../components/features/Mobil
 import { NewTaskModal } from '../components/features/NewTaskModal'
 import { PrintArea, PrintTaskData } from '../components/features/PrintArea'
 import { PrintQuoteArea, PrintQuoteData } from '../components/features/PrintQuoteArea'
+import { InvoiceModal } from '../components/features/InvoiceModal'
 import { Input, Button, MapLink } from '../components/ui'
 import { mapJobStatusToLane, mapLaneToJobStatus } from '../lib/statusMapping'
 
@@ -93,6 +95,14 @@ export const Jobs: React.FC = () => {
   const [quoteInitialData, setQuoteInitialData] = useState<InitialQuoteData | null>(null)
   const [printTask, setPrintTask] = useState<PrintTaskData | null>(null)
   const [printQuoteData, setPrintQuoteData] = useState<PrintQuoteData | null>(null)
+  const [invoiceJob, setInvoiceJob] = useState<Job | null>(null)
+  const [isInvoiceModalOpen, setIsInvoiceModalOpen] = useState(false)
+
+  const handleOpenInvoiceForJob = (job: Job, e?: React.MouseEvent) => {
+    if (e) e.stopPropagation()
+    setInvoiceJob(job)
+    setIsInvoiceModalOpen(true)
+  }
 
   // 案件のnotesから概算見積データ(PrintQuoteData)を抽出するヘルパー（フォールバック付き）
   const parseQuoteDataFromJob = (job: Job): PrintQuoteData => {
@@ -707,28 +717,42 @@ export const Jobs: React.FC = () => {
                       </span>
                     </div>
                     <div className="flex items-center space-x-1 flex-shrink-0">
-                      <button
-                        type="button"
-                        onClick={(e) => {
-                          e.stopPropagation()
-                          setPrintQuoteData(existingQuoteData)
-                        }}
-                        className="px-2 py-0.5 bg-emerald-600 hover:bg-emerald-700 active:scale-95 text-white text-[10px] font-bold rounded shadow-sm flex items-center space-x-1 transition-all"
-                        title="概算見積書を表示・印刷"
-                      >
-                        <FileSpreadsheet className="w-3 h-3" />
-                        <span>見積書</span>
-                      </button>
-                      {canCreateQuote && (
+                      {['completed', 'billed', 'collected'].includes(job.status) ? (
                         <button
                           type="button"
-                          onClick={(e) => handleOpenQuoteForJob(job, e)}
-                          className="px-2 py-0.5 bg-blue-600 hover:bg-blue-700 active:scale-95 text-white text-[10px] font-bold rounded shadow-sm flex items-center space-x-1 transition-all"
-                          title="この案件の見積書を作成"
+                          onClick={(e) => handleOpenInvoiceForJob(job, e)}
+                          className="px-2 py-0.5 bg-indigo-600 hover:bg-indigo-700 active:scale-95 text-white text-[10px] font-bold rounded shadow-sm flex items-center space-x-1 transition-all"
+                          title="請求・売上内容を確認・入力"
                         >
-                          <Calculator className="w-3 h-3" />
-                          <span>作成</span>
+                          <Receipt className="w-3 h-3" />
+                          <span>請求・売上</span>
                         </button>
+                      ) : (
+                        <>
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation()
+                              setPrintQuoteData(existingQuoteData)
+                            }}
+                            className="px-2 py-0.5 bg-emerald-600 hover:bg-emerald-700 active:scale-95 text-white text-[10px] font-bold rounded shadow-sm flex items-center space-x-1 transition-all"
+                            title="概算見積書を表示・印刷"
+                          >
+                            <FileSpreadsheet className="w-3 h-3" />
+                            <span>見積書</span>
+                          </button>
+                          {canCreateQuote && (
+                            <button
+                              type="button"
+                              onClick={(e) => handleOpenQuoteForJob(job, e)}
+                              className="px-2 py-0.5 bg-blue-600 hover:bg-blue-700 active:scale-95 text-white text-[10px] font-bold rounded shadow-sm flex items-center space-x-1 transition-all"
+                              title="この案件の見積書を作成"
+                            >
+                              <Calculator className="w-3 h-3" />
+                              <span>作成</span>
+                            </button>
+                          )}
+                        </>
                       )}
                       <ChevronRight className="w-4 h-4 text-slate-400" />
                     </div>
@@ -882,42 +906,71 @@ export const Jobs: React.FC = () => {
                       {/* 操作ボタン */}
                       <td className="py-2 px-3 text-right">
                         <div className="flex items-center justify-end space-x-1.5">
-                          <Button
-                            type="button"
-                            className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold py-1 px-2 text-[11px] shadow-sm flex items-center space-x-1"
-                            size="sm"
-                            onClick={(e) => {
-                              e.stopPropagation()
-                              setPrintQuoteData(existingQuoteData)
-                            }}
-                            title="概算見積書を表示・印刷"
-                          >
-                            <FileSpreadsheet className="w-3.5 h-3.5" />
-                            <span>見積書印刷</span>
-                          </Button>
-                          {canCreateQuote && (
-                            <Button
-                              type="button"
-                              className="bg-blue-600 hover:bg-blue-700 text-white font-bold py-1 px-2 text-[11px] shadow-sm flex items-center space-x-1"
-                              size="sm"
-                              onClick={(e) => handleOpenQuoteForJob(job, e)}
-                              title="この案件の見積書を作成"
-                            >
-                              <Calculator className="w-3.5 h-3.5" />
-                              <span>見積作成</span>
-                            </Button>
+                          {['completed', 'billed', 'collected'].includes(job.status) ? (
+                            <>
+                              <Button
+                                type="button"
+                                className="bg-indigo-600 hover:bg-indigo-700 active:scale-95 text-white font-bold py-1 px-2.5 text-[11px] shadow-sm flex items-center space-x-1 transition-all"
+                                size="sm"
+                                onClick={(e) => handleOpenInvoiceForJob(job, e)}
+                                title="請求書の内容入力・確定売上・乖離分析"
+                              >
+                                <Receipt className="w-3.5 h-3.5" />
+                                <span>請求・売上入力</span>
+                              </Button>
+                              <Button
+                                type="button"
+                                variant="outline"
+                                size="sm"
+                                onClick={(e) => {
+                                  e.stopPropagation()
+                                  handleOpenDetail(job)
+                                }}
+                                title="案件の詳細履歴を確認"
+                              >
+                                詳細確認
+                              </Button>
+                            </>
+                          ) : (
+                            <>
+                              <Button
+                                type="button"
+                                className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold py-1 px-2 text-[11px] shadow-sm flex items-center space-x-1"
+                                size="sm"
+                                onClick={(e) => {
+                                  e.stopPropagation()
+                                  setPrintQuoteData(existingQuoteData)
+                                }}
+                                title="概算見積書を表示・印刷"
+                              >
+                                <FileSpreadsheet className="w-3.5 h-3.5" />
+                                <span>見積書印刷</span>
+                              </Button>
+                              {canCreateQuote && (
+                                <Button
+                                  type="button"
+                                  className="bg-blue-600 hover:bg-blue-700 text-white font-bold py-1 px-2 text-[11px] shadow-sm flex items-center space-x-1"
+                                  size="sm"
+                                  onClick={(e) => handleOpenQuoteForJob(job, e)}
+                                  title="この案件の見積書を作成"
+                                >
+                                  <Calculator className="w-3.5 h-3.5" />
+                                  <span>見積作成</span>
+                                </Button>
+                              )}
+                              <Button
+                                type="button"
+                                variant="outline"
+                                size="sm"
+                                onClick={(e) => {
+                                  e.stopPropagation()
+                                  handleOpenDetail(job)
+                                }}
+                              >
+                                詳細・編集
+                              </Button>
+                            </>
                           )}
-                          <Button
-                            type="button"
-                            variant="outline"
-                            size="sm"
-                            onClick={(e) => {
-                              e.stopPropagation()
-                              handleOpenDetail(job)
-                            }}
-                          >
-                            詳細・編集
-                          </Button>
                         </div>
                       </td>
                     </tr>
@@ -967,6 +1020,17 @@ export const Jobs: React.FC = () => {
         isOpen={isExcelImportOpen}
         onClose={() => setIsExcelImportOpen(false)}
         onImportSuccess={() => refetch()}
+      />
+
+      {/* 完了済み案件の請求・売上確定モーダル */}
+      <InvoiceModal
+        job={invoiceJob}
+        isOpen={isInvoiceModalOpen}
+        onClose={() => {
+          setIsInvoiceModalOpen(false)
+          setInvoiceJob(null)
+        }}
+        onSuccess={() => refetch()}
       />
     </div>
   )

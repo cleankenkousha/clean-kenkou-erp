@@ -10,4 +10,5 @@ export * from './PrintQuoteArea'
 export * from './CustomerModal'
 export * from './MobileQuoteModal'
 export * from './SignaturePadModal'
+export * from './InvoiceModal'
 

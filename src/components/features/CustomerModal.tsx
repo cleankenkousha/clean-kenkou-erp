@@ -1,8 +1,9 @@
 import React, { useState, useEffect } from 'react'
-import { X, User, Phone, MapPin, Save, Briefcase, Calendar } from 'lucide-react'
+import { X, User, Phone, MapPin, Save, Briefcase, Calendar, Receipt } from 'lucide-react'
 import { Customer, Job } from '../../types'
 import { Input, Button } from '../ui'
 import { supabase } from '../../lib/supabase'
+import { InvoiceModal } from './InvoiceModal'
 
 export interface CustomerModalProps {
   customer: Customer | null
@@ -25,6 +26,9 @@ export const CustomerModal: React.FC<CustomerModalProps> = ({
   const [isLoadingJobs, setIsLoadingJobs] = useState(false)
   const [isSaving, setIsSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
+
+  const [invoiceJob, setInvoiceJob] = useState<Job | null>(null)
+  const [isInvoiceModalOpen, setIsInvoiceModalOpen] = useState(false)
 
   useEffect(() => {
     if (customer) {
@@ -174,24 +178,44 @@ export const CustomerModal: React.FC<CustomerModalProps> = ({
                     まだ案件履歴はありません
                   </p>
                 ) : (
-                  <div className="space-y-2 max-h-40 overflow-y-auto pr-1">
-                    {customerJobs.map((job) => (
-                      <div
-                        key={job.id}
-                        className="p-2.5 bg-slate-50 hover:bg-slate-100/80 rounded-lg border border-border text-xs flex justify-between items-center transition-colors"
-                      >
-                        <div>
-                          <p className="font-semibold text-main">{job.title}</p>
-                          <p className="text-[11px] text-sub flex items-center gap-1 mt-0.5">
-                            <Calendar className="w-3 h-3" />
-                            {job.scheduled_date || '日程未定'}
-                          </p>
+                  <div className="space-y-2 max-h-48 overflow-y-auto pr-1">
+                    {customerJobs.map((job) => {
+                      const isCompleted = ['completed', 'billed', 'collected'].includes(job.status)
+                      return (
+                        <div
+                          key={job.id}
+                          className="p-2.5 bg-slate-50 hover:bg-slate-100/80 rounded-lg border border-border text-xs flex justify-between items-center transition-colors gap-2"
+                        >
+                          <div className="min-w-0 flex-1">
+                            <p className="font-semibold text-main truncate">{job.title}</p>
+                            <p className="text-[11px] text-sub flex items-center gap-1 mt-0.5">
+                              <Calendar className="w-3 h-3" />
+                              {job.scheduled_date || '日程未定'}
+                            </p>
+                          </div>
+                          <div className="flex items-center space-x-1.5 flex-shrink-0">
+                            {isCompleted ? (
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  setInvoiceJob(job)
+                                  setIsInvoiceModalOpen(true)
+                                }}
+                                className="px-2 py-1 bg-indigo-600 hover:bg-indigo-700 active:scale-95 text-white font-bold text-[10px] rounded shadow-sm flex items-center space-x-1 transition-all"
+                                title="確定請求・売上内容の入力・確認"
+                              >
+                                <Receipt className="w-3 h-3" />
+                                <span>請求・売上入力</span>
+                              </button>
+                            ) : (
+                              <span className="px-2 py-0.5 rounded text-[10px] font-medium bg-slate-200 text-slate-700">
+                                {job.status}
+                              </span>
+                            )}
+                          </div>
                         </div>
-                        <span className="px-2 py-0.5 rounded text-[10px] font-medium bg-slate-200 text-slate-700">
-                          {job.status}
-                        </span>
-                      </div>
-                    ))}
+                      )
+                    })}
                   </div>
                 )}
               </div>
@@ -210,6 +234,29 @@ export const CustomerModal: React.FC<CustomerModalProps> = ({
           </div>
         </form>
       </div>
+
+      {/* 完了済み案件の請求・売上確定モーダル */}
+      <InvoiceModal
+        job={invoiceJob}
+        isOpen={isInvoiceModalOpen}
+        onClose={() => {
+          setIsInvoiceModalOpen(false)
+          setInvoiceJob(null)
+        }}
+        onSuccess={() => {
+          // 案件一覧を再読み込み
+          if (customer) {
+            supabase
+              .from('jobs')
+              .select('*')
+              .eq('customer_id', customer.id)
+              .order('created_at', { ascending: false })
+              .then(({ data }) => {
+                if (data) setCustomerJobs(data as Job[])
+              })
+          }
+        }}
+      />
     </div>
   )
 }

@@ -1,11 +1,12 @@
 import React, { useState, useEffect } from 'react'
-import { Camera, Calculator, PenTool, CheckCircle2, RotateCcw, Trash2 } from 'lucide-react'
+import { Camera, Calculator, PenTool, CheckCircle2, RotateCcw, Trash2, Receipt } from 'lucide-react'
 import { ProcessTask, ProcessLane, STEP_DEFINITIONS } from './KanbanBoard'
 import { StepsData } from './PrintArea'
 import { useProfiles } from '../../hooks/useProfiles'
 import { MapLink } from '../ui/MapLink'
 import { InitialQuoteData } from './MobileQuoteModal'
 import { SignaturePadModal } from './SignaturePadModal'
+import { InvoiceModal } from './InvoiceModal'
 
 interface TaskDetailModalProps {
   task: ProcessTask | null
@@ -100,6 +101,7 @@ export const TaskDetailModal: React.FC<TaskDetailModalProps> = ({
   const [stepsData, setStepsData] = useState<StepsData>({})
   const [signature, setSignature] = useState<string | null>(null)
   const [isSignatureModalOpen, setIsSignatureModalOpen] = useState(false)
+  const [isInvoiceModalOpen, setIsInvoiceModalOpen] = useState(false)
 
   useEffect(() => {
     if (task) {
@@ -295,6 +297,36 @@ export const TaskDetailModal: React.FC<TaskDetailModalProps> = ({
         </div>
 
         <div className="modal-body">
+          {/* 完了済み案件の請求・売上管理バー */}
+          {currentStatus === '請求書送付' && (
+            <div className="mb-4 p-3.5 bg-gradient-to-r from-indigo-50 to-emerald-50 border border-indigo-200 rounded-xl flex flex-col sm:flex-row sm:items-center justify-between gap-3 shadow-xs">
+              <div className="flex items-center space-x-2.5">
+                <div className="p-2 bg-indigo-600 text-white rounded-lg flex-shrink-0">
+                  <Receipt className="w-5 h-5" />
+                </div>
+                <div>
+                  <div className="flex items-center gap-1.5">
+                    <h4 className="font-bold text-xs text-indigo-900">作業完了・請求管理</h4>
+                    <span className="text-[10px] font-bold px-1.5 py-0.2 bg-emerald-100 text-emerald-800 rounded border border-emerald-300">
+                      完了済み
+                    </span>
+                  </div>
+                  <p className="text-[11px] text-slate-600 mt-0.5">
+                    確定請求金額や入金状況の入力、事前見積との乖離（差額）分析を行えます
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setIsInvoiceModalOpen(true)}
+                className="px-3.5 py-1.5 bg-indigo-600 hover:bg-indigo-700 active:scale-95 text-white font-bold text-xs rounded-lg shadow-sm flex items-center justify-center space-x-1.5 transition-all flex-shrink-0"
+              >
+                <Receipt className="w-3.5 h-3.5" />
+                <span>💰 請求・売上を入力</span>
+              </button>
+            </div>
+          )}
+
           <div className="info-section">
             <div className="info-group">
               <label>顧客名</label>
@@ -611,20 +643,40 @@ export const TaskDetailModal: React.FC<TaskDetailModalProps> = ({
                       className="timeline-input"
                     />
 
-                    {/* 見積実施・見積調整など見積関連ステップ時に「カメラ撮影・概算見積作成」ボタンを表示 */}
-                    {(step.id === 'estimate_do' || step.id === 'estimate_schedule' || step.id === 'estimate_submit' || step.id === 'reception') && onOpenQuoteWithData && (
-                      <div className="mt-2 pt-2 border-t border-slate-200/60 flex items-center justify-between">
-                        <span className="text-[11px] text-slate-500 font-semibold flex items-center gap-1">
-                          <Calculator className="w-3.5 h-3.5 text-blue-600" />
-                          現場で写真撮影 & 概算算定
+                    {/* 見積実施・見積調整など見積関連ステップ時に「カメラ撮影・概算見積作成」ボタンを表示 (完了案件時は非表示) */}
+                    {currentStatus !== '請求書送付' &&
+                      (step.id === 'estimate_do' || step.id === 'estimate_schedule' || step.id === 'estimate_submit' || step.id === 'reception') &&
+                      onOpenQuoteWithData && (
+                        <div className="mt-2 pt-2 border-t border-slate-200/60 flex items-center justify-between">
+                          <span className="text-[11px] text-slate-500 font-semibold flex items-center gap-1">
+                            <Calculator className="w-3.5 h-3.5 text-blue-600" />
+                            現場で写真撮影 & 概算算定
+                          </span>
+                          <button
+                            type="button"
+                            onClick={handleOpenQuoteForThisTask}
+                            className="px-3 py-1.5 bg-blue-600 hover:bg-blue-700 active:scale-95 text-white font-bold text-xs rounded-lg shadow-sm flex items-center space-x-1.5 transition-all"
+                          >
+                            <Camera className="w-4 h-4" />
+                            <span>概算見積を作成 (顧客情報連動)</span>
+                          </button>
+                        </div>
+                    )}
+
+                    {/* 請求書送付ステップ時に「請求・売上入力」ボタンを表示 */}
+                    {step.id === 'invoice_sent' && (
+                      <div className="mt-2 pt-2 border-t border-indigo-200/60 flex items-center justify-between">
+                        <span className="text-[11px] text-indigo-800 font-semibold flex items-center gap-1">
+                          <Receipt className="w-3.5 h-3.5 text-indigo-600" />
+                          確定請求金額・入金状況の入力 & 乖離分析
                         </span>
                         <button
                           type="button"
-                          onClick={handleOpenQuoteForThisTask}
-                          className="px-3 py-1.5 bg-blue-600 hover:bg-blue-700 active:scale-95 text-white font-bold text-xs rounded-lg shadow-sm flex items-center space-x-1.5 transition-all"
+                          onClick={() => setIsInvoiceModalOpen(true)}
+                          className="px-3 py-1.5 bg-indigo-600 hover:bg-indigo-700 active:scale-95 text-white font-bold text-xs rounded-lg shadow-sm flex items-center space-x-1.5 transition-all"
                         >
-                          <Camera className="w-4 h-4" />
-                          <span>概算見積を作成 (顧客情報連動)</span>
+                          <Receipt className="w-4 h-4" />
+                          <span>請求・売上内容を入力</span>
                         </button>
                       </div>
                     )}
@@ -646,14 +698,25 @@ export const TaskDetailModal: React.FC<TaskDetailModalProps> = ({
             案件をキャンセル
           </button>
 
-          <button
-            type="button"
-            onClick={() => onPrint({ ...task, status: currentStatus, updater, stepsData, signature })}
-            className="btn-secondary"
-            style={{ background: '#0284c7', color: 'white', borderColor: '#0284c7' }}
-          >
-            🖨️ 指示書を印刷
-          </button>
+          {currentStatus === '請求書送付' ? (
+            <button
+              type="button"
+              onClick={() => setIsInvoiceModalOpen(true)}
+              className="btn-secondary"
+              style={{ background: '#4f46e5', color: 'white', borderColor: '#4f46e5', fontWeight: 'bold' }}
+            >
+              💰 請求・売上入力
+            </button>
+          ) : (
+            <button
+              type="button"
+              onClick={() => onPrint({ ...task, status: currentStatus, updater, stepsData, signature })}
+              className="btn-secondary"
+              style={{ background: '#0284c7', color: 'white', borderColor: '#0284c7' }}
+            >
+              🖨️ 指示書を印刷
+            </button>
+          )}
 
           <button
             type="button"
@@ -682,6 +745,32 @@ export const TaskDetailModal: React.FC<TaskDetailModalProps> = ({
         }}
         customerName={task.customer}
         existingSignature={signature}
+      />
+
+      {/* 完了済み案件の請求・売上確定モーダル */}
+      <InvoiceModal
+        job={
+          task
+            ? {
+                id: task.id,
+                customer_id: '',
+                title: task.taskType,
+                status: 'billed',
+                notes: task.stepsData ? JSON.stringify(task.stepsData) : null,
+                created_at: task.receptionDate,
+                customers: {
+                  name: task.customer,
+                  phone: task.tel,
+                  address: task.address,
+                },
+              }
+            : null
+        }
+        isOpen={isInvoiceModalOpen}
+        onClose={() => setIsInvoiceModalOpen(false)}
+        onSuccess={() => {
+          setIsInvoiceModalOpen(false)
+        }}
       />
     </div>
   )

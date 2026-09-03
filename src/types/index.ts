@@ -41,3 +41,18 @@ export interface Job {
   } | null
 }
 
+export interface Invoice {
+  id?: string
+  job_id: string
+  amount: number
+  billing_status: 'unissued' | 'issued' | 'paid'
+  issued_at?: string | null
+  due_date?: string | null
+  paid_at?: string | null
+  invoice_number?: string | null
+  variance_reason?: string | null
+  notes?: string | null
+  created_at?: string
+  updated_at?: string
+}
+
