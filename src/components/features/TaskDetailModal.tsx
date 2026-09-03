@@ -183,7 +183,18 @@ export const TaskDetailModal: React.FC<TaskDetailModalProps> = ({
           }
         })
       } else {
-        const autoWorker = prev[stepId]?.worker || (statusVal !== '未' ? currentUpdater : '')
+        // 各ステップの担当者：
+        // 1. すでに設定されている担当者がいればそれを絶対に維持
+        // 2. 受付(reception)や見積ステップは事務所スタッフ・営業が担当するため、
+        //    作業/配車担当者を強制代入せず、自由に選択・入力できるようにする
+        // 3. 作業実施などの現場作業系ステップのみ、未設定時に作業担当者を補完
+        let autoWorker = prev[stepId]?.worker || ''
+        if (!autoWorker && statusVal !== '未') {
+          if (stepId === 'work_execution' || stepId === 'work_schedule' || stepId === 'schedule_confirmed') {
+            autoWorker = currentUpdater
+          }
+        }
+
         nextData = {
           ...nextData,
           [stepId]: {
@@ -533,15 +544,64 @@ export const TaskDetailModal: React.FC<TaskDetailModalProps> = ({
                             )
                           })}
                         </div>
-                        <input
-                          type="text"
-                          list="staffListOptions"
-                          value={currentStepData.worker || ''}
-                          onChange={(e) => handleStepWorkerChange(stepKey, e.target.value)}
-                          placeholder="担当者"
-                          className="timeline-worker-input"
-                          title="工程担当者名"
-                        />
+                        <div style={{ display: 'inline-flex', alignItems: 'center', gap: '0.25rem' }}>
+                          <input
+                            type="text"
+                            list="staffListOptions"
+                            value={currentStepData.worker || ''}
+                            onChange={(e) => handleStepWorkerChange(stepKey, e.target.value)}
+                            placeholder="担当者"
+                            className="timeline-worker-input"
+                            title="工程担当者名（直接入力または右から選択）"
+                          />
+                          {profiles.length > 0 && (
+                            <select
+                              value=""
+                              onChange={(e) => {
+                                if (e.target.value) handleStepWorkerChange(stepKey, e.target.value)
+                              }}
+                              className="form-input"
+                              style={{
+                                padding: '0.2rem 0.35rem',
+                                fontSize: '0.72rem',
+                                width: 'auto',
+                                cursor: 'pointer',
+                                borderColor: '#cbd5e1',
+                                borderRadius: '0.375rem',
+                                height: '26px',
+                                background: '#f8fafc',
+                              }}
+                              title="登録スタッフから担当者を選択"
+                            >
+                              <option value="">▼選択</option>
+                              {profiles.map((p) => (
+                                <option key={p.id} value={p.display_name || ''}>
+                                  {p.display_name || '名前未設定'}
+                                </option>
+                              ))}
+                            </select>
+                          )}
+                          {currentStepData.worker && (
+                            <button
+                              type="button"
+                              onClick={() => handleStepWorkerChange(stepKey, '')}
+                              style={{
+                                background: '#f1f5f9',
+                                border: '1px solid #cbd5e1',
+                                borderRadius: '0.25rem',
+                                color: '#64748b',
+                                cursor: 'pointer',
+                                fontSize: '0.7rem',
+                                padding: '1px 5px',
+                                height: '26px',
+                                lineHeight: '24px',
+                              }}
+                              title="担当者をクリア"
+                            >
+                              ✕
+                            </button>
+                          )}
+                        </div>
                       </div>
                     </div>
                     <textarea
