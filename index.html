@@ -19,13 +19,34 @@
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Noto+Sans+JP:wght@400;500;700&display=swap" rel="stylesheet">
     <script>
+      // Service Worker を登録（PWA対応）
+      // タブレットでのインストールフリーズを防ぐため、
+      // アプリ本体の読み込みを絶対にブロックしない設計にしています
       if ('serviceWorker' in navigator) {
         window.addEventListener('load', function() {
-          navigator.serviceWorker.register('/sw.js').then(function(reg) {
-            console.log('PWA ServiceWorker registered with scope:', reg.scope);
-          }).catch(function(err) {
-            console.warn('PWA ServiceWorker registration failed:', err);
-          });
+          // 既存の SW が存在する場合はすぐに更新を試みる
+          navigator.serviceWorker.register('/sw.js', { scope: '/' })
+            .then(function(reg) {
+              console.log('[PWA] SW registered, scope:', reg.scope);
+              // 新しい SW が待機中の場合はすぐに有効化
+              if (reg.waiting) {
+                reg.waiting.postMessage({ type: 'SKIP_WAITING' });
+              }
+              reg.addEventListener('updatefound', function() {
+                var newWorker = reg.installing;
+                if (newWorker) {
+                  newWorker.addEventListener('statechange', function() {
+                    if (newWorker.state === 'installed' && navigator.serviceWorker.controller) {
+                      newWorker.postMessage({ type: 'SKIP_WAITING' });
+                    }
+                  });
+                }
+              });
+            })
+            .catch(function(err) {
+              // SW 登録失敗してもアプリは動作する（オフライン機能なし）
+              console.warn('[PWA] SW registration failed (app will still work online):', err);
+            });
         });
       }
     </script>
