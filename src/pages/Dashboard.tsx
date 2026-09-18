@@ -75,7 +75,7 @@ export const Dashboard: React.FC = () => {
           tel: job.customers?.phone || '',
           address: job.customers?.address || '',
           taskType: job.title || '臨時収集',
-          status: mapJobStatusToLane(job.status),
+          status: mapJobStatusToLane(job.status, stepsData),
           receptionDate: job.created_at
             ? new Date(job.created_at).toLocaleDateString('ja-JP')
             : '',
@@ -99,6 +99,8 @@ export const Dashboard: React.FC = () => {
   // ドラッグ＆ドロップでステータス更新
   const handleTaskMove = async (taskId: string, newStatus: ProcessLane) => {
     const nowStr = new Date().toISOString()
+    let updatedStepsData: any = null
+
     setTasks((prev) =>
       prev.map((t) => {
         if (t.id !== taskId) return t
@@ -109,6 +111,14 @@ export const Dashboard: React.FC = () => {
         if (newRank < oldRank) {
           resetStepsAfterStatus(stepsData, newStatus)
         }
+        if (newStatus === '日程確定') {
+          stepsData.schedule_confirmed = {
+            status: '済',
+            memo: stepsData.schedule_confirmed?.memo || '',
+            worker: stepsData.schedule_confirmed?.worker || t.updater || '',
+          }
+        }
+        updatedStepsData = stepsData
 
         return {
           ...t,
@@ -123,7 +133,11 @@ export const Dashboard: React.FC = () => {
     const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(taskId)
     if (isUuid) {
       const dbStatus = mapLaneToJobStatus(newStatus)
-      await updateJobStatus(taskId, dbStatus)
+      await updateJobDetails(taskId, {
+        status: dbStatus,
+        notes: updatedStepsData ? JSON.stringify(updatedStepsData) : undefined,
+      })
+      refetch()
     }
   }
 
@@ -135,18 +149,31 @@ export const Dashboard: React.FC = () => {
 
   // 詳細モーダル保存
   const handleSaveTaskDetail = async (updatedTask: ProcessTask) => {
-    setTasks((prev) =>
-      prev.map((t) => (t.id === updatedTask.id ? updatedTask : t))
-    )
-    setSelectedTask(updatedTask)
+    const stepsData = updatedTask.stepsData ? { ...updatedTask.stepsData } : {}
+    if (updatedTask.status === '日程確定') {
+      stepsData.schedule_confirmed = {
+        status: '済',
+        memo: stepsData.schedule_confirmed?.memo || '',
+        worker: stepsData.schedule_confirmed?.worker || updatedTask.updater || '',
+      }
+    }
+    const finalTask: ProcessTask = {
+      ...updatedTask,
+      stepsData,
+    }
 
-    const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(updatedTask.id)
+    setTasks((prev) =>
+      prev.map((t) => (t.id === finalTask.id ? finalTask : t))
+    )
+    setSelectedTask(finalTask)
+
+    const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(finalTask.id)
     if (isUuid) {
-      const dbStatus: JobStatus = mapLaneToJobStatus(updatedTask.status)
+      const dbStatus: JobStatus = mapLaneToJobStatus(finalTask.status)
 
       let notesVal: string | undefined = undefined
-      if (updatedTask.stepsData && Object.keys(updatedTask.stepsData).length > 0) {
-        notesVal = JSON.stringify(updatedTask.stepsData)
+      if (stepsData && Object.keys(stepsData).length > 0) {
+        notesVal = JSON.stringify(stepsData)
       }
 
       // 担当スタッフの特定および自動プロファイル登録

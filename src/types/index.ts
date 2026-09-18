@@ -4,6 +4,7 @@ export type JobStatus =
   | 'received'
   | 'quoting'
   | 'arranged'
+  | 'scheduled'
   | 'collected'
   | 'billed'
   | 'completed'

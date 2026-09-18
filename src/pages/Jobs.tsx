@@ -39,11 +39,34 @@ const statusBadgeConfig: Record<JobStatus, { label: string; style: string }> = {
   received: { label: '新規受付済', style: 'bg-amber-100 text-amber-800 border-amber-200' },
   quoting: { label: '見積中', style: 'bg-purple-100 text-purple-800 border-purple-200' },
   pending: { label: '保留中', style: 'bg-orange-100 text-orange-800 border-orange-200' },
-  arranged: { label: '手配済 / 進行中', style: 'bg-blue-100 text-blue-800 border-blue-200' },
+  arranged: { label: '手配済 / 日程調整中', style: 'bg-blue-100 text-blue-800 border-blue-200' },
+  scheduled: { label: '日程確定', style: 'bg-cyan-100 text-cyan-800 border-cyan-300' },
   collected: { label: '作業実施', style: 'bg-indigo-100 text-indigo-800 border-indigo-200' },
   billed: { label: '請求済', style: 'bg-teal-100 text-teal-800 border-teal-200' },
   completed: { label: '完了済', style: 'bg-emerald-200 text-emerald-900 border-emerald-300' },
   cancelled: { label: 'キャンセル', style: 'bg-slate-100 text-slate-600 border-slate-200' },
+}
+
+// 案件の実効ステータスバッジ取得（DBがarrangedでもstepsDataで日程確定している場合は「日程確定」バッジを表示）
+const getJobBadge = (job: Job) => {
+  let effectiveStatus: JobStatus = job.status
+  if (job.status === 'arranged' && job.notes) {
+    try {
+      const parsed = JSON.parse(job.notes)
+      const steps = parsed?.stepsData || (job.notes.startsWith('{') ? parsed : null)
+      if (steps?.schedule_confirmed?.status === '済') {
+        effectiveStatus = 'scheduled'
+      }
+    } catch (e) {
+      // ignore
+    }
+  }
+  return (
+    statusBadgeConfig[effectiveStatus] || {
+      label: job.status,
+      style: 'bg-slate-100 text-slate-700 border-slate-200',
+    }
+  )
 }
 
 // Job -> ProcessTask 変換ヘルパー
@@ -69,7 +92,7 @@ const mapJobToProcessTask = (job: Job): ProcessTask => {
     tel: job.customers?.phone || '',
     address: job.customers?.address || '',
     taskType: job.title || '臨時収集',
-    status: mapJobStatusToLane(job.status),
+    status: mapJobStatusToLane(job.status, stepsData),
     receptionDate: job.created_at ? new Date(job.created_at).toLocaleDateString('ja-JP') : '',
     updatedAt: job.updated_at || job.created_at || new Date().toISOString(),
     updater: job.profiles?.display_name || '',
@@ -335,12 +358,18 @@ export const Jobs: React.FC = () => {
   }
 
   const handleSaveProcessTask = async (updatedTask: ProcessTask) => {
-    const dbStatus: JobStatus = mapLaneToJobStatus(updatedTask.status)
-
-    let notesVal: string | undefined = undefined
-    if (updatedTask.stepsData && Object.keys(updatedTask.stepsData).length > 0) {
-      notesVal = JSON.stringify(updatedTask.stepsData)
+    const stepsData = updatedTask.stepsData ? { ...updatedTask.stepsData } : {}
+    if (updatedTask.status === '日程確定') {
+      stepsData.schedule_confirmed = {
+        status: '済',
+        memo: stepsData.schedule_confirmed?.memo || '',
+        worker: stepsData.schedule_confirmed?.worker || updatedTask.updater || '',
+      }
     }
+
+    const dbStatus: JobStatus = mapLaneToJobStatus(updatedTask.status)
+    const notesVal: string | undefined =
+      Object.keys(stepsData).length > 0 ? JSON.stringify(stepsData) : undefined
 
     // 担当スタッフ（表示名・ID・自由記述）の保持検索および自動登録
     let assignedUuid: string | null = null
@@ -436,7 +465,7 @@ export const Jobs: React.FC = () => {
       `"${(j.customers?.phone || '').replace(/"/g, '""')}"`,
       `"${(j.customers?.address || '').replace(/"/g, '""')}"`,
       `"${(j.profiles?.display_name || '未割当').replace(/"/g, '""')}"`,
-      statusBadgeConfig[j.status]?.label || j.status,
+      getJobBadge(j).label,
       j.scheduled_date || '',
       j.created_at ? new Date(j.created_at).toLocaleString('ja-JP') : '',
       `"${(j.notes || '').replace(/"/g, '""')}"`,
@@ -692,10 +721,7 @@ export const Jobs: React.FC = () => {
           <div className="divide-y divide-border">
 
             {filteredJobs.map((job) => {
-              const badge = statusBadgeConfig[job.status] || {
-                label: job.status,
-                style: 'bg-slate-100 text-slate-700 border-slate-200',
-              }
+              const badge = getJobBadge(job)
               const canCreateQuote = ['received', 'quoting', 'pending'].includes(job.status)
               const existingQuoteData = parseQuoteDataFromJob(job)
 
@@ -808,10 +834,7 @@ export const Jobs: React.FC = () => {
               </thead>
               <tbody className="divide-y divide-border">
                 {filteredJobs.map((job) => {
-                  const badge = statusBadgeConfig[job.status] || {
-                    label: job.status,
-                    style: 'bg-slate-100 text-slate-700 border-slate-200',
-                  }
+                  const badge = getJobBadge(job)
                   const canCreateQuote = ['received', 'quoting', 'pending'].includes(job.status)
                   const existingQuoteData = parseQuoteDataFromJob(job)
 

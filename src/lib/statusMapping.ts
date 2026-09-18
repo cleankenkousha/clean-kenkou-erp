@@ -4,8 +4,27 @@ import { ProcessLane } from '../components/features/KanbanBoard'
 /**
  * Supabase の JobStatus から カンバンボードの ProcessLane へのマッピング
  */
-export const mapJobStatusToLane = (status?: string | null): ProcessLane => {
+export const mapJobStatusToLane = (
+  status?: string | null,
+  stepsData?: any
+): ProcessLane => {
   if (!status) return '未着手'
+
+  // 1. DBステータスが直接 scheduled の場合は日程確定
+  if (status === 'scheduled') {
+    return '日程確定'
+  }
+
+  // 2. stepsData が存在し、日程確定が「済」の場合は作業実施・請求以降でない限り「日程確定」として判定
+  if (stepsData && typeof stepsData === 'object') {
+    if (
+      stepsData.schedule_confirmed?.status === '済' &&
+      !['collected', 'billed', 'completed', 'cancelled'].includes(status)
+    ) {
+      return '日程確定'
+    }
+  }
+
   switch (status) {
     case 'received':
       return '未着手'
@@ -14,6 +33,8 @@ export const mapJobStatusToLane = (status?: string | null): ProcessLane => {
       return '顧客検討'
     case 'arranged':
       return '作業日程調整'
+    case 'scheduled':
+      return '日程確定'
     case 'collected':
       return '作業実施'
     case 'billed':
@@ -36,8 +57,9 @@ export const mapLaneToJobStatus = (lane: ProcessLane): JobStatus => {
     case '顧客検討':
       return 'quoting'
     case '作業日程調整':
-    case '日程確定':
       return 'arranged'
+    case '日程確定':
+      return 'scheduled'
     case '作業実施':
       return 'collected'
     case '請求書送付':

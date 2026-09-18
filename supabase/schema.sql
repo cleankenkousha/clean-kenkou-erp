@@ -46,7 +46,7 @@ CREATE TABLE IF NOT EXISTS public.jobs (
     customer_id UUID NOT NULL REFERENCES public.customers(id) ON DELETE CASCADE,
     title TEXT NOT NULL,
     status TEXT NOT NULL DEFAULT 'received' CHECK (
-        status IN ('received', 'quoting', 'arranged', 'collected', 'billed', 'completed', 'pending', 'cancelled')
+        status IN ('received', 'quoting', 'arranged', 'scheduled', 'collected', 'billed', 'completed', 'pending', 'cancelled')
     ),
     received_at TIMESTAMPTZ DEFAULT now(),
     scheduled_date DATE,

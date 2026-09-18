@@ -75,10 +75,21 @@ export const useJobs = (): UseJobsReturn => {
   const updateJobStatus = useCallback(
     async (jobId: string, newStatus: JobStatus): Promise<boolean> => {
       try {
-        const { error: updateError } = await supabase
+        let { error: updateError } = await supabase
           .from('jobs')
           .update({ status: newStatus })
           .eq('id', jobId)
+
+        if (updateError && newStatus === 'scheduled') {
+          // DB制約で 'scheduled' が未適用の場合は 'arranged' へ自動フォールバック
+          const fallbackRes = await supabase
+            .from('jobs')
+            .update({ status: 'arranged' })
+            .eq('id', jobId)
+          if (!fallbackRes.error) {
+            updateError = null
+          }
+        }
 
         if (updateError) {
           throw new Error(updateError.message)
@@ -136,10 +147,22 @@ export const useJobs = (): UseJobsReturn => {
           }
         }
 
-        const { error: updateError } = await supabase
+        let { error: updateError } = await supabase
           .from('jobs')
           .update(cleanUpdates)
           .eq('id', jobId)
+
+        if (updateError && cleanUpdates.status === 'scheduled') {
+          // DB制約で 'scheduled' が未適用の場合は 'arranged' へ自動フォールバック
+          cleanUpdates.status = 'arranged'
+          const fallbackRes = await supabase
+            .from('jobs')
+            .update(cleanUpdates)
+            .eq('id', jobId)
+          if (!fallbackRes.error) {
+            updateError = null
+          }
+        }
 
         if (updateError) {
           throw new Error(updateError.message)

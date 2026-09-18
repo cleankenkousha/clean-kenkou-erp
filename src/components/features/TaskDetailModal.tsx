@@ -134,29 +134,59 @@ export const TaskDetailModal: React.FC<TaskDetailModalProps> = ({
 
     setCurrentStatus(newStatus)
 
-    if (newRank < oldRank) {
-      setStepsData((prev) => {
-        const nextData = { ...prev }
-        const STEP_MIN_RANK: Record<string, number> = {
-          reception: 0,
-          estimate_schedule: 1,
-          estimate_do: 1,
-          estimate_submit: 1,
-          customer_consideration: 1,
-          work_schedule: 2,
-          schedule_confirmed: 3,
-          work_execution: 4,
-          invoice_sent: 5,
-        }
+    setStepsData((prev) => {
+      const nextData = { ...prev }
+      const STEP_MIN_RANK: Record<string, number> = {
+        reception: 0,
+        estimate_schedule: 1,
+        estimate_do: 1,
+        estimate_submit: 1,
+        customer_consideration: 1,
+        work_schedule: 2,
+        schedule_confirmed: 3,
+        work_execution: 4,
+        invoice_sent: 5,
+      }
+
+      // ランクが下がった場合は後ろのステップをリセット
+      if (newRank < oldRank) {
         Object.keys(STEP_MIN_RANK).forEach((sKey) => {
           const stepId = sKey as keyof StepsData
           if (STEP_MIN_RANK[sKey] > newRank && nextData[stepId]) {
             nextData[stepId] = { ...nextData[stepId]!, status: '未' }
           }
         })
-        return nextData
-      })
-    }
+      }
+
+      // ステータスを手動で進めた場合、該当ステップを「済」にする
+      const currentWorker = updater.trim()
+      if (newStatus === '日程確定') {
+        nextData.schedule_confirmed = {
+          status: '済',
+          memo: nextData.schedule_confirmed?.memo || '',
+          worker: nextData.schedule_confirmed?.worker || currentWorker,
+        }
+      } else if (newStatus === '作業実施') {
+        nextData.schedule_confirmed = {
+          status: '済',
+          memo: nextData.schedule_confirmed?.memo || '',
+          worker: nextData.schedule_confirmed?.worker || currentWorker,
+        }
+        nextData.work_execution = {
+          status: '済',
+          memo: nextData.work_execution?.memo || '',
+          worker: nextData.work_execution?.worker || currentWorker,
+        }
+      } else if (newStatus === '請求書送付') {
+        nextData.invoice_sent = {
+          status: '済',
+          memo: nextData.invoice_sent?.memo || '',
+          worker: nextData.invoice_sent?.worker || currentWorker,
+        }
+      }
+
+      return nextData
+    })
   }
 
   // ステップボタンクリック時 (自動連動 & 自動昇格機能)
@@ -185,11 +215,6 @@ export const TaskDetailModal: React.FC<TaskDetailModalProps> = ({
           }
         })
       } else {
-        // 各ステップの担当者：
-        // 1. すでに設定されている担当者がいればそれを絶対に維持
-        // 2. 受付(reception)や見積ステップは事務所スタッフ・営業が担当するため、
-        //    作業/配車担当者を強制代入せず、自由に選択・入力できるようにする
-        // 3. 作業実施などの現場作業系ステップのみ、未設定時に作業担当者を補完
         let autoWorker = prev[stepId]?.worker || ''
         if (!autoWorker && statusVal !== '未') {
           if (stepId === 'work_execution' || stepId === 'work_schedule' || stepId === 'schedule_confirmed') {
@@ -208,12 +233,8 @@ export const TaskDetailModal: React.FC<TaskDetailModalProps> = ({
       }
 
       const suggestedStatus = computeTaskStatus(nextData)
-      const currentRank = getStatusRank(currentStatus)
-      const suggestedRank = getStatusRank(suggestedStatus)
-
-      if (suggestedRank > currentRank) {
-        setCurrentStatus(suggestedStatus)
-      }
+      // チェックリストの変更に合わせてステータスを即座に連動
+      setCurrentStatus(suggestedStatus)
 
       return nextData
     })
@@ -251,14 +272,20 @@ export const TaskDetailModal: React.FC<TaskDetailModalProps> = ({
 
     const nowStr = new Date().toISOString()
     const autoStatus = computeTaskStatus(stepsData)
+
+    // ユーザー選択ステータス、またはチェックリスト進捗から高い方を採用
     const selectedRank = getStatusRank(currentStatus)
     const autoRank = getStatusRank(autoStatus)
+    const finalStatus: ProcessLane = selectedRank >= autoRank ? currentStatus : autoStatus
 
-    let finalStatus = currentStatus
-    if (selectedRank < autoRank) {
-      finalStatus = currentStatus
-    } else {
-      finalStatus = autoRank > selectedRank ? autoStatus : currentStatus
+    // finalStatus が「日程確定」の場合は、stepsData.schedule_confirmed が確実に「済」になるよう保証
+    const finalStepsData = { ...stepsData }
+    if (finalStatus === '日程確定') {
+      finalStepsData.schedule_confirmed = {
+        status: '済',
+        memo: finalStepsData.schedule_confirmed?.memo || '',
+        worker: finalStepsData.schedule_confirmed?.worker || updater.trim(),
+      }
     }
 
     const updatedTask: ProcessTask = {
@@ -266,7 +293,7 @@ export const TaskDetailModal: React.FC<TaskDetailModalProps> = ({
       status: finalStatus,
       updater: updater.trim(),
       updatedAt: nowStr,
-      stepsData,
+      stepsData: finalStepsData,
       assignedTo: updater.trim(),
       signature,
     }
