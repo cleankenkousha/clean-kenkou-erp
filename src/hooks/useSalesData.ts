@@ -72,20 +72,11 @@ export const useSalesData = (): UseSalesDataReturn => {
 
     try {
       // invoices + jobs（顧客情報含む）を JOIN して取得
+      // ※ invoices テーブルの列は DB マイグレーション状況により異なるため * で取得
       const { data: invoices, error: fetchErr } = await supabase
         .from('invoices')
         .select(`
-          id,
-          job_id,
-          amount,
-          billing_status,
-          issued_at,
-          due_date,
-          paid_at,
-          invoice_number,
-          variance_reason,
-          notes,
-          created_at,
+          *,
           jobs (
             id,
             title,
