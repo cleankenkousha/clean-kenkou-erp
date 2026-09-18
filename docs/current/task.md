@@ -1,60 +1,63 @@
 # Clean KENKOU ERP - 作業進捗および次回残課題ログ
 
-**最終更新日時**: 2026-09-17  
-**ステータス**: AndroidタブレットへのPWAインストール問題が完全解決。従業員向けインストール手順書（Word）を作成・配布準備完了。
+**最終更新日時**: 2026-09-18  
+**ステータス**: 売上管理ダッシュボード・乖離分析機能を実装完了。セキュリティヘッダー設定も完了。
 
 ---
 
-## 1. 本日完了した作業・進捗サマリー（2026-09-17）
+## 1. 本日完了した作業・進捗サマリー（2026-09-18）
 
-### ① 【最重要課題・解決済み✅】 Android 11 タブレットでのPWAインストールフリーズ問題の完全解消
+### ① 【完了✅】 売上一覧・乖離分析・経営戦略ダッシュボード
 
-- **経緯**: 前回セッションまでに `sw.js` の install イベントを即時完了（`skipWaiting()` のみ）に変更し、  
-  Netlify の `netlify.toml` に `sw.js` の `Cache-Control: no-store` ヘッダーを追加済みだった。
-- **本日の確認内容**:
-  - Android 11 / Chrome 152.0.7977.82 の端末にて、実際にインストール操作を実施。
-  - 「インストールしています…」の画面が数分間表示され止まって見えるが、これは **WebAPKミンティング（Google サーバーでの専用APK生成）** が裏で進行中の正常な動作であることを確認。
-  - 待機後、ホーム画面に「健康社ERP」アイコンが正常に出現 → **インストール成功を確認**。
-- **根本原因の整理**:
-  - 問題はコード側ではなく、WebAPK生成プロセスへの理解不足（フリーズではなくバックグラウンド処理待ち）。
-  - 前回実施の `sw.js` 軽量化・`netlify.toml` ヘッダー対応が正しく効いており、インストール自体は正常に動作している。
+- **新規ページ** `/sales`（`src/pages/SalesAnalytics.tsx`）を実装。
+- **新規 Hook** `src/hooks/useSalesData.ts` を実装。
+  - `invoices` + `jobs` + `customers` を JOIN して月別売上・KPI・乖離リストを集計。
+- **実装内容**:
+  1. **KPIカード行** (今月売上・累計確定売上・回収率・未請求件数)
+  2. **月別売上推移グラフ** (recharts StackedBarChart / 直近12ヶ月 / 入金済・請求済色分け)
+  3. **乖離分析テーブル** (事前見積 vs 確定請求・差額・増減率・ステータスフィルタ・ソート付き)
+- **ナビゲーション追加**: PCヘッダーに「売上管理」（TrendingUp アイコン）を追加。
+- `recharts` ライブラリを `npm install` で追加済み。
 
-### ② 従業員向け「タブレットインストール手順書」の作成（Word形式）
+### ② 【完了✅】 セキュリティ改修
 
-- **ファイル**: `Clean_KENKOU_ERP_インストール手順書.docx`（プロジェクトルートに配置）
-- **内容**:
-  1. はじめに（PWA説明・フリーズして見える注意書き）
-  2. インストール前の確認事項（Wi-Fi / Googleアカウント / Chrome）
-  3. インストール手順（STEP 1〜7、番号付き詳細）
-  4. うまくいかない場合のトラブルシューティング
-  5. ログイン情報の取り扱い注意
-- **特記事項**: 「インストールしています…は正常動作、1〜3分待つ」の説明を複数箇所に明記。
+- **`netlify.toml`** に全ページ向けセキュリティヘッダーを追加:
+  - `X-Frame-Options: DENY`（クリックジャッキング対策）
+  - `X-Content-Type-Options: nosniff`（MIMEスニッフィング防止）
+  - `X-XSS-Protection: 1; mode=block`
+  - `Referrer-Policy: strict-origin-when-cross-origin`
+  - `Permissions-Policy`（カメラ・マイク・位置情報の無効化）
+  - `Content-Security-Policy`（Supabase・Google Fonts を明示許可）
+- **`supabase/security_fix_handle_new_user.sql`** を新規作成:
+  - `handle_new_user()` 関数の `SECURITY DEFINER` → `SECURITY INVOKER` 変更。
+  - `profiles.user_id` への `UNIQUE` 制約追加（重複防止）。
+  - **⚠️ 未実行**: Supabase SQL Editor で手動実行が必要。
+
+### ③ ビルド確認
+
+- `npm run build` → TypeScript コンパイルエラーなし、2270モジュール正常変換。
 
 ---
 
 ## 2. 次回以降の残課題・今後の実装計画
 
-### 🔴【優先度 High】売上一覧・乖離分析・経営戦略ダッシュボード
+### 🔴【優先度 High】セキュリティ改修（SQL未適用分）
 
-- **見積 vs 請求 乖離分析レポート画面**:
-  - 案件ごとの事前見積と確定請求額の差額・増減率一覧表示。
-  - 現場増額・減額の傾向分析（回収品目・作業条件ごとの統計）。
-- **売上一覧・月別売上推移グラフ**:
-  - 月別・期間別の確定売上合計額の集計・グラフ表示。
-  - 入金ステータス別の管理（未回収請求書の検知・回収率モニタリング）。
-
-### 🔴【優先度 High】セキュリティ改修 & 本番運用検証
-
-- **C-4**: `handle_new_user()` 関数の `SECURITY DEFINER` 見直し。
+- **⚠️ 要手動実行**: `supabase/security_fix_handle_new_user.sql` を Supabase SQL Editor で実行。
 - **H-1 / H-2**: ロールベースアクセス制御（RBAC）の強化（admin限定操作の保護）。
-- **H-5 / H-8**: Netlify セキュリティヘッダー設定（CSP / X-Frame-Options 等）。
-- **実端末テスト**: スマホ・タブレットでの電子サイン描き心地、請求・売上入力、印刷プレビューの最終動作検証。
+  - 現在 RLS ポリシーは `USING (true)` の全開放状態のため、
+    `auth.uid()` を使った認証済みユーザー限定ポリシーへの強化が望ましい。
 
 ### 🟡【優先度 Medium】PWA 追加強化（必要に応じて）
 
 - `vite-plugin-pwa`（Workbox）の正式導入によるキャッシュマニフェスト完全自動生成。
 - オフライン時のフォールバック画面の実装。
-- Chrome DevTools リモートデバッグによるLighthouse PWA監査スコアの向上。
+- Chrome DevTools リモートデバッグによる Lighthouse PWA 監査スコアの向上。
+
+### 🟡【優先度 Medium】パフォーマンス最適化
+
+- `npm run build` で JS バンドルが 1.5MB (gzip後 450KB) の警告あり。
+  - `React.lazy` + `Suspense` による動的インポート (コードスプリット) を検討。
 
 ### 🟡【優先度 Medium】ドキュメント整備
 
@@ -64,16 +67,14 @@
 
 ---
 
-## 3. PWAインストール手順（従業員配布用サマリー）
+## 3. 関連ファイル一覧
 
-> ※ 詳細は `Clean_KENKOU_ERP_インストール手順書.docx` を参照。
-
-1. Chrome で `https://clean-kenkou-erp.netlify.app/` を開く
-2. 右上「⋮」→「ホーム画面に追加」をタップ
-3. **「インストール」**（ショートカットではない）を選択
-4. 確認ダイアログで「インストール」を押す
-5. 「インストールしています…」が表示されたら **1〜3分そのまま待つ**（閉じない）
-6. ホーム画面に「健康社ERP」アイコンが出たら完了
+| ファイル | 用途 |
+|---|---|
+| `src/pages/SalesAnalytics.tsx` | 売上管理ダッシュボード（新規） |
+| `src/hooks/useSalesData.ts` | 売上集計 Hook（新規） |
+| `netlify.toml` | セキュリティヘッダー追加済み |
+| `supabase/security_fix_handle_new_user.sql` | SECURITY DEFINER 修正 SQL（要手動実行） |
 
 ---
 

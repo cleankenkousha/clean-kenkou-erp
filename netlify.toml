@@ -6,6 +6,27 @@
   VITE_SUPABASE_URL = "https://cnwlcxfhxaugqtatibav.supabase.co"
   VITE_SUPABASE_ANON_KEY = "sb_publishable_PSK5mj-C1gUN6hzJBv2YJA_MIIRgDM5"
 
+# ── セキュリティヘッダー (全ページ共通) ──
+[[headers]]
+  for = "/*"
+  [headers.values]
+    # クリックジャッキング対策
+    X-Frame-Options = "DENY"
+    # MIMEスニッフィング防止
+    X-Content-Type-Options = "nosniff"
+    # XSS フィルタ (レガシーブラウザ向け)
+    X-XSS-Protection = "1; mode=block"
+    # リファラー情報の制限
+    Referrer-Policy = "strict-origin-when-cross-origin"
+    # カメラ・マイク・位置情報等の制限
+    Permissions-Policy = "camera=(), microphone=(), geolocation=(), payment=()"
+    # Content Security Policy
+    # - Supabase API・Realtime・Auth を明示許可
+    # - Google Fonts を許可
+    # - data: URI (電子サイン描画に必要)
+    # - 'unsafe-inline' はTailwind/Vite産のスタイルに対応するため style-src のみ許可
+    Content-Security-Policy = "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' data: blob: https:; connect-src 'self' https://cnwlcxfhxaugqtatibav.supabase.co wss://cnwlcxfhxaugqtatibav.supabase.co https://cnwlcxfhxaugqtatibav.supabase.co:*; frame-ancestors 'none'; object-src 'none'; base-uri 'self';"
+
 # sw.js は絶対にキャッシュしない（常に最新を取得）
 [[headers]]
   for = "/sw.js"
@@ -26,3 +47,4 @@
   from = "/*"
   to = "/index.html"
   status = 200
+

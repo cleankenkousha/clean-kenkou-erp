@@ -6,6 +6,7 @@ import { Customers } from './pages/Customers'
 import { Jobs } from './pages/Jobs'
 import { Settings } from './pages/Settings'
 import { Login } from './pages/Login'
+import { SalesAnalytics } from './pages/SalesAnalytics'
 import { ViewModeProvider } from './hooks/useViewMode'
 
 export function App() {
@@ -28,6 +29,7 @@ export function App() {
                     <Route path="/customers" element={<Customers />} />
                     <Route path="/jobs" element={<Jobs />} />
                     <Route path="/settings" element={<Settings />} />
+                    <Route path="/sales" element={<SalesAnalytics />} />
                   </Routes>
                 </Layout>
               </ProtectedRoute>

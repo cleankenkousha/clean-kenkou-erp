@@ -10,6 +10,7 @@ import {
   LogOut,
   Smartphone,
   Monitor,
+  TrendingUp,
 } from 'lucide-react'
 import { supabase } from '../../lib/supabase'
 import { useViewMode } from '../../hooks/useViewMode'
@@ -28,6 +29,7 @@ const pcNavItems: NavItem[] = [
   { label: 'ダッシュボード', path: '/', icon: LayoutDashboard },
   { label: '顧客管理', path: '/customers', icon: Users },
   { label: '案件一覧', path: '/jobs', icon: Briefcase },
+  { label: '売上管理', path: '/sales', icon: TrendingUp },
   { label: '設定', path: '/settings', icon: Settings },
 ]
 
