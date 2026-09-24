@@ -2,11 +2,11 @@
 <html lang="ja">
 <head>
   <meta charset="UTF-8">
-  <title>Clean KENKOU ERP 取扱説明書（最新改訂版）</title>
+  <title>Clean KENKOU ERP かんたん・やさしい操作マニュアル（第3版 2026年最新版）</title>
   <style>
     @page {
       size: A4 portrait;
-      margin: 14mm 12mm 14mm 12mm;
+      margin: 12mm 12mm 14mm 12mm;
     }
     *, *::before, *::after {
       box-sizing: border-box;
@@ -18,7 +18,7 @@
       background: #ffffff;
       margin: 0;
       padding: 0;
-      font-size: 10.5pt;
+      font-size: 10pt;
       -webkit-print-color-adjust: exact;
       print-color-adjust: exact;
     }
@@ -29,12 +29,14 @@
       page-break-inside: avoid;
     }
 
-    /* 表紙 */
+    /* 表紙・ヘッダー */
     .cover {
       text-align: center;
-      padding: 40px 20px 25px;
+      padding: 30px 20px 20px;
       border-bottom: 2px solid #059669;
       margin-bottom: 20px;
+      background: linear-gradient(to bottom, #f0fdf4, #ffffff);
+      border-radius: 8px;
     }
     .badge {
       display: inline-block;
@@ -43,194 +45,149 @@
       border: 1px solid #a7f3d0;
       padding: 4px 14px;
       border-radius: 9999px;
-      font-size: 9.5pt;
+      font-size: 9pt;
       font-weight: bold;
-      margin-bottom: 12px;
+      margin-bottom: 8px;
     }
     h1.title {
-      font-size: 23pt;
+      font-size: 22pt;
       color: #0f172a;
-      margin: 0 0 8px;
+      margin: 0 0 6px;
       letter-spacing: -0.5px;
       font-weight: 800;
     }
     .subtitle {
-      font-size: 12.5pt;
+      font-size: 12pt;
       color: #059669;
       font-weight: 700;
-      margin-bottom: 6px;
+      margin-bottom: 4px;
     }
     .author {
-      font-size: 9.5pt;
+      font-size: 9pt;
       color: #64748b;
     }
 
     /* 見出し */
     h2 {
-      font-size: 13.5pt;
+      font-size: 13pt;
       color: #0f172a;
       border-left: 5px solid #059669;
       padding-left: 10px;
-      margin-top: 22px;
+      margin-top: 20px;
       margin-bottom: 10px;
       font-weight: 700;
+      background: #f8fafc;
+      padding-top: 4px;
+      padding-bottom: 4px;
+      border-radius: 0 4px 4px 0;
     }
     h3 {
-      font-size: 11pt;
+      font-size: 10.5pt;
       color: #1e293b;
       margin-top: 14px;
-      margin-bottom: 8px;
+      margin-bottom: 6px;
       font-weight: 700;
-      background: #f8fafc;
-      padding: 6px 10px;
-      border-radius: 6px;
-      border-left: 3px solid #3b82f6;
-    }
-
-    p {
-      margin: 0 0 8px;
-      font-size: 9.5pt;
-      color: #334155;
-    }
-
-    /* 図解カード・ボックス */
-    .flow-container {
-      display: flex;
-      justify-content: space-between;
-      gap: 8px;
-      margin: 14px 0;
-    }
-    .flow-step {
-      flex: 1;
-      background: #f8fafc;
-      border: 1px solid #cbd5e1;
-      border-radius: 8px;
-      padding: 10px 8px;
-      text-align: center;
-      position: relative;
-    }
-    .flow-step.active {
-      background: #f0fdf4;
-      border-color: #86efac;
-    }
-    .flow-step-num {
-      width: 22px;
-      height: 22px;
-      line-height: 22px;
-      background: #059669;
-      color: white;
-      border-radius: 50%;
-      display: inline-block;
-      font-size: 9pt;
-      font-weight: bold;
-      margin-bottom: 4px;
-    }
-    .flow-step-title {
-      font-size: 10pt;
-      font-weight: bold;
-      color: #0f172a;
-      margin-bottom: 4px;
-    }
-    .flow-step-desc {
-      font-size: 8.5pt;
-      color: #64748b;
-      line-height: 1.35;
-    }
-
-    /* グリッド・カード表示 */
-    .feature-grid {
-      display: grid;
-      grid-template-columns: 1fr 1fr;
-      gap: 10px;
-      margin: 12px 0;
-    }
-    .feature-card {
-      background: #ffffff;
-      border: 1px solid #e2e8f0;
-      border-radius: 8px;
-      padding: 12px;
-      box-shadow: 0 1px 2px rgba(0,0,0,0.04);
-    }
-    .feature-card h4 {
-      margin: 0 0 6px;
-      font-size: 10.5pt;
-      color: #047857;
       display: flex;
       align-items: center;
       gap: 6px;
     }
-    .feature-card p {
-      font-size: 9pt;
-      color: #475569;
-      margin: 0;
-    }
 
-    /* サイン特集カード */
-    .sign-card-container {
+    /* カード・ボックス */
+    .card-grid {
       display: grid;
-      grid-template-columns: 1fr 1fr 1fr;
+      grid-template-columns: repeat(2, 1fr);
       gap: 10px;
-      margin: 12px 0;
+      margin-bottom: 14px;
     }
-    .sign-card {
+    .card {
+      border: 1px solid #e2e8f0;
       border-radius: 8px;
       padding: 12px;
-      border: 1px solid #cbd5e1;
       background: #ffffff;
+      box-shadow: 0 1px 2px rgba(0,0,0,0.04);
     }
-    .sign-card.sign-hand {
-      border-color: #10b981;
+    .card.highlight {
+      border-color: #a7f3d0;
       background: #f0fdf4;
     }
-    .sign-card.sign-absent {
-      border-color: #f59e0b;
+    .card.amber {
+      border-color: #fde68a;
       background: #fffbeb;
     }
-    .sign-card.sign-none {
-      border-color: #94a3b8;
-      background: #f8fafc;
+    .card.blue {
+      border-color: #bfdbfe;
+      background: #eff6ff;
     }
-    .sign-badge {
-      display: inline-block;
-      padding: 2px 8px;
-      border-radius: 4px;
-      font-size: 8.5pt;
+    .card-title {
       font-weight: bold;
+      font-size: 10.5pt;
+      color: #0f172a;
       margin-bottom: 6px;
+      display: flex;
+      align-items: center;
+      gap: 6px;
     }
-    .badge-green { background: #d1fae5; color: #065f46; border: 1px solid #a7f3d0; }
-    .badge-amber { background: #fef3c7; color: #92400e; border: 1px solid #fde68a; }
-    .badge-slate { background: #e2e8f0; color: #334155; border: 1px solid #cbd5e1; }
 
-    /* 注意書きボックス */
-    .alert-box {
+    /* イラスト風ダイアグラム・タイムライン */
+    .diagram-box {
+      background: #f8fafc;
+      border: 1px dashed #cbd5e1;
       border-radius: 8px;
-      padding: 10px 14px;
-      margin: 10px 0;
+      padding: 12px;
+      margin: 12px 0;
+      font-family: monospace;
       font-size: 9pt;
       line-height: 1.5;
+      color: #334155;
     }
-    .alert-info {
-      background: #eff6ff;
-      border: 1px solid #bfdbfe;
-      color: #1e40af;
+
+    /* ステップリスト */
+    .step-list {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+      margin: 10px 0;
     }
-    .alert-warning {
-      background: #fffbeb;
-      border: 1px solid #fde68a;
-      color: #92400e;
+    .step-item {
+      display: flex;
+      gap: 12px;
+      background: #ffffff;
+      border: 1px solid #e2e8f0;
+      border-radius: 6px;
+      padding: 10px 12px;
     }
-    .alert-success {
-      background: #ecfdf5;
-      border: 1px solid #a7f3d0;
-      color: #065f46;
+    .step-num {
+      width: 26px;
+      height: 26px;
+      border-radius: 50%;
+      background: #059669;
+      color: #ffffff;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-weight: bold;
+      font-size: 9pt;
+      flex-shrink: 0;
+    }
+    .step-content {
+      flex: 1;
+    }
+    .step-title {
+      font-weight: bold;
+      color: #0f172a;
+      font-size: 10pt;
+      margin-bottom: 2px;
+    }
+    .step-desc {
+      font-size: 9pt;
+      color: #475569;
     }
 
     /* テーブル */
     table {
       width: 100%;
       border-collapse: collapse;
-      margin: 10px 0;
+      margin: 10px 0 14px;
       font-size: 9pt;
     }
     th, td {
@@ -240,306 +197,397 @@
     }
     th {
       background: #f1f5f9;
-      color: #1e293b;
       font-weight: bold;
-    }
-    tr:nth-child(even) td {
-      background: #f8fafc;
+      color: #1e293b;
     }
 
-    /* ステップ手順リスト */
-    .step-list {
+    /* 注意・ヒントバッジ */
+    .tip-box {
+      background: #fefce8;
+      border-left: 4px solid #eab308;
+      padding: 8px 12px;
+      font-size: 9pt;
+      color: #713f12;
+      border-radius: 0 4px 4px 0;
       margin: 10px 0;
     }
-    .step-item {
-      display: flex;
-      gap: 12px;
-      margin-bottom: 10px;
+
+    /* タイムライン表 */
+    .timeline-table {
+      width: 100%;
+      border-collapse: collapse;
+      margin: 10px 0;
+      font-size: 8.5pt;
     }
-    .step-num {
-      width: 26px;
-      height: 26px;
-      background: #059669;
+    .timeline-table th {
+      background: #0f172a;
       color: white;
-      border-radius: 6px;
-      display: flex;
-      align-items: center;
-      justify-content: center;
+      text-align: center;
+      padding: 6px;
+    }
+    .timeline-table td {
+      border: 1px solid #cbd5e1;
+      padding: 6px;
+      height: 38px;
+      vertical-align: middle;
+    }
+    .slot-open {
+      background: #f8fafc;
+      color: #94a3b8;
+      text-align: center;
+      border: 1px dashed #cbd5e1;
       font-weight: bold;
-      font-size: 10pt;
-      flex-shrink: 0;
     }
-    .step-content {
-      flex: 1;
+    .slot-appt {
+      background: #fef3c7;
+      color: #92400e;
+      border-left: 3px solid #d97706;
+      font-weight: bold;
+      border-radius: 4px;
+      padding: 4px 6px;
     }
-    .step-content h5 {
-      margin: 0 0 3px;
-      font-size: 9.5pt;
-      color: #0f172a;
-    }
-    .step-content p {
-      margin: 0;
-      font-size: 9pt;
-      color: #475569;
+    .slot-away {
+      background: #e0f2fe;
+      color: #0369a1;
+      border-left: 3px solid #0284c7;
+      font-weight: bold;
+      border-radius: 4px;
+      padding: 4px 6px;
     }
 
-    /* フッター */
-    .footer {
-      border-top: 1px solid #cbd5e1;
-      padding-top: 10px;
-      margin-top: 25px;
-      text-align: center;
-      font-size: 8.5pt;
-      color: #94a3b8;
+    /* 印刷ボタン（画面表示時のみ） */
+    .print-bar {
+      position: sticky;
+      top: 0;
+      background: #1e293b;
+      color: #ffffff;
+      padding: 10px 16px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      z-index: 999;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.15);
+    }
+    .print-btn {
+      background: #059669;
+      color: #ffffff;
+      border: none;
+      padding: 8px 18px;
+      border-radius: 6px;
+      font-size: 10pt;
+      font-weight: bold;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+    .print-btn:hover {
+      background: #047857;
+    }
+    @media print {
+      .print-bar {
+        display: none !important;
+      }
     }
   </style>
 </head>
 <body>
 
-  <!-- 表紙 -->
-  <div class="cover avoid-break">
-    <div class="badge">有限会社クリーン健康社 公式マニュアル（第2版・2026年9月改訂）</div>
-    <h1 class="title">Clean KENKOU ERP 取扱説明書</h1>
-    <div class="subtitle">誰でも迷わず使える、現場と事務所をつなぐスマート業務システム</div>
-    <div class="author">
-      電子サイン・不在回収記録・クラウド同期・AI写真見積もり・複数人同時利用 対応版
-    </div>
+  <!-- 印刷用トップバー（印刷時は自動で非表示） -->
+  <div class="print-bar">
+    <div style="font-weight: bold; font-size: 10.5pt;">📄 Clean KENKOU ERP 操作マニュアル（第3版 2026年最新改訂版）</div>
+    <button class="print-btn" onclick="window.print()">🖨️ A4で印刷 / PDFとして保存</button>
   </div>
 
-  <!-- 1. はじめに -->
-  <div class="avoid-break">
-    <h2>1. Clean KENKOU ERP とは？</h2>
-    <p>
-      <strong>Clean KENKOU ERP</strong> は、有限会社クリーン健康社の粗大ごみ・不用品回収、し尿収集、臨時収集などの日常業務を、現場スタッフと事務所の全員でスムーズに進めるための専用システムです。
-    </p>
-    <div class="feature-grid">
-      <div class="feature-card">
-        <h4>✍️ タブレット手書き電子サイン</h4>
-        <p>お客様の指先やタッチペンで画面上に直接サインを受領。紙の受領書紛失がなくなり、指示書や見積書に自動印字されます。</p>
-      </div>
-      <div class="feature-card">
-        <h4>📦 不在回収・サイン不要ワンタップ</h4>
-        <p>お客様が不在の置き回収や電話承諾済み案件も、「立ち会い無し」「サイン不要」ボタンを1回押すだけで帳票に明記されます。</p>
-      </div>
-      <div class="feature-card">
-        <h4>📸 スマホ・タブレットでAI写真見積</h4>
-        <p>現場の粗大ごみをスマホで撮影するだけ！AIが品目を瞬時に見分け、体積（m³）やトラック積載率を自動計算します。</p>
-      </div>
-      <div class="feature-card">
-        <h4>☁️ クラウド安全同期 & 複数人同時利用</h4>
-        <p>事務所PCと複数の現場タブレットから同時に使ってもデータが消えません。単価変更も「クラウド同期ボタン」で一発共有できます。</p>
-      </div>
-    </div>
-  </div>
+  <div style="padding: 15px 20px;">
 
-  <!-- 2. 日常の業務フロー -->
-  <div class="avoid-break">
-    <h2>2. 日常の業務の流れ（4つのステップ）</h2>
-    <p>お電話の受付から、現場での作業・サイン受領、請求書の発行まで、かんばんボードで一目瞭然に管理できます。</p>
-
-    <div class="flow-container">
-      <div class="flow-step">
-        <span class="flow-step-num">1</span>
-        <div class="flow-step-title">受付・登録</div>
-        <div class="flow-step-desc">電話を受けたら顧客名・住所・品目を入力</div>
-      </div>
-      <div class="flow-step">
-        <span class="flow-step-num">2</span>
-        <div class="flow-step-title">現調・見積もり</div>
-        <div class="flow-step-desc">AI写真見積もりで概算提示 & 承諾サイン</div>
-      </div>
-      <div class="flow-step active">
-        <span class="flow-step-num">3</span>
-        <div class="flow-step-title">回収・作業実施</div>
-        <div class="flow-step-desc">現場で手書きサイン（または不在回収記録）</div>
-      </div>
-      <div class="flow-step">
-        <span class="flow-step-num">4</span>
-        <div class="flow-step-title">完了・請求</div>
-        <div class="flow-step-desc">指示書印刷・完了報告・請求書送付へ</div>
-      </div>
-    </div>
-  </div>
-
-  <div class="page-break"></div>
-
-  <!-- 3. 画面の開き方とログイン -->
-  <div class="avoid-break">
-    <h2>3. 画面の開き方（パソコン・タブレット）</h2>
-
-    <div class="feature-grid">
-      <div class="feature-card">
-        <h4>💻 事務所のパソコンで使う場合</h4>
-        <p>デスクトップの <strong>「開発サーバー起動.bat」</strong> またはお気に入り（ブックマーク）をクリックするだけで、ブラウザが開きます。</p>
-      </div>
-      <div class="feature-card">
-        <h4>📱 現場のタブレット・スマホで使う場合</h4>
-        <p>社内掲示の <strong>「QRコード」</strong> をカメラで読み取るだけで、現場専用の使いやすい画面がすぐに開きます。</p>
-      </div>
+    <!-- 表紙 -->
+    <div class="cover avoid-break">
+      <div class="badge">✨ 2026年9月 営業スケジュール・スタッフ管理 新機能対応版</div>
+      <h1 class="title">Clean KENKOU ERP 操作マニュアル</h1>
+      <div class="subtitle">有限会社クリーン健康社 専用 業務支援システム</div>
+      <div class="author">事務所PC ＆ 外出先・現場タブレット・スマホ 完全対応ガイド</div>
     </div>
 
-    <div class="alert-box alert-warning">
-      <strong>⚠️ タブレットで開くときのワンポイント注意点</strong><br>
-      GoogleやYahooの「検索欄」にURLを入れてしまうと検索結果画面になってしまいます。必ずブラウザ一番上の <strong>「アドレスバー（URL入力欄）」</strong> に直接入れるか、QRコードをご利用ください。
-    </div>
-  </div>
+    <!-- 1. システム概要 -->
+    <div class="avoid-break">
+      <h2>1. Clean KENKOU ERP ってどんなシステム？</h2>
+      <p style="margin: 0 0 10px; font-size: 9.5pt;">
+        事務所のパソコン、現場のタブレット、外出中の営業マンのスマートフォンが**クラウドでリアルタイムに連動**し、
+        電話受付から見積枠予約、配車、現場回収、手書き電子サイン、請求書印刷までを一気通貫で進めるシステムです。
+      </p>
 
-  <!-- 4. 電子サイン & 不在回収・サイン不要機能 -->
-  <div class="avoid-break">
-    <h2>4. ✍️ 電子サイン & 不在回収・サイン不要機能（NEW!）</h2>
-    <p>
-      現場での回収完了時や見積もりご提示時に、お客様からサインをいただく機能です。<br>
-      実務のあらゆる状況（立ち会いあり、不在置き回収、サイン不要）に柔軟に対応しています。
-    </p>
-
-    <div class="sign-card-container">
-      <div class="sign-card sign-hand">
-        <span class="sign-badge badge-green">お客様がご在宅のとき</span>
-        <h4 style="margin: 0 0 6px; color: #047857; font-size: 10pt;">✍️ 手書き電子サイン</h4>
-        <p style="font-size: 8.5pt; color: #475569; margin: 0;">
-          「サインを受領する」を押すと白いキャンバスが画面いっぱいに開きます。お客様に指先やタッチペンでお名前を書いていただきます。書き損じても「書き直し」ボタンで何度でもやり直せます。
-        </p>
-      </div>
-
-      <div class="sign-card sign-absent">
-        <span class="sign-badge badge-amber">留守・不在置き回収のとき</span>
-        <h4 style="margin: 0 0 6px; color: #92400e; font-size: 10pt;">📦 立ち会い無し（不在回収）</h4>
-        <p style="font-size: 8.5pt; color: #475569; margin: 0;">
-          お客様がご不在で、玄関前や車庫から回収した場合は<strong>「立ち会い無し」</strong>ボタンを1タップ！指示書に『立ち会い無し（不在回収）』と明記され、トラブルを防ぎます。
-        </p>
-      </div>
-
-      <div class="sign-card sign-none">
-        <span class="sign-badge badge-slate">定期顧客・事前確認済のとき</span>
-        <h4 style="margin: 0 0 6px; color: #334155; font-size: 10pt;">📝 サイン不要（事前承諾）</h4>
-        <p style="font-size: 8.5pt; color: #475569; margin: 0;">
-          お電話で回収内容を事前確認済みの場合や、サインを求めないお得意様の場合は<strong>「サイン不要」</strong>ボタンを1タップ！帳票にも『サイン不要（事前承諾済）』と正しく印字されます。
-        </p>
-      </div>
-    </div>
-
-    <h3>🖨️ 印刷帳票（臨時収集依頼書・概算御見積書）への自動印字</h3>
-    <div class="step-list">
-      <div class="step-item">
-        <div class="step-num">1</div>
-        <div class="step-content">
-          <h5>手書きサインを受領した場合</h5>
-          <p>帳票上部の「お客様受領サイン」枠の中に、お客様が書かれた筆跡そのままのサイン画像がくっきり自動印字されます。</p>
+      <div class="card-grid">
+        <div class="card highlight">
+          <div class="card-title">📅 営業スケジュール ＆ 見積枠予約</div>
+          <div style="font-size: 9pt; color: #475569;">
+            営業マンの空き状況がひと目でわかり、事務員さんが電話口で即座に見積訪問枠を確保＆案件自動作成できます。
+          </div>
         </div>
-      </div>
-      <div class="step-item">
-        <div class="step-num">2</div>
-        <div class="step-content">
-          <h5>「立ち会い無し」または「サイン不要」を選んだ場合</h5>
-          <p>サイン枠の中に<strong>『立ち会い無し（不在回収）』</strong>または<strong>『サイン不要（事前承諾済）』</strong>という文字が枠内に太字で自動印字されます。</p>
+        <div class="card amber">
+          <div class="card-title">✍️ 電子サイン ＆ 不在回収対応</div>
+          <div style="font-size: 9pt; color: #475569;">
+            お客様の指先やペンで手書きサイン受領。不在置き回収時は「立ち会い無し」ボタン1タップで証跡印字。
+          </div>
+        </div>
+        <div class="card blue">
+          <div class="card-title">📸 AIカメラ写真見積もり</div>
+          <div style="font-size: 9pt; color: #475569;">
+            不用品の写真を撮るだけで品目を自動認識。軽トラや2tトラックの積載率（m³）を自動シミュレーション。
+          </div>
+        </div>
+        <div class="card">
+          <div class="card-title">🔒 個別アカウント ＆ マイタスク</div>
+          <div style="font-size: 9pt; color: #475569;">
+            自分の担当案件だけを1タップで絞り込み。パスワードも各スタッフ自身で安全・自由に変更可能です。
+          </div>
         </div>
       </div>
     </div>
-  </div>
 
-  <div class="page-break"></div>
-
-  <!-- 5. 主要機能の使い方ガイド -->
-  <div class="avoid-break">
-    <h2>5. 各画面の詳しい使い方ガイド</h2>
-
-    <h3>📌 案件一覧（かんばんボード）</h3>
-    <p>
-      「未着手」「顧客検討」「作業日程調整」「日程確定」「作業実施」「請求書送付」のカードが並んでいます。<br>
-      パソコンならマウスでカードをつかんで右へスッと動かすだけ（ドラッグ＆ドロップ）。タブレットなら案件カードをタップして「ステータス」を選ぶだけで状態を変更できます。
-    </p>
-
-    <h3>📸 AIカメラ写真見積もり機能（現場スタッフ必見！）</h3>
-    <ul>
-      <li><strong>写真をパシャリと撮るだけ:</strong> 複数枚の現場写真をアップロードして「AI解析」を押します。</li>
-      <li><strong>AIが自動リストアップ:</strong> 冷蔵庫、タンス、洗濯機、段ボール等の品目・個数・体積（m³）を自動抽出。</li>
-      <li><strong>トラック積載シミュレーター:</strong> 「軽トラック1台分」「2t平トラック半分」などの積載率がひと目で分かります。</li>
-      <li><strong>現場で見積書プレビュー & サイン:</strong> その場でお客様に画面を見せ、電子サインをいただいて見積書を印刷・発行できます。</li>
-    </ul>
-
-    <h3>☁️ 単価マスタ・会社情報の設定と「クラウド同期」</h3>
-    <p>
-      「設定」画面から、社内の回収品目単価や自社情報をいつでも修正できます。<br>
-      変更後は、画面上部にある <strong>「クラウドへ全件同期」ボタン（紫色の雲マーク）</strong> を押してください。全スタッフのタブレットやスマホへ最新の単価が一瞬で反映されます。
-    </p>
-  </div>
-
-  <!-- 6. 複数人で使うときの安心ルール -->
-  <div class="avoid-break">
-    <h2>6. 複数人で同時に使うときの安心ルール</h2>
-
-    <div class="alert-box alert-info">
-      <strong>💡 何人同時に使ってもデータは安全に守られます！</strong><br>
-      事務所で電話受付の入力をしている最中に、現場スタッフがタブレットで見積もりやサイン受領をしても、お互いの入力が消えることはありません。クラウド（Supabase）がリアルタイムに保護しています。
-    </div>
-
-    <table>
-      <thead>
-        <tr>
-          <th style="width: 32%;">利用シーン</th>
-          <th>動作とおすすめの運用</th>
-        </tr>
-      </thead>
-      <tbody>
-        <tr>
-          <td><strong>別々の案件を触っているとき</strong></td>
-          <td>何人でも同時に作業できます。全く問題ありません。</td>
-        </tr>
-        <tr>
-          <td><strong>同じ1つの案件を同時に触るとき</strong></td>
-          <td>後から「保存」を押した方の内容が反映されます。「今この案件を触るね」とお声がけいただくとより確実です。</td>
-        </tr>
-        <tr>
-          <td><strong>他人の最新入力をすぐ見たいとき</strong></td>
-          <td>画面上部のタブを切り替えるか、ブラウザの「再読み込み（更新マーク）」を押してください。</td>
-        </tr>
-        <tr>
-          <td><strong>単価を変更したとき</strong></td>
-          <td>「設定」画面の「クラウドへ全件同期」ボタンを押せば、全端末に最新単価が共有されます。</td>
-        </tr>
-      </tbody>
-    </table>
-  </div>
-
-  <!-- 7. 困ったときのQ&A -->
-  <div class="avoid-break">
-    <h2>7. 困ったときの Q&A</h2>
-
-    <div class="step-list">
-      <div class="step-item">
-        <div class="step-num">Q1</div>
-        <div class="step-content">
-          <h5>不在回収のとき、サインはどうすればいい？</h5>
-          <p><strong>A.</strong> サイン欄にある<strong>「立ち会い無し」ボタン</strong>を1タップしてください。印刷指示書にも自動で『立ち会い無し（不在回収）』と明記され、トラブル防止の証跡になります。</p>
+    <!-- 2. 画面の開き方と表示切り替え -->
+    <div class="avoid-break">
+      <h2>2. 画面の開き方と表示の切り替え（PC・タブレット・スマホ）</h2>
+      <div class="step-list">
+        <div class="step-item">
+          <div class="step-num">💻</div>
+          <div class="step-content">
+            <div class="step-title">事務所のパソコンで使うとき</div>
+            <div class="step-desc">
+              ブラウザ上部に「ダッシュボード」「スケジュール」「案件一覧」「顧客管理」「売上分析」「設定」が横並びで表示されます。
+            </div>
+          </div>
+        </div>
+        <div class="step-item">
+          <div class="step-num">📱</div>
+          <div class="step-content">
+            <div class="step-title">現場・外出先のタブレット＆スマホで使うとき</div>
+            <div class="step-desc">
+              画面の**一番下（固定フッター）**に大きなメニューが表示されます。一番左端の **「📅 スケジュール」** からいつでも空き枠確認や予定登録ができます。
+            </div>
+          </div>
         </div>
       </div>
-      <div class="step-item">
-        <div class="step-num">Q2</div>
-        <div class="step-content">
-          <h5>お客様がサインを書き間違えてしまった！</h5>
-          <p><strong>A.</strong> サイン枠の横にある<strong>「再署名」</strong>ボタンを押せば、もう一度手書きサイン画面が開き、何度でもきれいに書き直せます。</p>
-        </div>
-      </div>
-      <div class="step-item">
-        <div class="step-num">Q3</div>
-        <div class="step-content">
-          <h5>「Failed to fetch」という赤い文字が出てログインできない</h5>
-          <p><strong>A.</strong> 端末のWi-Fiや電波状況をご確認ください。ブラウザの再読み込み（Ctrl + F5 または更新ボタン）を行うと復帰します。</p>
-        </div>
-      </div>
-      <div class="step-item">
-        <div class="step-num">Q4</div>
-        <div class="step-content">
-          <h5>PCで新しく追加した品目単価が、タブレットに表示されない</h5>
-          <p><strong>A.</strong> PCの「設定」画面で<strong>「クラウドへ全件同期」ボタン（紫の雲）</strong>を押したあと、タブレット側で画面を一度再読み込み（更新）してください。</p>
-        </div>
+
+      <div class="tip-box">
+        💡 <strong>表示モードの切り替え：</strong> 画面右上にある「📱 携帯・タブレット表示へ / 💻 PC表示へ」ボタンを押すと、お好みの見やすさにいつでもワンタップで切り替えられます！
       </div>
     </div>
-  </div>
 
-  <!-- フッター -->
-  <div class="footer avoid-break">
-    Clean KENKOU ERP ｜ 有限会社クリーン健康社 専用業務支援システム ｜ 発行日: 2026年9月（第2版 改訂）
+    <div class="page-break"></div>
+
+    <!-- 3. 新機能：営業スケジュール ＆ 見積枠予約カレンダー -->
+    <div class="avoid-break">
+      <h2>3. 【新機能✨】📅 営業スケジュール ＆ 見積枠予約カレンダー</h2>
+      <p style="margin: 0 0 10px; font-size: 9.5pt;">
+        お客様から「見積もりに来てほしい！」とお電話があったとき、営業マンへの確認電話なしで、画面上の空き枠をタップするだけで予約が完了します。
+      </p>
+
+      <h3 style="margin-top: 10px;">タイムライン表示のイメージ（営業担当者のみがずらり並びます）</h3>
+      <table class="timeline-table">
+        <thead>
+          <tr>
+            <th style="width: 70px;">時間</th>
+            <th>廣田 龍之介（営業担当）</th>
+            <th>原口 真治（営業担当）</th>
+            <th>新任の営業マン（営業担当）</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td style="text-align: center; font-weight: bold; background: #f8fafc;">9:00</td>
+            <td><div class="slot-away">🟦 外出・移動（役所・下見）</div></td>
+            <td class="slot-open">＋ 空き枠（タップで予約）</td>
+            <td class="slot-open">＋ 空き枠（タップで予約）</td>
+          </tr>
+          <tr>
+            <td style="text-align: center; font-weight: bold; background: #f8fafc;">10:00</td>
+            <td><div class="slot-appt">🟧 山田様 見積（案件自動連動）</div></td>
+            <td class="slot-open">＋ 空き枠（タップで予約）</td>
+            <td><div class="slot-away">🟪 社内打合せ・確認</div></td>
+          </tr>
+          <tr>
+            <td style="text-align: center; font-weight: bold; background: #f8fafc;">11:00</td>
+            <td class="slot-open">＋ 空き枠（タップで予約）</td>
+            <td><div class="slot-appt">🟧 佐藤様 見積（山鹿市）</div></td>
+            <td class="slot-open">＋ 空き枠（タップで予約）</td>
+          </tr>
+        </tbody>
+      </table>
+
+      <h3>📝 空き枠タップで見積訪問予約をとる手順</h3>
+      <div class="step-list">
+        <div class="step-item">
+          <div class="step-num">1</div>
+          <div class="step-content">
+            <div class="step-title">空いている白い枠（＋ 空き枠）をクリックまたはタップ</div>
+            <div class="step-desc">担当営業マンの名前、日付、時間が自動セットされた予約モーダルが立ち上がります。</div>
+          </div>
+        </div>
+        <div class="step-item">
+          <div class="step-num">2</div>
+          <div class="step-content">
+            <div class="step-title">お客様のお名前・電話番号・住所・品目を入力</div>
+            <div class="step-desc">既存のお客様はリストから選ぶだけで住所・電話番号が自動補完されます。新規のお客様も直接入力でOK。</div>
+          </div>
+        </div>
+        <div class="step-item">
+          <div class="step-num">3</div>
+          <div class="step-content">
+            <div class="step-title">「見積枠を予約する」ボタンを押す</div>
+            <div class="step-desc">
+              これだけで、<strong>カレンダーに見積予約が登録され、同時に案件管理ボードの「顧客検討（見積対応）」に新規案件が自動作成</strong>されます！
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <h3>🚗 外出先の営業マン向け便利機能（スマホ・タブレット）</h3>
+      <div class="card-grid">
+        <div class="card">
+          <div class="card-title">📍 Googleマップ ルート案内</div>
+          <div style="font-size: 8.5pt; color: #475569;">
+            予定カードをタップして「地図」を押すと、スマホのGoogleマップナビが開き、お客様宅までの道順を即座に案内します。
+          </div>
+        </div>
+        <div class="card">
+          <div class="card-title">📞 お客様へワンタップ電話発信</div>
+          <div style="font-size: 8.5pt; color: #475569;">
+            「電話」ボタンを押すだけでお客様の携帯・固定電話へ直接通話発信。到着前連絡がスムーズに行えます。
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- 4. 担当者・スタッフ管理（営業担当の増やし方） -->
+    <div class="avoid-break">
+      <h2>4. 【新機能✨】👥 担当者・スタッフ管理（営業担当の増やし方）</h2>
+      <p style="margin: 0 0 10px; font-size: 9.5pt;">
+        スケジュール画面に表示されるのは、管理画面で役割が「営業担当」に設定されているスタッフのみです。
+        新しく営業スタッフが入った場合や、現場作業員が営業を兼ねる場合も、以下の手順で自由に追加・変更できます。
+      </p>
+
+      <div class="step-list">
+        <div class="step-item">
+          <div class="step-num">1</div>
+          <div class="step-content">
+            <div class="step-title">メニューの「⚙️ 設定」を開き、「👥 担当者・スタッフ管理」タブを選択</div>
+            <div class="step-desc">スタッフ一覧と、役割（現場作業員、配車担当、営業担当、事務担当、管理者）が表示されます。</div>
+          </div>
+        </div>
+        <div class="step-item">
+          <div class="step-num">2</div>
+          <div class="step-content">
+            <div class="step-title">対象スタッフの役割を「営業担当」に変更（または新規追加）</div>
+            <div class="step-desc">セレクトボックスで「営業担当」を選ぶだけで自動保存されます。新しいスタッフを追加する場合も役割を「営業担当」に指定します。</div>
+          </div>
+        </div>
+        <div class="step-item">
+          <div class="step-num">3</div>
+          <div class="step-content">
+            <div class="step-title">スケジュール画面に戻ると、そのスタッフの予定列が自動追加！</div>
+            <div class="step-desc">人数が増えた分だけ自動的にタイムラインの列が増え、フィルター選択肢にも追加されます。</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="page-break"></div>
+
+    <!-- 5. パスワード変更 & マイタスク絞り込み -->
+    <div class="avoid-break">
+      <h2>5. 【新機能✨】🔒 自分のパスワード変更 ＆ 🎯 マイタスク絞り込み</h2>
+
+      <div class="card-grid">
+        <div class="card">
+          <div class="card-title">🔑 自分のパスワードを変更する手順</div>
+          <div style="font-size: 9pt; color: #334155; line-height: 1.6;">
+            1. 画面右上にある<strong>自分の名前（アイコン）</strong>をクリック。<br>
+            2. メニューから<strong>「🔑 パスワードを変更する」</strong>を選択。<br>
+            3. 新しいパスワード（英数字6文字以上）を2回入力して「変更する」を押すだけ。<br>
+            ※各スタッフ自身でいつでも安全に変更できます。
+          </div>
+        </div>
+
+        <div class="card">
+          <div class="card-title">🎯 ダッシュボードで「自分の案件」だけを絞り込む</div>
+          <div style="font-size: 9pt; color: #334155; line-height: 1.6;">
+            1. ダッシュボードのかんばんボード上部を見る。<br>
+            2. <strong>「担当者」セレクトボックス</strong>から自分の名前を選ぶ。<br>
+            3. 自分が担当している案件カードだけがパッと抽出表示されます。<br>
+            ※今日やるべきタスクが一目で把握でき、見落としを防げます。
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- 6. お仕事全体のやさしい流れ -->
+    <div class="avoid-break">
+      <h2>6. おさらい：お仕事全体のやさしい流れ（電話受付〜完了・請求）</h2>
+      <table>
+        <thead>
+          <tr>
+            <th style="width: 25%;">ステップ</th>
+            <th style="width: 25%;">担当</th>
+            <th>主な作業内容と便利機能</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><strong>① 電話受付・見積予約</strong></td>
+            <td>👩‍💼 事務員さん</td>
+            <td>スケジュール画面で営業マンの空き枠を確認し、ワンタップで予約＆案件自動作成。</td>
+          </tr>
+          <tr>
+            <td><strong>② 現地下見・見積提示</strong></td>
+            <td>👨‍💼 営業マン</td>
+            <td>スマホのナビで直行。📸 AIカメラで品目・体積を自動計算。手書き電子サインを受領。</td>
+          </tr>
+          <tr>
+            <td><strong>③ 配車・回収作業</strong></td>
+            <td>👷‍♂️ 現場作業員</td>
+            <td>案件詳細の地図・品目を確認して回収。完了時にお客様サインを受領（不在時は「立ち会い無し」）。</td>
+          </tr>
+          <tr>
+            <td><strong>④ 帳票印刷・請求</strong></td>
+            <td>👩‍💼 事務員さん</td>
+            <td>臨時収集依頼書や請求書を印刷・発行。サイン画像や不在回収表記が美しく自動印字されます。</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <!-- 7. 困ったときの Q&A -->
+    <div class="avoid-break">
+      <h2>7. 困ったときの Q&A（よくある質問）</h2>
+      <div style="display: flex; flex-direction: column; gap: 8px;">
+        <div style="border: 1px solid #e2e8f0; border-radius: 6px; padding: 10px; background: #ffffff;">
+          <div style="font-weight: bold; color: #0f172a; font-size: 9.5pt;">Q. タブレットで営業スケジュールはどこから見られますか？</div>
+          <div style="font-size: 9pt; color: #475569; margin-top: 4px;">
+            <strong>A.</strong> 画面の**一番下（固定バー）の左端にある「📅 スケジュール」アイコン**をタップしてください。画面右上のボタンで「携帯・タブレット表示」と「PC表示」を切り替えることもできます。
+          </div>
+        </div>
+
+        <div style="border: 1px solid #e2e8f0; border-radius: 6px; padding: 10px; background: #ffffff;">
+          <div style="font-weight: bold; color: #0f172a; font-size: 9.5pt;">Q. スケジュールに特定の営業スタッフが表示されません！</div>
+          <div style="font-size: 9pt; color: #475569; margin-top: 4px;">
+            <strong>A.</strong> 「設定」→「担当者・スタッフ管理」タブで、そのスタッフの役割を「営業担当」に変更してください。即座にスケジュール画面に列が追加されます。
+          </div>
+        </div>
+
+        <div style="border: 1px solid #e2e8f0; border-radius: 6px; padding: 10px; background: #ffffff;">
+          <div style="font-weight: bold; color: #0f172a; font-size: 9.5pt;">Q. 複数人で同時に使ってもデータは消えませんか？</div>
+          <div style="font-size: 9pt; color: #475569; margin-top: 4px;">
+            <strong>A.</strong> はい、大丈夫です！ クラウドで安全に自動同期されます。最新の状態を確認したいときは画面を再読み込み（更新）してください。
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div style="text-align: center; margin-top: 25px; padding-top: 15px; border-top: 1px solid #e2e8f0; font-size: 8.5pt; color: #94a3b8;">
+      有限会社クリーン健康社 Clean KENKOU ERP 運用サポートチーム
+    </div>
+
   </div>
 
 </body>
