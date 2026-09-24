@@ -1,4 +1,5 @@
 import React, { useState, useMemo } from 'react'
+import { Link } from 'react-router-dom'
 import {
   Calendar as CalendarIcon,
   ChevronLeft,
@@ -122,18 +123,18 @@ export const Schedule: React.FC = () => {
   // 連動案件の詳細モーダルを開くためのjobId
   const [activeJobDetailId, setActiveJobDetailId] = useState<string | null>(null)
 
-  // 営業または全体スタッフ（優先度：営業 > 事務 > その他）
+  // 役割が「営業担当（sales）」のスタッフのみを抽出（設定の担当者・スタッフ管理と完全連動）
+  const salesProfiles = useMemo(() => {
+    return profiles.filter((p) => p.role === 'sales')
+  }, [profiles])
+
+  // タイムライン描画対象（営業担当のみ）
   const targetStaffList = useMemo(() => {
     if (selectedStaffFilter !== 'all') {
-      return profiles.filter((p) => p.id === selectedStaffFilter)
+      return salesProfiles.filter((p) => p.id === selectedStaffFilter)
     }
-    // 営業担当を先頭に並べる
-    return [...profiles].sort((a, b) => {
-      if (a.role === 'sales' && b.role !== 'sales') return -1
-      if (a.role !== 'sales' && b.role === 'sales') return 1
-      return (a.display_name || '').localeCompare(b.display_name || '')
-    })
-  }, [profiles, selectedStaffFilter])
+    return salesProfiles
+  }, [salesProfiles, selectedStaffFilter])
 
   // 当日のスケジュール一覧
   const daySchedules = useMemo(() => {
@@ -297,11 +298,11 @@ export const Schedule: React.FC = () => {
               <h1 className="text-lg md:text-xl font-bold text-main tracking-tight flex items-center gap-2">
                 <span>営業スケジュール ＆ 見積枠予約</span>
                 <span className="hidden sm:inline-block text-xs bg-amber-100 text-amber-800 border border-amber-300 px-2 py-0.5 rounded font-semibold">
-                  リアルタイム空き状況
+                  営業担当専用
                 </span>
               </h1>
               <p className="text-xs text-sub hidden sm:block">
-                営業の空き枠を確認し、即座に見積訪問予約と新規案件を一括登録できます
+                営業担当の空き枠を確認し、即座に見積訪問予約と新規案件を一括登録できます（設定の「担当者・スタッフ管理」で営業担当に設定されたスタッフが自動連動します）
               </p>
             </div>
           </div>
@@ -371,16 +372,16 @@ export const Schedule: React.FC = () => {
 
         {/* 右側：絞り込み＆新規予定ボタン */}
         <div className="flex flex-wrap items-center gap-2">
-          {/* 担当者フィルター */}
+          {/* 担当営業フィルター */}
           <select
             value={selectedStaffFilter}
             onChange={(e) => setSelectedStaffFilter(e.target.value)}
             className="p-2 border border-border rounded-lg text-xs bg-white font-medium text-main focus:ring-2 focus:ring-slate-900"
           >
-            <option value="all">全スタッフ表示</option>
-            {profiles.map((p) => (
+            <option value="all">営業担当 全員表示 ({salesProfiles.length}名)</option>
+            {salesProfiles.map((p) => (
               <option key={p.id} value={p.id}>
-                {p.display_name} ({getRoleInfo(p.role).label})
+                {p.display_name} (営業担当)
               </option>
             ))}
           </select>
@@ -392,7 +393,7 @@ export const Schedule: React.FC = () => {
             size="sm"
             onClick={() => {
               setSimpleForm({
-                profileId: targetStaffList[0]?.id || '',
+                profileId: targetStaffList[0]?.id || salesProfiles[0]?.id || '',
                 title: '',
                 scheduleType: 'away',
                 date: selectedDate,
@@ -468,7 +469,26 @@ export const Schedule: React.FC = () => {
           {isLoading ? (
             <div className="p-12 text-center text-xs text-sub">スケジュールを読み込んでいます...</div>
           ) : targetStaffList.length === 0 ? (
-            <div className="p-12 text-center text-xs text-sub">スタッフ情報が登録されていません。</div>
+            <div className="p-12 text-center">
+              <div className="w-12 h-12 rounded-full bg-amber-100 text-amber-700 flex items-center justify-center mx-auto mb-3 font-bold">
+                <Briefcase className="w-6 h-6" />
+              </div>
+              <h3 className="text-base font-bold text-main mb-1">
+                {selectedStaffFilter !== 'all'
+                  ? '該当する営業担当者が見つかりません'
+                  : '営業担当のスタッフが登録されていません'}
+              </h3>
+              <p className="text-xs text-sub max-w-md mx-auto mb-4 leading-relaxed">
+                スケジュール画面では、設定で役割が「営業担当」になっているスタッフのみが表示されます。
+                営業担当スタッフの追加や役割変更は「設定」→「担当者・スタッフ管理」から行えます。
+              </p>
+              <Link
+                to="/settings"
+                className="inline-flex items-center px-4 py-2 bg-slate-900 text-white rounded-lg text-xs font-semibold hover:bg-slate-800 transition-colors shadow-sm"
+              >
+                担当者・スタッフ管理へ移動
+              </Link>
+            </div>
           ) : (
             <div className="overflow-x-auto">
               <div className="min-w-[800px]">
@@ -666,8 +686,11 @@ export const Schedule: React.FC = () => {
               const dayItems = schedules.filter((s) => {
                 const sDate = s.start_time.split('T')[0]
                 if (sDate !== day.dateStr) return false
-                if (selectedStaffFilter !== 'all' && s.profile_id !== selectedStaffFilter) return false
-                return true
+                if (selectedStaffFilter !== 'all') {
+                  return s.profile_id === selectedStaffFilter
+                }
+                // 営業担当者のみ表示
+                return salesProfiles.some((sp) => sp.id === s.profile_id)
               })
 
               return (
@@ -709,7 +732,9 @@ export const Schedule: React.FC = () => {
                   <div className="flex-1 space-y-2 overflow-y-auto">
                     {dayItems.length === 0 ? (
                       <div
-                        onClick={() => handleSlotClick(targetStaffList[0]?.id || '', 10, day.dateStr)}
+                        onClick={() =>
+                          handleSlotClick(targetStaffList[0]?.id || salesProfiles[0]?.id || '', 10, day.dateStr)
+                        }
                         className="h-24 border border-dashed border-slate-200 rounded-lg flex flex-col items-center justify-center text-slate-400 hover:border-amber-300 hover:text-amber-600 hover:bg-amber-50/30 cursor-pointer transition-colors p-2 text-center"
                       >
                         <Plus className="w-4 h-4 mb-1" />
@@ -929,10 +954,10 @@ export const Schedule: React.FC = () => {
                     required
                     className="w-full p-2 border border-border rounded-lg text-xs bg-white text-main font-semibold focus:ring-2 focus:ring-slate-900"
                   >
-                    <option value="">担当者を選択...</option>
-                    {profiles.map((p) => (
+                    <option value="">担当営業を選択...</option>
+                    {salesProfiles.map((p) => (
                       <option key={p.id} value={p.id}>
-                        {p.display_name} ({getRoleInfo(p.role).label})
+                        {p.display_name} (営業担当)
                       </option>
                     ))}
                   </select>
@@ -1077,17 +1102,17 @@ export const Schedule: React.FC = () => {
 
             <div className="space-y-3 text-xs">
               <div>
-                <label className="block font-bold text-main mb-1">対象スタッフ *</label>
+                <label className="block font-bold text-main mb-1">対象営業 *</label>
                 <select
                   value={simpleForm.profileId}
                   onChange={(e) => setSimpleForm({ ...simpleForm, profileId: e.target.value })}
                   required
                   className="w-full p-2 border border-border rounded-lg text-xs bg-white text-main font-semibold focus:ring-2 focus:ring-slate-900"
                 >
-                  <option value="">スタッフを選択...</option>
-                  {profiles.map((p) => (
+                  <option value="">対象営業を選択...</option>
+                  {salesProfiles.map((p) => (
                     <option key={p.id} value={p.id}>
-                      {p.display_name} ({getRoleInfo(p.role).label})
+                      {p.display_name} (営業担当)
                     </option>
                   ))}
                 </select>
