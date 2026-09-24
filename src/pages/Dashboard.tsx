@@ -17,7 +17,7 @@ import { ExcelImportModal } from '../components/features/ExcelImportModal'
 import { MobileQuoteModal, InitialQuoteData } from '../components/features/MobileQuoteModal'
 import { PrintArea, PrintTaskData } from '../components/features/PrintArea'
 import { useJobs } from '../hooks/useJobs'
-import { useProfiles } from '../hooks/useProfiles'
+import { useProfiles, getRoleInfo } from '../hooks/useProfiles'
 import { useViewMode } from '../hooks/useViewMode'
 import { supabase } from '../lib/supabase'
 import { JobStatus } from '../types'
@@ -30,6 +30,7 @@ export const Dashboard: React.FC = () => {
   const { profiles, addStaff } = useProfiles()
   const [tasks, setTasks] = useState<ProcessTask[]>([])
   const [viewFilter, setViewFilter] = useState<'active' | 'archived' | 'all'>('active')
+  const [staffFilter, setStaffFilter] = useState<string>('all')
 
   // モバイルモードの場合は案件一覧画面 (/jobs) へリダイレクト
   useEffect(() => {
@@ -80,6 +81,7 @@ export const Dashboard: React.FC = () => {
             ? new Date(job.created_at).toLocaleDateString('ja-JP')
             : '',
           updatedAt: job.updated_at || job.created_at || new Date().toISOString(),
+          assignedTo: job.assigned_to || '',
           updater: job.profiles?.display_name || '',
           stepsData,
         }
@@ -88,13 +90,21 @@ export const Dashboard: React.FC = () => {
     }
   }, [jobs])
 
+  // 担当者絞り込み後のタスク一覧
+  const filteredTasks = useMemo(() => {
+    if (staffFilter === 'all') return tasks
+    if (staffFilter === 'unassigned') return tasks.filter((t) => !t.assignedTo)
+    return tasks.filter((t) => t.assignedTo === staffFilter)
+  }, [tasks, staffFilter])
+
   // カウント
   const counts = useMemo(() => {
-    const activeCount = tasks.filter((t) => !isTaskCompleted(t)).length
-    const archivedCount = tasks.filter((t) => isTaskCompleted(t)).length
-    const allCount = tasks.length
+    const activeCount = filteredTasks.filter((t) => !isTaskCompleted(t)).length
+    const archivedCount = filteredTasks.filter((t) => isTaskCompleted(t)).length
+    const allCount = filteredTasks.length
     return { active: activeCount, archived: archivedCount, all: allCount }
-  }, [tasks])
+  }, [filteredTasks])
+
 
   // ドラッグ＆ドロップでステータス更新
   const handleTaskMove = async (taskId: string, newStatus: ProcessLane) => {
@@ -375,32 +385,61 @@ export const Dashboard: React.FC = () => {
         </div>
       </header>
 
-      {/* View Filter Switcher Tabs */}
-      <div className="view-switcher-container" style={{ margin: '1rem 0 0.5rem 0', display: 'flex', gap: '0.5rem' }}>
-        <button
-          className={`btn-filter ${viewFilter === 'active' ? 'active' : ''}`}
-          onClick={() => setViewFilter('active')}
-        >
-          📄 進行中 <span className="badge">{counts.active}</span>
-        </button>
-        <button
-          className={`btn-filter ${viewFilter === 'archived' ? 'active' : ''}`}
-          onClick={() => setViewFilter('archived')}
-        >
-          🎨 完了・過去履歴 <span className="badge">{counts.archived}</span>
-        </button>
-        <button
-          className={`btn-filter ${viewFilter === 'all' ? 'active' : ''}`}
-          onClick={() => setViewFilter('all')}
-        >
-          📂 すべて <span className="badge">{counts.all}</span>
-        </button>
+      {/* View Filter Switcher Tabs & Staff Filter */}
+      <div className="view-switcher-container" style={{ margin: '1rem 0 0.5rem 0', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '0.5rem' }}>
+        <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
+          <button
+            className={`btn-filter ${viewFilter === 'active' ? 'active' : ''}`}
+            onClick={() => setViewFilter('active')}
+          >
+            📄 進行中 <span className="badge">{counts.active}</span>
+          </button>
+          <button
+            className={`btn-filter ${viewFilter === 'archived' ? 'active' : ''}`}
+            onClick={() => setViewFilter('archived')}
+          >
+            🎨 完了・過去履歴 <span className="badge">{counts.archived}</span>
+          </button>
+          <button
+            className={`btn-filter ${viewFilter === 'all' ? 'active' : ''}`}
+            onClick={() => setViewFilter('all')}
+          >
+            📂 すべて <span className="badge">{counts.all}</span>
+          </button>
+        </div>
+
+        {/* 担当者（スタッフ・マイタスク）絞り込み */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+          <span style={{ fontSize: '0.75rem', fontWeight: 600, color: 'var(--text-sub)' }}>担当者:</span>
+          <select
+            value={staffFilter}
+            onChange={(e) => setStaffFilter(e.target.value)}
+            style={{
+              padding: '0.35rem 0.6rem',
+              borderRadius: '0.375rem',
+              border: '1px solid var(--border)',
+              background: '#fff',
+              fontSize: '0.75rem',
+              fontWeight: 600,
+              color: 'var(--text-main)',
+              cursor: 'pointer',
+            }}
+          >
+            <option value="all">全スタッフ表示</option>
+            <option value="unassigned">担当未割当のみ</option>
+            {profiles.map((p) => (
+              <option key={p.id} value={p.id}>
+                {p.display_name} ({getRoleInfo(p.role).label})
+              </option>
+            ))}
+          </select>
+        </div>
       </div>
 
       {/* Main Kanban Content */}
       <main className="main-layout">
         <KanbanBoard
-          tasks={tasks}
+          tasks={filteredTasks}
           viewFilter={viewFilter}
           onTaskMove={handleTaskMove}
           onTaskClick={handleCardClick}
@@ -410,6 +449,7 @@ export const Dashboard: React.FC = () => {
           }}
         />
       </main>
+
 
       {/* Modals */}
       <TaskDetailModal

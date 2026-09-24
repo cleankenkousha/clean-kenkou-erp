@@ -57,3 +57,39 @@ export interface Invoice {
   updated_at?: string
 }
 
+export type ScheduleType = 'appointment' | 'meeting' | 'away' | 'work' | 'private' | 'other'
+
+export interface StaffSchedule {
+  id: string
+  profile_id: string
+  job_id?: string | null
+  title: string
+  schedule_type: ScheduleType
+  start_time: string // ISO string
+  end_time: string // ISO string
+  is_all_day?: boolean
+  location?: string | null
+  customer_name?: string | null
+  customer_phone?: string | null
+  notes?: string | null
+  created_by?: string | null
+  created_at?: string
+  updated_at?: string
+  profiles?: {
+    display_name: string | null
+    role?: string
+  } | null
+  jobs?: {
+    id: string
+    title: string
+    status: JobStatus
+    customer_id?: string
+    customers?: {
+      name: string
+      phone?: string | null
+      address?: string | null
+    } | null
+  } | null
+}
+
+

@@ -7,6 +7,7 @@ export interface Profile {
   id: string
   display_name: string | null
   role: StaffRole
+  email?: string | null
   created_at?: string
   updated_at?: string
 }
@@ -29,7 +30,7 @@ export interface UseProfilesReturn {
   error: string | null
   refetch: () => Promise<void>
   updateProfile: (id: string, updates: Partial<Profile>) => Promise<boolean>
-  addStaff: (displayName: string, role?: StaffRole) => Promise<Profile | null>
+  addStaff: (displayName: string, role?: StaffRole, email?: string) => Promise<Profile | null>
   deleteStaff: (id: string) => Promise<boolean>
   syncAllProfiles: () => Promise<{ success: boolean; message: string }>
 }
@@ -43,15 +44,16 @@ const isUuid = (str: string) =>
 const VALID_ROLES = ['admin', 'sales', 'dispatcher', 'operator', 'clerk']
 
 const DEFAULT_PROFILES: Profile[] = [
-  { id: '00000000-0000-4000-8000-000000000001', display_name: '千葉正和', role: 'admin' },
-  { id: '00000000-0000-4000-8000-000000000002', display_name: '川上大輝', role: 'dispatcher' },
-  { id: '00000000-0000-4000-8000-000000000003', display_name: '廣田龍之介', role: 'sales' },
-  { id: '00000000-0000-4000-8000-000000000004', display_name: '原口真治', role: 'sales' },
-  { id: '00000000-0000-4000-8000-000000000005', display_name: '古川有佐', role: 'clerk' },
-  { id: '00000000-0000-4000-8000-000000000006', display_name: '木下りな', role: 'clerk' },
-  { id: '00000000-0000-4000-8000-000000000007', display_name: '矢部川麻衣子', role: 'clerk' },
-  { id: '00000000-0000-4000-8000-000000000008', display_name: '中原知美', role: 'operator' },
+  { id: '00000000-0000-4000-8000-000000000001', display_name: '千葉正和', role: 'admin', email: 'chiba@kenkou.co.jp' },
+  { id: '00000000-0000-4000-8000-000000000002', display_name: '川上大輝', role: 'dispatcher', email: 'kawakami@kenkou.co.jp' },
+  { id: '00000000-0000-4000-8000-000000000003', display_name: '廣田龍之介', role: 'sales', email: 'hirota@kenkou.co.jp' },
+  { id: '00000000-0000-4000-8000-000000000004', display_name: '原口真治', role: 'sales', email: 'haraguchi@kenkou.co.jp' },
+  { id: '00000000-0000-4000-8000-000000000005', display_name: '古川有佐', role: 'clerk', email: 'furukawa@kenkou.co.jp' },
+  { id: '00000000-0000-4000-8000-000000000006', display_name: '木下りな', role: 'clerk', email: 'kinoshita@kenkou.co.jp' },
+  { id: '00000000-0000-4000-8000-000000000007', display_name: '矢部川麻衣子', role: 'clerk', email: 'yabegawa@kenkou.co.jp' },
+  { id: '00000000-0000-4000-8000-000000000008', display_name: '中原知美', role: 'operator', email: 'nakahara@kenkou.co.jp' },
 ]
+
 
 export const useProfiles = (): UseProfilesReturn => {
   const [profiles, setProfiles] = useState<Profile[]>([])
@@ -313,7 +315,7 @@ export const useProfiles = (): UseProfilesReturn => {
   )
 
   const addStaff = useCallback(
-    async (displayName: string, role: StaffRole = 'operator'): Promise<Profile | null> => {
+    async (displayName: string, role: StaffRole = 'operator', email?: string): Promise<Profile | null> => {
       const trimmedName = displayName.trim()
       if (!trimmedName) return null
 
@@ -323,6 +325,7 @@ export const useProfiles = (): UseProfilesReturn => {
         id: newId,
         display_name: trimmedName,
         role: validRole,
+        email: email?.trim() || null,
         created_at: new Date().toISOString(),
       }
 
@@ -340,6 +343,7 @@ export const useProfiles = (): UseProfilesReturn => {
               id: newId,
               display_name: trimmedName,
               role: validRole,
+              email: email?.trim() || null,
               updated_at: new Date().toISOString(),
             },
           ])
@@ -357,6 +361,7 @@ export const useProfiles = (): UseProfilesReturn => {
     },
     []
   )
+
 
   const deleteStaff = useCallback(
     async (id: string): Promise<boolean> => {

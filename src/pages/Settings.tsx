@@ -20,13 +20,17 @@ import {
   ArrowUp,
   ArrowDown,
   ExternalLink,
+  Mail,
+  Key,
 } from 'lucide-react'
+import { supabase } from '../lib/supabase'
 import { useProfiles, getRoleInfo, StaffRole } from '../hooks/useProfiles'
 import { useJobs } from '../hooks/useJobs'
 import { useCustomers } from '../hooks/useCustomers'
 import { useCompanySettings, CompanyInfo, DEFAULT_COMPANY_INFO } from '../hooks/useCompanySettings'
 import { usePriceMaster } from '../hooks/usePriceMaster'
 import { Input, Button } from '../components/ui'
+
 
 export const Settings: React.FC = () => {
   const location = useLocation()
@@ -54,6 +58,7 @@ export const Settings: React.FC = () => {
   const { profiles, isLoading: isLoadingProfiles, updateProfile, addStaff, deleteStaff, syncAllProfiles } = useProfiles()
   const [newStaffName, setNewStaffName] = useState('')
   const [newStaffRole, setNewStaffRole] = useState<StaffRole>('operator')
+  const [newStaffEmail, setNewStaffEmail] = useState('')
   const [isSavedStaff, setIsSavedStaff] = useState(false)
   const [isSyncingStaff, setIsSyncingStaff] = useState(false)
 
@@ -94,13 +99,15 @@ export const Settings: React.FC = () => {
   const handleAddStaff = async (e: React.FormEvent) => {
     e.preventDefault()
     if (!newStaffName.trim()) return
-    const success = await addStaff(newStaffName.trim(), newStaffRole)
+    const success = await addStaff(newStaffName.trim(), newStaffRole, newStaffEmail.trim())
     if (success) {
       setNewStaffName('')
+      setNewStaffEmail('')
       setIsSavedStaff(true)
       setTimeout(() => setIsSavedStaff(false), 4000)
     }
   }
+
 
   const handleDeleteStaff = async (id: string, name: string) => {
     if (confirm(`スタッフ「${name}」を削除してもよろしいですか？`)) {
@@ -483,7 +490,7 @@ export const Settings: React.FC = () => {
                 {isSyncingStaff ? 'Supabase同期中...' : 'Supabaseへ全件同期'}
               </Button>
 
-              <form onSubmit={handleAddStaff} className="flex items-center space-x-2">
+              <form onSubmit={handleAddStaff} className="flex flex-wrap items-center gap-2">
                 <select
                   value={newStaffRole}
                   onChange={(e) => setNewStaffRole(e.target.value as StaffRole)}
@@ -497,10 +504,18 @@ export const Settings: React.FC = () => {
                 </select>
                 <Input
                   type="text"
-                  placeholder="新しいスタッフ名を入力..."
+                  placeholder="スタッフ氏名 *"
                   value={newStaffName}
                   onChange={(e) => setNewStaffName(e.target.value)}
-                  className="text-xs max-w-xs"
+                  className="text-xs max-w-[130px]"
+                  required
+                />
+                <Input
+                  type="email"
+                  placeholder="メールアドレス (任意)"
+                  value={newStaffEmail}
+                  onChange={(e) => setNewStaffEmail(e.target.value)}
+                  className="text-xs max-w-[180px]"
                 />
                 <Button type="submit" variant="primary" size="sm">
                   <Plus className="w-4 h-4 mr-1" />
@@ -522,17 +537,18 @@ export const Settings: React.FC = () => {
           ) : (
             <div className="border border-border rounded-lg overflow-hidden">
               <table className="w-full text-left text-xs">
-                <thead className="bg-slate-50 text-sub border-b border-border">
+                <thead className="bg-slate-50 text-sub border-b border-border font-semibold">
                   <tr>
                     <th className="py-3 px-4">表示名（スタッフ名）</th>
                     <th className="py-3 px-4">役割 / 担当区分</th>
+                    <th className="py-3 px-4">ログインメールアドレス</th>
                     <th className="py-3 px-4 text-right">操作</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-border">
                   {profiles.length === 0 ? (
                     <tr>
-                      <td colSpan={3} className="py-6 text-center text-sub">
+                      <td colSpan={4} className="py-6 text-center text-sub">
                         まだ登録されたスタッフはいません
                       </td>
                     </tr>
@@ -570,7 +586,58 @@ export const Settings: React.FC = () => {
                               </select>
                             </div>
                           </td>
+                          <td className="py-3 px-4">
+                            <div className="flex items-center space-x-1.5 text-slate-700">
+                              <Mail className="w-3.5 h-3.5 text-slate-400 flex-shrink-0" />
+                              <span className="font-mono text-[11px]">
+                                {profile.email || <span className="text-slate-400">未設定</span>}
+                              </span>
+                              <button
+                                type="button"
+                                onClick={async () => {
+                                  const newEmail = prompt('ログイン用メールアドレスを入力してください', profile.email || '')
+                                  if (newEmail !== null) {
+                                    await updateProfile(profile.id, { email: newEmail.trim() || null })
+                                    setIsSavedStaff(true)
+                                    setTimeout(() => setIsSavedStaff(false), 4000)
+                                  }
+                                }}
+                                className="text-slate-400 hover:text-slate-700 ml-1"
+                                title="メールアドレスを変更"
+                              >
+                                <Edit2 className="w-3 h-3" />
+                              </button>
+                            </div>
+                          </td>
                           <td className="py-3 px-4 text-right space-x-1">
+                            <Button
+                              type="button"
+                              variant="outline"
+                              size="sm"
+                              onClick={async () => {
+                                if (!profile.email) {
+                                  alert('パスワード再設定を行うには、まずメールアドレスを登録してください。')
+                                  return
+                                }
+                                if (confirm(`「${profile.email}」宛にパスワードリセット・登録リンクを送信しますか？`)) {
+                                  try {
+                                    const { error: resetErr } = await supabase.auth.resetPasswordForEmail(profile.email)
+                                    if (resetErr) {
+                                      alert(`送信エラー: ${resetErr.message}`)
+                                    } else {
+                                      alert(`✅ 「${profile.email}」へパスワード再設定メールを送信しました！`)
+                                    }
+                                  } catch (err: any) {
+                                    alert(`エラー: ${err.message || String(err)}`)
+                                  }
+                                }
+                              }}
+                              className="text-[11px] py-1 px-2 text-slate-600 hover:text-slate-900"
+                              title="パスワード再設定メール送信"
+                            >
+                              <Key className="w-3 h-3 mr-1 text-amber-600" />
+                              パスワード設定
+                            </Button>
                             <Button
                               type="button"
                               variant="outline"
@@ -583,15 +650,16 @@ export const Settings: React.FC = () => {
                                   setTimeout(() => setIsSavedStaff(false), 4000)
                                 }
                               }}
+                              className="text-[11px] py-1 px-2"
                             >
-                              名前を変更
+                              名前変更
                             </Button>
                             <Button
                               type="button"
                               variant="outline"
                               size="sm"
                               onClick={() => handleDeleteStaff(profile.id, profile.display_name || 'スタッフ')}
-                              className="hover:bg-rose-50 hover:text-rose-700 hover:border-rose-200"
+                              className="hover:bg-rose-50 hover:text-rose-700 hover:border-rose-200 py-1 px-2"
                             >
                               <Trash2 className="w-3 h-3 text-rose-500" />
                             </Button>
@@ -606,6 +674,7 @@ export const Settings: React.FC = () => {
           )}
         </div>
       )}
+
 
       {/* Tab 3: 回収品目・単価マスタ（編集・追加可能） */}
       {activeTab === 'items' && (

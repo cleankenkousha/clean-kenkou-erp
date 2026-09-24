@@ -4,5 +4,6 @@ export * from './useCustomers'
 export * from './useProfiles'
 export * from './useCompanySettings'
 export * from './usePriceMaster'
+export * from './useStaffSchedules'
 
 
