@@ -11,7 +11,7 @@ import {
   getStatusRank,
   resetStepsAfterStatus,
 } from '../components/features/TaskDetailModal'
-import { NewTaskModal } from '../components/features/NewTaskModal'
+import { NewTaskModal, NewTaskSubmissionData } from '../components/features/NewTaskModal'
 import { ExportModal } from '../components/features/ExportModal'
 import { ExcelImportModal } from '../components/features/ExcelImportModal'
 import { MobileQuoteModal, InitialQuoteData } from '../components/features/MobileQuoteModal'
@@ -251,9 +251,9 @@ export const Dashboard: React.FC = () => {
     })
   }
 
-  // 新規タスク登録（Supabase DB への確実な保存連携）
+  // 新規タスク登録（Supabase DB への確実な保存連携 ＆ 営業スケジュール自動連携）
   const handleCreateNewTask = async (
-    newTaskData: Omit<ProcessTask, 'id' | 'updatedAt'>,
+    newTaskData: NewTaskSubmissionData,
     shouldPrint = false
   ) => {
     try {
@@ -262,23 +262,46 @@ export const Dashboard: React.FC = () => {
         return
       }
 
-      // 1. 顧客の作成
-      const { data: customerData, error: customerErr } = await supabase
-        .from('customers')
-        .insert([
-          {
-            name: newTaskData.customer.trim(),
-            phone: newTaskData.tel?.trim() || null,
-            address: newTaskData.address?.trim() || null,
-          },
-        ])
-        .select()
-        .single()
+      // 1. 既存顧客の検索または新規作成
+      let customerId: string | null = null
+      let customerRecord = {
+        name: newTaskData.customer.trim(),
+        phone: newTaskData.tel?.trim() || null,
+        address: newTaskData.address?.trim() || null,
+      }
 
-      if (customerErr || !customerData) {
-        console.error('顧客登録エラー:', customerErr)
-        alert(`顧客の登録に失敗しました: ${customerErr?.message || '不明なエラー'}`)
-        return
+      // 既存顧客チェック (名前または電話番号で既存を照合)
+      let query = supabase.from('customers').select('id, name, phone, address')
+      if (newTaskData.tel?.trim()) {
+        query = query.eq('phone', newTaskData.tel.trim())
+      } else {
+        query = query.eq('name', newTaskData.customer.trim())
+      }
+      const { data: existingCustomer } = await query.maybeSingle()
+
+      if (existingCustomer?.id) {
+        customerId = existingCustomer.id
+        // 住所等に更新があれば更新
+        if (newTaskData.address?.trim() && !existingCustomer.address) {
+          await supabase
+            .from('customers')
+            .update({ address: newTaskData.address.trim() })
+            .eq('id', customerId)
+        }
+      } else {
+        // 新規作成
+        const { data: createdCustomer, error: customerErr } = await supabase
+          .from('customers')
+          .insert([customerRecord])
+          .select()
+          .single()
+
+        if (customerErr || !createdCustomer) {
+          console.error('顧客登録エラー:', customerErr)
+          alert(`顧客の登録に失敗しました: ${customerErr?.message || '不明なエラー'}`)
+          return
+        }
+        customerId = createdCustomer.id
       }
 
       // 2. 担当スタッフの特定および自動プロファイル登録
@@ -298,16 +321,30 @@ export const Dashboard: React.FC = () => {
         }
       }
 
+      // スケジュール連動時は、選択した営業マンを案件の担当者に設定
+      const finalAssignedTo =
+        newTaskData.scheduleParams?.enabled && newTaskData.scheduleParams.salesStaffId
+          ? newTaskData.scheduleParams.salesStaffId
+          : assignedUuid
+
+      const finalStatus: JobStatus =
+        newTaskData.scheduleParams?.enabled ? 'quoting' : 'received'
+
       // 3. 案件の作成
       const { data: jobData, error: jobErr } = await supabase
         .from('jobs')
         .insert([
           {
-            customer_id: customerData.id,
+            customer_id: customerId,
             title: newTaskData.taskType.trim() || '臨時収集',
-            status: 'received',
-            assigned_to: assignedUuid,
-            notes: null,
+            status: finalStatus,
+            scheduled_date: newTaskData.scheduleParams?.enabled
+              ? newTaskData.scheduleParams.date
+              : null,
+            assigned_to: finalAssignedTo,
+            notes: newTaskData.scheduleParams?.notes
+              ? `【受付時メモ】\n${newTaskData.scheduleParams.notes}`
+              : null,
           },
         ])
         .select()
@@ -317,6 +354,32 @@ export const Dashboard: React.FC = () => {
         console.error('新規受付保存エラー:', jobErr)
         alert(`案件の作成に失敗しました: ${jobErr.message}`)
         return
+      }
+
+      // 4. 営業マンスケジュール枠への自動連携
+      if (newTaskData.scheduleParams?.enabled && newTaskData.scheduleParams.salesStaffId) {
+        const sp = newTaskData.scheduleParams
+        const startIso = `${sp.date}T${sp.startHour}:00+09:00`
+        const endIso = `${sp.date}T${sp.endHour}:00+09:00`
+        const scheduleTitle = sp.title || `${newTaskData.customer.trim()}様 見積訪問`
+
+        const { error: schErr } = await supabase.from('staff_schedules').insert({
+          id: crypto.randomUUID(),
+          profile_id: sp.salesStaffId,
+          job_id: jobData ? jobData.id : null,
+          title: scheduleTitle,
+          schedule_type: 'appointment',
+          start_time: startIso,
+          end_time: endIso,
+          location: newTaskData.address?.trim() || '',
+          customer_name: newTaskData.customer.trim(),
+          customer_phone: newTaskData.tel?.trim() || '',
+          notes: sp.notes || newTaskData.taskType.trim(),
+        })
+
+        if (schErr) {
+          console.warn('営業スケジュールへの自動連携 notice:', schErr.message)
+        }
       }
 
       const createdTask: ProcessTask = {
