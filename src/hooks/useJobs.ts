@@ -75,6 +75,9 @@ export const useJobs = (): UseJobsReturn => {
   const updateJobStatus = useCallback(
     async (jobId: string, newStatus: JobStatus): Promise<boolean> => {
       try {
+        // DBに実際に保存されたステータスを追跡する変数
+        let actualStatus: JobStatus = newStatus
+
         let { error: updateError } = await supabase
           .from('jobs')
           .update({ status: newStatus })
@@ -88,6 +91,7 @@ export const useJobs = (): UseJobsReturn => {
             .eq('id', jobId)
           if (!fallbackRes.error) {
             updateError = null
+            actualStatus = 'arranged' // フォールバック後の実際の値を反映
           }
         }
 
@@ -95,10 +99,10 @@ export const useJobs = (): UseJobsReturn => {
           throw new Error(updateError.message)
         }
 
-        // ローカルステートを直ちに更新
+        // ローカルステートをDBに保存された実際の値で更新
         setJobs((prevJobs) =>
           prevJobs.map((job) =>
-            job.id === jobId ? { ...job, status: newStatus } : job
+            job.id === jobId ? { ...job, status: actualStatus } : job
           )
         )
         return true
@@ -168,7 +172,7 @@ export const useJobs = (): UseJobsReturn => {
           throw new Error(updateError.message)
         }
 
-        // ローカルステートを直ちに更新 (DB に送信した検証済みデータのみを適用)
+        // ローカルステートをDBに保存された実際の値で更新（フォールバック後の cleanUpdates を反映）
         setJobs((prevJobs) =>
           prevJobs.map((job) => {
             if (job.id !== jobId) return job

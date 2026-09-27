@@ -209,10 +209,26 @@ export const useStaffSchedules = (): UseStaffSchedulesReturn => {
     []
   )
 
-  // スケジュール更新
+  // スケジュール更新（ホワイトリストによるカラム制限）
   const updateSchedule = useCallback(async (id: string, updates: Partial<StaffSchedule>): Promise<boolean> => {
+    // staff_schedules テーブルの有効な更新可能カラムのみを安全に抽出（ホワイトリスト）
+    const allowedKeys = [
+      'profile_id', 'job_id', 'title', 'schedule_type',
+      'start_time', 'end_time', 'is_all_day',
+      'location', 'customer_name', 'customer_phone', 'notes',
+    ]
+    const cleanUpdates: Record<string, any> = {}
+    for (const key of Object.keys(updates)) {
+      if (allowedKeys.includes(key)) {
+        const val = (updates as any)[key]
+        if (val !== undefined) {
+          cleanUpdates[key] = val
+        }
+      }
+    }
+
     setSchedules((prev) => {
-      const next = prev.map((s) => (s.id === id ? { ...s, ...updates, updated_at: new Date().toISOString() } : s))
+      const next = prev.map((s) => (s.id === id ? { ...s, ...cleanUpdates, updated_at: new Date().toISOString() } : s))
       saveToLocal(next)
       return next
     })
@@ -221,7 +237,7 @@ export const useStaffSchedules = (): UseStaffSchedulesReturn => {
       const { error: updateErr } = await supabase
         .from('staff_schedules')
         .update({
-          ...updates,
+          ...cleanUpdates,
           updated_at: new Date().toISOString(),
         })
         .eq('id', id)

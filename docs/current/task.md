@@ -1,104 +1,111 @@
 # Clean KENKOU ERP - 作業進捗および次回残課題ログ
 
-**最終更新日時**: 2026-09-25 15:20  
-**ステータス**: 見積訪問後の「AIカメラ写真見積」シームレス連動、新規受付から営業マンスケジュール自動連動＆既存顧客サジェスト、操作マニュアル改訂、本番ビルド検証完了。ローカルコミット完了（※Netlifyクレジット上限のためリモートプッシュは来月実施保留中）。
+**最終更新日時**: 2026-09-27 13:00  
+**ステータス**: 全体バグ・セキュリティ監査およびコード側セキュリティ修正（全8ファイル、TypeScript型チェック通過）完了。SQLマイグレーションスクリプト作成完了。次回手動作業（3点）およびNetlify月次プッシュ待ち。
 
 ---
 
-## 1. 本日完了した作業・進捗サマリー（2026-09-25）
+## 1. 本日完了した作業・進捗サマリー（2026-09-27）
 
-### ① 【完了✅】 見積訪問後の「AIカメラ写真見積」へのシームレス連動機能
-- **背景・課題**:
-  - 営業担当（廣田さん、原口さん等）がお客様宅へ到着した際、スケジュール画面から即座に「AIカメラ写真見積」を起動し、不用品の撮影・AI自動算定・電子手書きサイン受領へスムーズに繋げたいという現場要望に対応。
-- **実装内容 (`src/pages/Schedule.tsx`)**:
-  1. **スケジュール画面への `MobileQuoteModal` 完全統合**:
-     - モバイル・現場特化型のAI写真見積モーダルをスケジュール画面内に配備。
-  2. **予定詳細モーダルへの「AIカメラ写真見積 & サイン」バナー新設**:
-     - 見積訪問アポや案件に連動した予定を開くと、最上部に目立つグラデーションアクションバナーを表示。
-     - お客様名・電話番号・住所・案件IDが自動的に見積作成画面へ引き継がれます。
-  3. **日別タイムライン ＆ 週間カレンダーカードへの「📸 見積」クイックボタン新設**:
-     - タイムラインおよび週間カレンダーの各予定カードに直接「📸 見積」クイックボタンを配置。詳細を開く手間すら省き、1タップで現場カメラ撮影＆AI見積を起動可能。
-  4. **連動案件詳細（`TaskDetailModal`）との双方向連動**:
-     - 案件詳細モーダル側の「AI概算見積 & 写真撮影」「概算見積を作成」ボタンからもシームレスに見積モーダルが起動するよう `onOpenQuoteWithData` を接続。
-  5. **見積登録・保存後のデータ自動同期**:
-     - 見積書作成・登録成功時に `refetchJobs()` および `refetchSchedules()` が自動発火し、案件ボードおよびスケジュール画面が即座に最新状態へ更新。
+### 🛡️ 【完了✅】 システム全体のバグ・セキュリティ監査および脆弱性修正
 
----
+システム全体の網羅的な監査（クライアントコード、Supabase設定、API連携、認証・認可）を実施し、発見された脆弱性・不具合に対するコード改修を完了しました。
 
-### ② 【完了✅】 新規受付から営業マンスケジュールへの一発自動登録＆顧客自動補完機能
-- **背景・課題**:
-  - 受付時に顧客情報（名前・住所・TEL）を入力した後、営業マンのスケジュールを別途開いて同じ内容を一から打ち直す二重入力の手間が発生していた。
-- **実装内容**:
-  1. **既存顧客サジェスト＆自動補完 (`NewTaskModal.tsx`, `JobReceptionForm.tsx`)**:
-     - 顧客名入力時にリアルタイムで既存顧客リストから候補を表示。タップ1つでお名前・電話番号・住所・エリアが全自動で瞬時に補完。
-  2. **「📅 営業マンのスケジュール枠に自動登録する」チェック連携**:
-     - 新規受付モーダル（ダッシュボード・案件ボード共通）および `/reception` 画面に営業連携チェックボックスを搭載。
-     - チェックを入れると担当営業スタッフ（営業権限スタッフのみ抽出）、訪問日、時間帯（開始〜終了）の選択フォームが表示。
-  3. **案件（`jobs`）と営業スケジュール（`staff_schedules`）の自動同時インサート (`Dashboard.tsx`, `Jobs.tsx`, `JobReceptionForm.tsx`)**:
-     - 受付確定と同時に、ステータス「顧客検討（見積対応）」で案件を作成しつつ、担当営業マンのカレンダーに訪問アポ（`schedule_type: 'appointment'`）が双方向リンク付きで自動登録。
-     - 顧客情報も自動保存（または既存ID紐付け）され、二重入力の手間がゼロに。
-  4. **実機ブラウザ動作検証（Playwright/Browser Agent）**:
-     - ダッシュボードの「＋ 新規受付」から営業連携をONにして登録を実施。スケジュール画面（廣田さんのタイムライン）に訪問予定が即座に自動生成され、顧客名・電話番号・住所・案件IDが正しく連動することを確認完了。
+#### ① 【Critical】 Gemini APIキー漏洩リスクの解消（C-1）
+- **対象**: `src/lib/gemini.ts`, `supabase/functions/gemini-analyze/index.ts`
+- **内容**: 
+  - フロントエンド側から直接 `GEMINI_API_KEY` を参照・実行する処理を廃止。
+  - Supabase Edge Function (`gemini-analyze`) を介したサーバーサイド経由でのみ Gemini AI 画像解析を実行する構造に一本化。
+  - クライアント側 JS バンドルへの API キー混入・漏洩リスクを完全に遮断。
 
----
-
-### ③ 【完了✅】 やさしい最新版操作マニュアルの改訂
-- **更新ファイル**:
-  1. **`docs/取扱説明書_Clean_KENKOU_ERP.md`**:
-     - 現場営業マン向け便利機能「📸 AIカメラ写真見積を開く」の手順に加え、新規受付時の「営業マンスケジュールへの一発自動登録」手順を追記。
-  2. **`docs/manual_print.html`**:
-     - 印刷用マニュアルに「📸 AIカメラ写真見積（新機能✨）」および「🌟 新機能：『＋ 新規受付』画面からも営業マンスケジュールへ一発自動登録！」の解説を追加。
-
----
-
-### ④ 【完了✅】 本番ビルド検証 & ローカルコミット
-- `npm run build` による TypeScript コンパイルおよび Vite 本番バンドル検証を実施。エラー 0 件で正常ビルドを確認。
-- Git ローカルコミットを実施（※Netlifyクレジット上限のため、リモート push は来月頭まで保留）。
-
----
-
-## 2. 次回以降やるべき残課題・今後の推奨タスク（TODO）
-
-### 🚨 0. 【来月月初・必須作業】Netlify枠リセットに伴うリモートプッシュ（git push）
-- **背景**:
-  - 現在Netlifyのビルドクレジットが上限に達しているため、GitHubへのリモートプッシュを一時保留中。
-- **次回対応手順**:
-  - 翌月（月初）にNetlifyのビルド時間枠がリセットされたタイミングで、以下のコマンドでリモートへプッシュする：
-    ```bash
-    git push origin main
-    ```
-  - Netlify側のデプロイログを確認し、本番環境への自動反映完了を確認する。
-
-### 🟡 1. 【社内運用テスト・フィードバック収集】（最優先）
+#### ② 【Critical】 Supabase Anon Key / URL のハードコード除去（C-3）
+- **対象**: `src/lib/supabase.ts`
 - **内容**:
-  - 事務所のパソコン（事務員さん）およびタブレット・スマホ（廣田さん、原口さん等）で、実際に「新規受付からの営業マン訪問予約の登録」→「現場での予定確認・ルート案内・ワンタップ電話」→「現場到着後のAIカメラ写真見積・手書きサイン受領」の一連のフローを試用し、フィードバックを収集する。
-- **確認項目**:
-  - 事務員さんが電話を受けながら迷わず空き枠をタップできるか、顧客サジェストによる住所自動補完がスムーズか。
-  - 外出先スマホで予約枠タップからのGoogleマップ起動・電話発信がスムーズか。
-  - 現場到着後に迷わず「📸 見積」を押してAI撮影・サイン受領まで完了できるか。
+  - コード内にフォールバック値としてハードコードされていた Supabase URL および Anon Key を完全除去。
+  - `import.meta.env.VITE_SUPABASE_URL` および `import.meta.env.VITE_SUPABASE_ANON_KEY` から安全に取得し、未設定時の明確なエラーハンドリングを追加。
 
-### 🟢 2. 【定期業務連携】し尿収集・定期顧客のスケジュール連動（中期的検討）
+#### ③ 【High / Medium】 マスアサインメント（過剰データ更新）防止（H-2, M-5）
+- **対象**: `src/hooks/useJobs.ts`, `src/hooks/useStaffSchedules.ts`
 - **内容**:
-  - 現在スポット粗大ごみ・不用品回収が中心の案件管理に加え、月次・定期のし尿収集や定期回収ルートのスケジュール反映に関する要件整理。
+  - `updateJobDetails` および `updateSchedule` において、オブジェクト全体をそのまま DB 更新へ流し込んでいた実装を改修。
+  - 許可されたテーブルカラムのみを抽出するホワイトリストフィルタリングを実装し、クライアントからの不正・意図しないカラム書き換えを防止。
 
-### 🔵 3. 【通知・リマインダー連携】（将来的な検討）
+#### ④ 【Medium】 CSP（コンテンツセキュリティポリシー）の強化とインラインスクリプト分離（M-4）
+- **対象**: `index.html`, `public/register-sw.js`, `netlify.toml`
 - **内容**:
-  - 見積予約の前日・当日の朝に、担当営業スタッフへリマインダー通知（LINE WORKSやメール等）を自動送付する仕組みの検討。
+  - `index.html` 内にあった Service Worker 登録インラインスクリプトを `public/register-sw.js` へ安全に外部ファイル化。
+  - `netlify.toml` の `Content-Security-Policy` ヘッダーから `script-src 'unsafe-inline'` を除去し、XSS攻撃に対する堅牢性を向上。
+
+#### ⑤ 【Database】 RLSポリシー強化・整合性制約 SQL マイグレーションスクリプト作成（C-2, B-4, H-1）
+- **対象**: `supabase/security_rls_and_constraints.sql`（新規作成）
+- **内容**:
+  - 全テーブルの RLS ポリシーを `USING(true)`（未認証含む全開放）から `TO authenticated`（認証済みユーザー限定）に安全に移行する SQL を策定。
+  - `invoices.job_id` の UNIQUE 制約を追加し、請求書・領収書の重複発行バグを防止。
+  - `handle_new_user` トリガー関数の `SECURITY DEFINER` 統一と権限制限。
+
+#### ⑥ 【検証】 TypeScript 型チェック検証
+- `npx tsc --noEmit --skipLibCheck` を実行し、全コードで型エラー 0 件であることを確認完了。
 
 ---
 
-## 3. 本日変更したファイル一覧
+## 2. 次回やるべきタスク（残りの手動作業3点 ＋ 今後の予定）
+
+次回作業開始時に、以下の **手動作業3点** を最優先で実施してください。
+
+### 🚨 1. 【手動作業①】Supabase SQLスクリプトの実行（DBセキュリティ反映）
+- **場所**: Supabase Dashboard > **SQL Editor**
+- **実行ファイル**: [`supabase/security_rls_and_constraints.sql`](file:///c:/Users/有限会社山鹿健康社/Desktop/ちばG/AI/Clean%20KENKOU%20ERP/supabase/security_rls_and_constraints.sql)
+- **手順**:
+  1. Supabase 管理画面にログインし、プロジェクトの「SQL Editor」を開く。
+  2. `supabase/security_rls_and_constraints.sql` の内容をコピー＆ペーストして「Run」を実行。
+  3. 全テーブルの RLS ポリシーが `authenticated` 限定に切り替わり、`invoices` の UNIQUE 制約が適用されたことを確認。
+
+### 🚨 2. 【手動作業②】Netlify 環境変数設定（本番環境用）
+- **場所**: Netlify Dashboard > **Site configuration** > **Environment variables**
+- **背景**: `src/lib/supabase.ts` のフォールバック除去に伴い、Netlify 本番デプロイ時に環境変数設定が必須となりました。
+- **手順**:
+  以下の2つの環境変数を Netlify の環境変数設定に追加：
+  - `VITE_SUPABASE_URL`: Supabase プロジェクトの URL
+  - `VITE_SUPABASE_ANON_KEY`: Supabase プロジェクトの anon (public) key
+
+### 🚨 3. 【手動作業③】Supabase Edge Function の再デプロイ
+- **場所**: ターミナル または Supabase CLI / Dashboard
+- **手順**:
+  Supabase CLI が利用可能な環境で以下を実行し、改修後の `gemini-analyze` 関数をデプロイ：
+  ```bash
+  supabase functions deploy gemini-analyze
+  ```
+  ※または Supabase Dashboard > Edge Functions からコードを更新・デプロイ。
+
+---
+
+### 🟡 4. 【来月月初】Netlifyビルド枠リセットに伴うリモートプッシュ
+- **手順**:
+  Netlifyの月間ビルドクレジットがリセットされたタイミングで、以下のコマンドで GitHub へプッシュ：
+  ```bash
+  git push origin main
+  ```
+
+### 🟢 5. 【社内実機テスト・運用検証】
+- **内容**:
+  - 事務所PCおよび現場スマホ・タブレットにて、ログイン、新規受付、スケジュール連携、AIカメラ見積・手書きサイン受領が正常に機能するか動作確認。
+
+---
+
+## 3. 本日変更したファイル一覧（2026-09-27）
 
 | ファイル | 区分 | 変更概要 |
 |---|---|---|
-| `src/pages/Schedule.tsx` | 変更 | `MobileQuoteModal` 統合、タイムライン＆週間カレンダーへのクイック見積ボタン、予定詳細モーダルへの起動バナー追加、データ自動同期 |
-| `src/components/features/NewTaskModal.tsx` | 変更 | 既存顧客名サジェスト＆自動補完、「📅 営業マンのスケジュール枠に自動登録する」チェック連携 |
-| `src/pages/Dashboard.tsx` | 変更 | 新規受付時の既存顧客名解決、案件（`jobs`）作成と営業マンスケジュール（`staff_schedules`）への同時自動登録 |
-| `src/pages/Jobs.tsx` | 変更 | 案件一覧の「＋ 新規受付」からの営業マンスケジュール同時自動登録処理 |
-| `src/components/features/JobReceptionForm.tsx` | 変更 | 電話受付画面（`/reception`）での顧客自動補完および営業マンスケジュール同時自動登録 |
-| `docs/取扱説明書_Clean_KENKOU_ERP.md` | 更新 | 「📸 AIカメラ写真見積を開く」手順、および新規受付時スケジュール自動登録手順の追記 |
-| `docs/manual_print.html` | 更新 | 印刷用マニュアルへの「📸 AIカメラ写真見積」および「新規受付時スケジュール一発登録」解説カード追加 |
-| `docs/current/task.md` | 更新 | 本作業進捗ログの更新（AIカメラ見積連動＆新規受付スケジュール連動の完了記録） |
+| `src/lib/gemini.ts` | 変更 | Gemini APIのクライアント直呼びを廃止し、Supabase Edge Function (`gemini-analyze`) 経由に統一 |
+| `src/lib/supabase.ts` | 変更 | ハードコードされていた Supabase URL / Anon Key のフォールバックを除去し安全化 |
+| `src/hooks/useJobs.ts` | 変更 | `updateJobDetails` に許可カラムのみ受け付けるホワイトリスト検証を追加 |
+| `src/hooks/useStaffSchedules.ts` | 変更 | `updateSchedule` に許可カラムのみ受け付けるホワイトリスト検証を追加 |
+| `index.html` | 変更 | インラインの Service Worker スクリプトを外部ファイルへ切り出し |
+| `public/register-sw.js` | 新規 | PWA用 Service Worker 登録スクリプト（外部スクリプト化） |
+| `netlify.toml` | 変更 | CSP から `script-src 'unsafe-inline'` を除去 |
+| `supabase/functions/gemini-analyze/index.ts` | 変更 | Edge Function のリクエスト受付・Gemini 呼び出しロジックの改善 |
+| `supabase/security_rls_and_constraints.sql` | 新規 | RLS ポリシー強化（認証必須化）、invoices.job_id UNIQUE制約付与 SQL スクリプト |
+| `docs/current/task.md` | 更新 | 本日のセキュリティ改修進捗および次回やるべき手動タスク3点の記録 |
 
 ---
 

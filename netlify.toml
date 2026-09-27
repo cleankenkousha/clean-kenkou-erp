@@ -2,9 +2,10 @@
   command = "npm run build"
   publish = "dist"
 
-[build.environment]
-  VITE_SUPABASE_URL = "https://cnwlcxfhxaugqtatibav.supabase.co"
-  VITE_SUPABASE_ANON_KEY = "sb_publishable_PSK5mj-C1gUN6hzJBv2YJA_MIIRgDM5"
+# ── 環境変数 ──
+# VITE_SUPABASE_URL, VITE_SUPABASE_ANON_KEY は
+# Netlify Dashboard > Site settings > Environment variables で設定してください。
+# セキュリティ上、このファイルにはハードコードしません。
 
 # ── セキュリティヘッダー (全ページ共通) ──
 [[headers]]
@@ -24,8 +25,9 @@
     # - Supabase API・Realtime・Auth を明示許可
     # - Google Fonts を許可
     # - data: URI (電子サイン描画に必要)
-    # - 'unsafe-inline' はTailwind/Vite産のスタイルに対応するため style-src のみ許可
-    Content-Security-Policy = "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' data: blob: https:; connect-src 'self' https://cnwlcxfhxaugqtatibav.supabase.co wss://cnwlcxfhxaugqtatibav.supabase.co https://cnwlcxfhxaugqtatibav.supabase.co:*; frame-ancestors 'none'; object-src 'none'; base-uri 'self';"
+    # - style-src の 'unsafe-inline' はTailwind/Vite産のスタイルに対応するため許可
+    # - script-src から 'unsafe-inline' を除去（インラインスクリプトは外部ファイルに移行済み）
+    Content-Security-Policy = "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' data: blob: https:; connect-src 'self' https://cnwlcxfhxaugqtatibav.supabase.co wss://cnwlcxfhxaugqtatibav.supabase.co https://cnwlcxfhxaugqtatibav.supabase.co:*; frame-ancestors 'none'; object-src 'none'; base-uri 'self';"
 
 # sw.js は絶対にキャッシュしない（常に最新を取得）
 [[headers]]
