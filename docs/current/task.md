@@ -45,7 +45,19 @@
   git push origin main
   ```
 
-### 🟢 2. 【社内実機テスト・運用検証】
+### 🔴 2. 【プッシュ後】AI画像解析機能（Gemini）の動作確認
+- **背景**: AI機能はGoogle AI Studio発行のAPIキーを使い、Supabase Edge Function（`gemini-analyze`）経由でGemini APIに画像を送って解析する仕組み。Edge Functionは本日デプロイ済みだが、フロントエンドコードはまだプッシュされていないため、プッシュ後に正常動作するか確認が必要。
+- **確認手順**:
+  1. Supabase Dashboard > 左メニュー「**Edge Functions**」> `gemini-analyze` を選択
+  2. 「**Secrets**」タブに `GEMINI_API_KEY` が設定されているか確認
+  3. 未設定の場合、Google AI Studio（https://aistudio.google.com/app/apikey）で発行したAPIキーを登録
+  4. 本番サイトでAIカメラ見積を実行し、画像解析が正常に動作するかテスト
+
+### 🟠 3. 【推奨】MobileQuoteModal の不要なAPIキー入力UI削除
+- **内容**: `src/components/features/MobileQuoteModal.tsx` に「🔑 APIキーを更新・診断」ボタンが残存している。Edge Function経由に移行済みのため不要。セキュリティ上の実害はないがユーザーの混乱を招く可能性がある。
+- **対象箇所**: 368行目の `localStorage.getItem('clean_kenkou_gemini_api_key')` および790〜816行目のAPIキー入力ダイアログ
+
+### 🟢 4. 【社内実機テスト・運用検証】
 - **内容**:
   - 事務所PCおよび現場スマホ・タブレットにて、ログイン、新規受付、スケジュール連携、AIカメラ見積・手書きサイン受領が正常に機能するか動作確認。
 
