@@ -152,13 +152,13 @@ SECURITY DEFINER
 SET search_path = public
 AS $$
 BEGIN
-    INSERT INTO public.profiles (user_id, display_name, role)
+    INSERT INTO public.profiles (id, display_name, role)
     VALUES (
         NEW.id,
         COALESCE(NEW.raw_user_meta_data->>'display_name', split_part(NEW.email, '@', 1), 'ユーザー'),
         'operator'
     )
-    ON CONFLICT (user_id) DO NOTHING;
+    ON CONFLICT (id) DO NOTHING;
     RETURN NEW;
 END;
 $$;
@@ -179,20 +179,7 @@ BEGIN
 END
 $$;
 
--- -----------------------------------------------------------------
--- 4. profiles.user_id に UNIQUE 制約を確認（ON CONFLICT 用）
--- -----------------------------------------------------------------
-DO $$
-BEGIN
-    IF NOT EXISTS (
-        SELECT 1 FROM pg_constraint
-        WHERE conrelid = 'public.profiles'::regclass
-          AND conname = 'profiles_user_id_key'
-    ) THEN
-        ALTER TABLE public.profiles ADD CONSTRAINT profiles_user_id_key UNIQUE (user_id);
-    END IF;
-END
-$$;
+
 
 -- =================================================================
 -- 実行後の確認クエリ
