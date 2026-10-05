@@ -99,42 +99,48 @@ serve(async (req) => {
       )
     }
 
-    // リクエストボディの解析
-    const { imageUrls, masterItems } = await req.json()
-    if (!imageUrls || !Array.isArray(imageUrls) || imageUrls.length === 0) {
-      return new Response(
-        JSON.stringify({ error: 'imageUrls array is required' }),
-        { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-      )
-    }
+    // リクエストボディの解析 (Base64直接送信 または imageUrls)
+    const { images, imageUrls, masterItems } = await req.json()
 
-    // 画像URL数の制限チェック
-    if (imageUrls.length > MAX_IMAGE_URLS) {
-      return new Response(
-        JSON.stringify({ error: `画像は最大${MAX_IMAGE_URLS}枚までです（${imageUrls.length}枚指定されました）` }),
-        { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-      )
-    }
+    let validImages: { mimeType: string; data: string }[] = []
 
-    // URLの基本的なバリデーション
-    for (const url of imageUrls) {
-      if (typeof url !== 'string' || (!url.startsWith('https://') && !url.startsWith('http://localhost'))) {
+    if (images && Array.isArray(images) && images.length > 0) {
+      if (images.length > MAX_IMAGE_URLS) {
         return new Response(
-          JSON.stringify({ error: '無効な画像URLが含まれています。HTTPS URLのみ許可されます。' }),
+          JSON.stringify({ error: `画像は最大${MAX_IMAGE_URLS}枚までです（${images.length}枚指定されました）` }),
           { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
         )
       }
-    }
+      validImages = images
+        .filter((img: any) => img && typeof img.data === 'string' && img.data.length > 0)
+        .map((img: any) => ({
+          mimeType: typeof img.mimeType === 'string' ? img.mimeType : 'image/jpeg',
+          data: img.data,
+        }))
+    } else if (imageUrls && Array.isArray(imageUrls) && imageUrls.length > 0) {
+      // 画像URL数の制限チェック
+      if (imageUrls.length > MAX_IMAGE_URLS) {
+        return new Response(
+          JSON.stringify({ error: `画像は最大${MAX_IMAGE_URLS}枚までです（${imageUrls.length}枚指定されました）` }),
+          { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        )
+      }
 
-    // 画像データの取得（並列処理）
-    const imageResults = await Promise.all(
-      imageUrls.map((url: string) => fetchImageAsBase64(url))
-    )
-    const validImages = imageResults.filter((img): img is { mimeType: string; data: string } => img !== null)
+      // 画像データの取得（並列処理）
+      const imageResults = await Promise.all(
+        imageUrls.map((url: string) => fetchImageAsBase64(url))
+      )
+      validImages = imageResults.filter((img): img is { mimeType: string; data: string } => img !== null)
+    } else {
+      return new Response(
+        JSON.stringify({ error: '画像データ(images または imageUrls)が必要です' }),
+        { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      )
+    }
 
     if (validImages.length === 0) {
       return new Response(
-        JSON.stringify({ error: '画像データの取得に失敗しました。画像URLが有効であることを確認してください。' }),
+        JSON.stringify({ error: '画像データの取得・解析に失敗しました。画像が有効であることを確認してください。' }),
         { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       )
     }
