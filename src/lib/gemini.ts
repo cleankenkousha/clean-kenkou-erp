@@ -144,6 +144,13 @@ export async function analyzeQuoteImagesWithGemini(
       return { items: [], error: userMessage }
     }
 
+    if (data?.error) {
+      if (onProgress) {
+        onProgress(`⚠️ ${data.error}`)
+      }
+      return { items: [], error: data.error }
+    }
+
     if (data && Array.isArray(data.items) && data.items.length > 0) {
       const items = data.items.map((item: any) => ({
         ...item,

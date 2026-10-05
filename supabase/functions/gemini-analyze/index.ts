@@ -1,36 +1,9 @@
 import { serve } from 'https://deno.land/std@0.168.0/http/server.ts'
 
-// 許可するオリジンのリスト（環境変数またはデフォルト値）
-const ALLOWED_ORIGINS = (Deno.env.get('ALLOWED_ORIGINS') || '')
-  .split(',')
-  .map((s) => s.trim())
-  .filter(Boolean)
-
-// デフォルトの許可オリジン（環境変数未設定時のフォールバック）
-const DEFAULT_ORIGINS = [
-  'http://localhost:5173',
-  'http://localhost:4173',
-]
-
-/**
- * リクエスト元オリジンが許可リストに含まれるかチェックし、
- * CORS ヘッダーを返す。許可されないオリジンには空文字を返す。
- */
-function getCorsHeaders(req: Request): Record<string, string> {
-  const origin = req.headers.get('origin') || ''
-  const allowList = ALLOWED_ORIGINS.length > 0 ? ALLOWED_ORIGINS : DEFAULT_ORIGINS
-
-  // Netlifyの本番URLパターン（*.netlify.app）も許可
-  const isAllowed =
-    allowList.includes(origin) ||
-    origin.endsWith('.netlify.app')
-
-  return {
-    'Access-Control-Allow-Origin': isAllowed ? origin : allowList[0] || '',
-    'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
-    'Access-Control-Allow-Methods': 'POST, OPTIONS',
-    'Vary': 'Origin',
-  }
+const corsHeaders = {
+  'Access-Control-Allow-Origin': '*',
+  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type, x-region, *',
+  'Access-Control-Allow-Methods': 'POST, OPTIONS',
 }
 
 // 画像URLの最大数（悪用防止）
@@ -83,10 +56,8 @@ async function fetchImageAsBase64(url: string): Promise<{ mimeType: string; data
 }
 
 serve(async (req) => {
-  const corsHeaders = getCorsHeaders(req)
-
   if (req.method === 'OPTIONS') {
-    return new Response('ok', { headers: corsHeaders })
+    return new Response('ok', { status: 200, headers: corsHeaders })
   }
 
   try {
@@ -194,34 +165,60 @@ JSON配列(JSON Array)のみを出力してください。マークダウンの�
       })
     }
 
-    const endpoint = `https://generativelanguage.googleapis.com/v1beta/models/gemini-3.8-flash:generateContent?key=${apiKey}`
+    // 利用可能なモデル候補（高負荷503や障害時に自動フォールバック）
+    const candidateModels = [
+      'gemini-3.5-flash-lite',
+      'gemini-3.8-flash',
+      'gemini-2.5-flash'
+    ]
 
-    const res = await fetch(endpoint, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        contents: [
-          {
-            parts,
-          },
-        ],
-        // レスポンスをJSON形式に限定
-        generationConfig: {
-          responseMimeType: 'application/json',
-        },
-      }),
-    })
+    let textOutput = ''
+    let lastError = ''
 
-    if (!res.ok) {
-      const errJson = await res.json().catch(() => ({}))
-      return new Response(
-        JSON.stringify({ error: errJson?.error?.message || `Gemini API returned HTTP ${res.status}` }),
-        { status: res.status, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-      )
+    for (const model of candidateModels) {
+      try {
+        console.log(`Geminiモデル [${model}] で解析を試行中...`)
+        const endpoint = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`
+
+        const res = await fetch(endpoint, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            contents: [{ parts }],
+            generationConfig: {
+              responseMimeType: 'application/json',
+            },
+          }),
+        })
+
+        if (res.ok) {
+          const resJson = await res.json()
+          textOutput = resJson.candidates?.[0]?.content?.parts?.[0]?.text || ''
+          if (textOutput) {
+            console.log(`モデル [${model}] での解析に成功しました`)
+            break
+          }
+        } else {
+          const errJson = await res.json().catch(() => ({}))
+          lastError = errJson?.error?.message || `HTTP ${res.status}`
+          console.warn(`モデル [${model}] 失敗 (${res.status}): ${lastError}`)
+        }
+      } catch (callErr: any) {
+        lastError = callErr.message || String(callErr)
+        console.warn(`モデル [${model}] 例外: ${lastError}`)
+      }
     }
 
-    const resJson = await res.json()
-    const textOutput = resJson.candidates?.[0]?.content?.parts?.[0]?.text || ''
+    if (!textOutput) {
+      console.error('全モデルでのGemini解析に失敗:', lastError)
+      return new Response(
+        JSON.stringify({
+          error: `AI解析サーバーが現在混み合っています。(${lastError})。少し時間をおいて再度お試しください。`,
+          items: []
+        }),
+        { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      )
+    }
 
     // JSONパース（コードブロックの除去を含む安全なパース）
     const cleanJson = textOutput
@@ -236,10 +233,11 @@ JSON配列(JSON Array)のみを出力してください。マークダウンの�
       console.error('Gemini API レスポンスの JSON パースに失敗:', cleanJson.substring(0, 500))
       return new Response(
         JSON.stringify({
-          error: 'AI解析結果の解析に失敗しました。再度お試しください。',
+          error: 'AI解析結果のパースに失敗しました。再度お試しください。',
+          items: [],
           rawOutput: cleanJson.substring(0, 200),
         }),
-        { status: 502, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       )
     }
 
@@ -253,8 +251,8 @@ JSON配列(JSON Array)のみを出力してください。マークダウンの�
     })
   } catch (err: any) {
     return new Response(
-      JSON.stringify({ error: err.message || 'Internal Edge Function Error' }),
-      { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      JSON.stringify({ error: err.message || 'Internal Edge Function Error', items: [] }),
+      { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     )
   }
 })
