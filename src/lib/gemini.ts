@@ -106,9 +106,18 @@ export async function analyzeQuoteImagesWithGemini(
 
   try {
     // ブラウザ側でBlob/URL画像をBase64に変換・圧縮（最大10枚）
-    const images = await Promise.all(
-      imageUrls.slice(0, 10).map((url) => processImageToBase64(url))
-    )
+    // ※この段階の失敗はサーバー通信ではなく「端末内の写真読み込み」の失敗として区別する
+    let images: { mimeType: string; data: string }[]
+    try {
+      images = await Promise.all(
+        imageUrls.slice(0, 10).map((url) => processImageToBase64(url))
+      )
+    } catch (imgErr: any) {
+      console.error('写真の読み込み・圧縮エラー:', imgErr)
+      const imgText = `写真の読み込みに失敗しました（端末内処理）: ${imgErr?.message || String(imgErr)}`
+      if (onProgress) onProgress(`⚠️ ${imgText}`)
+      return { items: [], error: imgText }
+    }
 
     if (onProgress) {
       onProgress(`全${images.length}枚の現場写真をEdge Function経由で安全に解析中...`)

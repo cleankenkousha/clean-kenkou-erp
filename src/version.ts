@@ -6,6 +6,6 @@
  * クライアントのキャッシュ状態を即座に確認できます。
  */
 
-export const APP_VERSION = 'v1.1.1'
-export const APP_BUILD_DATE = '2026.10.05-15:00'
-export const APP_DESCRIPTION = 'Geminiマルチモデル自動フォールバック(3.5-lite / 3.8-flash) & 耐障害性強化'
+export const APP_VERSION = 'v1.1.2'
+export const APP_BUILD_DATE = '2026.10.05-15:10'
+export const APP_DESCRIPTION = 'CSP修正(blob:写真読み込み許可) & AIエラー段階表示'

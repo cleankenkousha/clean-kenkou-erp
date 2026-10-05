@@ -27,7 +27,8 @@
     # - data: URI (電子サイン描画に必要)
     # - style-src の 'unsafe-inline' はTailwind/Vite産のスタイルに対応するため許可
     # - script-src から 'unsafe-inline' を除去（インラインスクリプトは外部ファイルに移行済み）
-    Content-Security-Policy = "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' data: blob: https:; connect-src 'self' https://cnwlcxfhxaugqtatibav.supabase.co wss://cnwlcxfhxaugqtatibav.supabase.co https://cnwlcxfhxaugqtatibav.supabase.co:*; frame-ancestors 'none'; object-src 'none'; base-uri 'self';"
+    # - connect-src の blob: data: はAI見積で写真(blob URL)をBase64化する際の fetch() に必須
+    Content-Security-Policy = "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' data: blob: https:; connect-src 'self' blob: data: https://cnwlcxfhxaugqtatibav.supabase.co wss://cnwlcxfhxaugqtatibav.supabase.co https://cnwlcxfhxaugqtatibav.supabase.co:*; frame-ancestors 'none'; object-src 'none'; base-uri 'self';"
 
 # sw.js は絶対にキャッシュしない（常に最新を取得）
 [[headers]]
