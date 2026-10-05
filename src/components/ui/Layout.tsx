@@ -15,6 +15,7 @@ import {
 } from 'lucide-react'
 import { supabase } from '../../lib/supabase'
 import { useViewMode } from '../../hooks/useViewMode'
+import { APP_VERSION, APP_BUILD_DATE } from '../../version'
 
 interface LayoutProps {
   children: React.ReactNode
@@ -197,9 +198,18 @@ export const Layout: React.FC<LayoutProps> = ({ children }) => {
             )}
           </button>
 
+          {/* バージョン表示バッジ (スマホ・タブレット・PC全対応) */}
+          <div
+            className="flex items-center space-x-1 px-2 py-1 bg-slate-100 text-slate-700 border border-slate-200 rounded-md text-[11px] font-mono font-bold cursor-default"
+            title={`システムバージョン: ${APP_VERSION} (ビルド: ${APP_BUILD_DATE})`}
+          >
+            <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></span>
+            <span>{APP_VERSION}</span>
+          </div>
+
           <div className="hidden lg:flex flex-col text-right text-xs">
             <span className="font-medium text-main">有限会社クリーン健康社</span>
-            <span className="text-[10px] text-sub">Clean KENKOU ERP v0.1</span>
+            <span className="text-[10px] text-sub font-mono">{APP_VERSION} ({APP_BUILD_DATE})</span>
           </div>
 
           <button

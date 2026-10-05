@@ -27,6 +27,7 @@ import { useViewMode } from '../../hooks/useViewMode'
 import { PrintQuoteArea, PrintQuoteData } from './PrintQuoteArea'
 import { analyzeQuoteImagesWithGemini } from '../../lib/gemini'
 import { SignaturePadModal } from './SignaturePadModal'
+import { APP_VERSION } from '../../version'
 
 export interface QuoteItem {
   id: string
@@ -650,9 +651,14 @@ export const MobileQuoteModal: React.FC<MobileQuoteModalProps> = ({
               <Calculator className="w-6 h-6 text-white" />
             </div>
             <div>
-              <h2 className="text-base sm:text-lg font-bold tracking-tight">
-                {isMobileMode ? '携帯・タブレット概算見積' : 'PC版 概算見積作成 (AI算定・撮影連動)'}
-              </h2>
+              <div className="flex items-center gap-2">
+                <h2 className="text-base sm:text-lg font-bold tracking-tight">
+                  {isMobileMode ? '携帯・タブレット概算見積' : 'PC版 概算見積作成 (AI算定・撮影連動)'}
+                </h2>
+                <span className="px-2 py-0.5 bg-blue-500/30 text-blue-200 border border-blue-400/40 rounded-full text-[10px] font-mono font-bold tracking-wide">
+                  {APP_VERSION}
+                </span>
+              </div>
               <p className="text-xs text-slate-300">単価マスタ連動・写真読み込み・AI自動体積算定を行えます</p>
             </div>
           </div>
@@ -759,7 +765,12 @@ export const MobileQuoteModal: React.FC<MobileQuoteModalProps> = ({
                       ) : (
                         <Sparkles className="w-4 h-4 text-purple-600" />
                       )}
-                      <span className="text-xs">{isAiAnalyzing ? '解析中...' : 'AI自動抽出'}</span>
+                      <span className="text-xs">
+                        {isAiAnalyzing ? '解析中...' : '✨ AI自動抽出'}
+                      </span>
+                      <span className="text-[10px] text-purple-500 font-mono font-bold">
+                        {APP_VERSION}
+                      </span>
                     </Button>
                   </div>
 
