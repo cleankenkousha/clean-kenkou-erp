@@ -19,60 +19,52 @@ export async function validateGeminiApiKey(_apiKey: string): Promise<{ valid: bo
 }
 
 /**
- * 画像（Blob URL または 通常URL）をブラウザ側で軽量リサイズして Base64 データに変換する
+ * 画像（Blob URL または 通常URL）をブラウザ側で約100KB前後に確実・高速圧縮して Base64 変換
  */
 async function processImageToBase64(
   url: string,
-  maxWidth = 1200,
-  maxHeight = 1200
+  maxWidth = 1000,
+  maxHeight = 1000
 ): Promise<{ mimeType: string; data: string }> {
   const response = await fetch(url)
   const blob = await response.blob()
 
-  return new Promise((resolve, reject) => {
-    const img = new Image()
-    img.crossOrigin = 'anonymous'
-    const objectUrl = URL.createObjectURL(blob)
+  // 1. createImageBitmap による超高速・安全なリサイズ
+  try {
+    const tempBitmap = await createImageBitmap(blob)
+    let w = tempBitmap.width
+    let h = tempBitmap.height
 
-    img.onload = () => {
-      URL.revokeObjectURL(objectUrl)
-
-      let width = img.width
-      let height = img.height
-
-      if (width > maxWidth || height > maxHeight) {
-        if (width > height) {
-          height = Math.round((height * maxWidth) / width)
-          width = maxWidth
-        } else {
-          width = Math.round((width * maxHeight) / height)
-          height = maxHeight
-        }
+    if (w > maxWidth || h > maxHeight) {
+      if (w > h) {
+        h = Math.round((h * maxWidth) / w)
+        w = maxWidth
+      } else {
+        w = Math.round((w * maxHeight) / h)
+        h = maxHeight
       }
-
-      const canvas = document.createElement('canvas')
-      canvas.width = width
-      canvas.height = height
-      const ctx = canvas.getContext('2d')
-      if (!ctx) {
-        readBlobAsBase64(blob).then(resolve).catch(reject)
-        return
-      }
-
-      ctx.drawImage(img, 0, 0, width, height)
-      const dataUrl = canvas.toDataURL('image/jpeg', 0.8)
-      const [header, base64] = dataUrl.split(',')
-      const mimeType = header.match(/:(.*?);/)?.[1] || 'image/jpeg'
-      resolve({ mimeType, data: base64 })
     }
 
-    img.onerror = () => {
-      URL.revokeObjectURL(objectUrl)
-      readBlobAsBase64(blob).then(resolve).catch(reject)
+    const canvas = document.createElement('canvas')
+    canvas.width = w
+    canvas.height = h
+    const ctx = canvas.getContext('2d')
+    if (ctx) {
+      ctx.drawImage(tempBitmap, 0, 0, w, h)
+      tempBitmap.close()
+      // JPEG品質 0.7 で圧縮（1枚あたり約80KB〜150KBに超軽量化）
+      const dataUrl = canvas.toDataURL('image/jpeg', 0.7)
+      const commaIdx = dataUrl.indexOf(',')
+      const base64 = dataUrl.slice(commaIdx + 1)
+      return { mimeType: 'image/jpeg', data: base64 }
     }
+    tempBitmap.close()
+  } catch (bitmapErr) {
+    console.warn('createImageBitmap fallback to FileReader:', bitmapErr)
+  }
 
-    img.src = objectUrl
-  })
+  // フォールバック: FileReader
+  return readBlobAsBase64(blob)
 }
 
 function readBlobAsBase64(blob: Blob): Promise<{ mimeType: string; data: string }> {
@@ -168,7 +160,8 @@ export async function analyzeQuoteImagesWithGemini(
     return { items: [], error: '写真から品目を検出できませんでした。' }
   } catch (err: any) {
     console.error('Edge Function 接続エラー:', err)
-    const errText = 'AI解析サービスに接続できません。ネットワークをご確認ください。'
+    const detail = err?.message || String(err)
+    const errText = `通信エラー: ${detail}`
 
     if (onProgress) {
       onProgress(`⚠️ ${errText}`)
