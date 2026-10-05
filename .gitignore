@@ -22,3 +22,7 @@ pnpm-debug.log*
 *.local
 .env
 .env.*
+
+# Generated PDFs and temp
+*.pdf
+supabase/.temp/
