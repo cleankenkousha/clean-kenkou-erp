@@ -25,7 +25,7 @@ import { supabase } from '../../lib/supabase'
 import { usePriceMaster } from '../../hooks/usePriceMaster'
 import { useViewMode } from '../../hooks/useViewMode'
 import { PrintQuoteArea, PrintQuoteData } from './PrintQuoteArea'
-import { analyzeQuoteImagesWithGemini, validateGeminiApiKey } from '../../lib/gemini'
+import { analyzeQuoteImagesWithGemini } from '../../lib/gemini'
 import { SignaturePadModal } from './SignaturePadModal'
 
 export interface QuoteItem {
@@ -365,10 +365,9 @@ export const MobileQuoteModal: React.FC<MobileQuoteModalProps> = ({
     setAiDetectedItems([])
 
     try {
-      const activeApiKey = localStorage.getItem('clean_kenkou_gemini_api_key') || undefined
       const detected = await analyzeQuoteImagesWithGemini(
         capturedImages,
-        activeApiKey,
+        undefined,
         (progressStatus) => {
           setAiMessage(progressStatus)
         },
@@ -776,45 +775,9 @@ export const MobileQuoteModal: React.FC<MobileQuoteModalProps> = ({
                 </div>
 
                 {aiMessage && (
-                  <div className="p-3 bg-purple-50 border border-purple-200 rounded-lg text-xs text-purple-900 flex flex-col sm:flex-row sm:items-center justify-between gap-2 shadow-sm">
-                    <div className="flex items-center space-x-2 min-w-0">
-                      <Sparkles className="w-4 h-4 text-purple-600 flex-shrink-0 animate-pulse" />
-                      <span className="font-semibold leading-relaxed break-all">{aiMessage}</span>
-                    </div>
-                    {aiMessage.includes('APIキー') && (
-                      <button
-                        type="button"
-                        onClick={async () => {
-                          const currentKey = localStorage.getItem('clean_kenkou_gemini_api_key') || ''
-                          const newKey = prompt(
-                            '【Gemini APIキーの更新・再登録】\n\nGoogle AI Studioで作成した無料APIキー(AI Studio API Key)を入力してください:\n\n取得URL: https://aistudio.google.com/app/apikey',
-                            currentKey
-                          )
-                          if (newKey !== null) {
-                            const trimmed = newKey.trim()
-                            if (!trimmed) {
-                              localStorage.removeItem('clean_kenkou_gemini_api_key')
-                              setAiMessage('APIキーを削除しました。')
-                              return
-                            }
-                            setAiMessage('キーの有効性をGoogle APIで診断テスト中...')
-                            const testResult = await validateGeminiApiKey(trimmed)
-                            if (testResult.valid) {
-                              localStorage.setItem('clean_kenkou_gemini_api_key', trimmed)
-                              alert(`${testResult.message}\n\nAPIキーを正常に保存しました！もう一度「✨ AI自動抽出」を押してください。`)
-                              setAiMessage('✅ APIキーの正常稼働を確認しました。写真選択後「✨ AI自動抽出」を押してください。')
-                            } else {
-                              alert(`【APIキー診断結果】\n${testResult.message}\n\n入力されたキーはGoogle APIによって拒否されました。Google AI Studioで正しいキーを再作成してください。`)
-                              setAiMessage(`キー診断警告: ${testResult.message}`)
-                            }
-                          }
-                        }}
-                        className="px-2.5 py-1 bg-purple-700 hover:bg-purple-800 text-white font-bold text-[11px] rounded shadow-sm flex items-center space-x-1 flex-shrink-0 transition-all"
-                      >
-                        <Settings className="w-3.5 h-3.5" />
-                        <span>🔑 APIキーを更新・診断</span>
-                      </button>
-                    )}
+                  <div className="p-3 bg-purple-50 border border-purple-200 rounded-lg text-xs text-purple-900 flex items-center space-x-2 shadow-sm">
+                    <Sparkles className="w-4 h-4 text-purple-600 flex-shrink-0 animate-pulse" />
+                    <span className="font-semibold leading-relaxed break-all">{aiMessage}</span>
                   </div>
                 )}
 
