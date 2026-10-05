@@ -365,7 +365,7 @@ export const MobileQuoteModal: React.FC<MobileQuoteModalProps> = ({
     setAiDetectedItems([])
 
     try {
-      const detected = await analyzeQuoteImagesWithGemini(
+      const result = await analyzeQuoteImagesWithGemini(
         capturedImages,
         undefined,
         (progressStatus) => {
@@ -374,7 +374,12 @@ export const MobileQuoteModal: React.FC<MobileQuoteModalProps> = ({
         masterItems
       )
 
-      const mappedItems: QuoteItem[] = detected.map((item, idx) => {
+      if (result.error) {
+        setAiMessage(`⚠️ ${result.error}`)
+        return
+      }
+
+      const mappedItems: QuoteItem[] = result.items.map((item, idx) => {
         const matched = matchMasterItem(item, masterItems)
         return {
           id: Date.now().toString() + '-' + idx,
@@ -391,12 +396,10 @@ export const MobileQuoteModal: React.FC<MobileQuoteModalProps> = ({
         setItems(mappedItems)
         setAiDetectedItems(mappedItems)
         setAiMessage(
-          `AI解析完了: 全${capturedImages.length}枚の写真から社内マスタと一致する【${mappedItems.length}件の回収品目】を自動算定しました！`
+          `✅ AI解析完了: 全${capturedImages.length}枚の写真から社内マスタと一致する【${mappedItems.length}件の回収品目】を自動算定しました！`
         )
       } else {
-        setAiMessage(
-          `AI解析完了: 全${capturedImages.length}枚の写真から品目を判別しました。手動で微調整してください。`
-        )
+        setAiMessage('⚠️ AI解析で品目を特定できませんでした。写真を確認して手動で品目を追加してください。')
       }
     } catch (err: any) {
       console.warn('Gemini API Analysis notice:', err)
@@ -775,8 +778,22 @@ export const MobileQuoteModal: React.FC<MobileQuoteModalProps> = ({
                 </div>
 
                 {aiMessage && (
-                  <div className="p-3 bg-purple-50 border border-purple-200 rounded-lg text-xs text-purple-900 flex items-center space-x-2 shadow-sm">
-                    <Sparkles className="w-4 h-4 text-purple-600 flex-shrink-0 animate-pulse" />
+                  <div
+                    className={`p-3 rounded-lg text-xs flex items-center space-x-2 shadow-sm transition-colors ${
+                      aiMessage.includes('⚠️') || aiMessage.includes('エラー') || aiMessage.includes('失敗')
+                        ? 'bg-amber-50 border border-amber-300 text-amber-900'
+                        : aiMessage.includes('✅')
+                        ? 'bg-emerald-50 border border-emerald-300 text-emerald-900'
+                        : 'bg-purple-50 border border-purple-200 text-purple-900'
+                    }`}
+                  >
+                    {aiMessage.includes('⚠️') || aiMessage.includes('エラー') || aiMessage.includes('失敗') ? (
+                      <AlertCircle className="w-4 h-4 text-amber-600 flex-shrink-0" />
+                    ) : aiMessage.includes('✅') ? (
+                      <CheckCircle2 className="w-4 h-4 text-emerald-600 flex-shrink-0" />
+                    ) : (
+                      <Sparkles className="w-4 h-4 text-purple-600 flex-shrink-0 animate-pulse" />
+                    )}
                     <span className="font-semibold leading-relaxed break-all">{aiMessage}</span>
                   </div>
                 )}

@@ -89,21 +89,23 @@ function readBlobAsBase64(blob: Blob): Promise<{ mimeType: string; data: string 
   })
 }
 
+export interface AnalyzeQuoteResult {
+  items: GeminiDetectedItem[]
+  error?: string
+}
+
 /**
  * Supabase Edge Function 経由で Gemini API による画像解析を実行
  * (クライアント側APIキー直接保持・送信を完全に排除したセキュア仕様)
- *
- * Edge Function がエラーの場合は空配列を返し、ユーザーに手動入力を促す。
- * 偽のAI解析結果は返さない。
  */
 export async function analyzeQuoteImagesWithGemini(
   imageUrls: string[],
   _customApiKey?: string,
   onProgress?: (statusText: string) => void,
   masterItems?: ItemPriceMaster[]
-): Promise<GeminiDetectedItem[]> {
+): Promise<AnalyzeQuoteResult> {
   if (imageUrls.length === 0) {
-    return []
+    return { items: [] }
   }
 
   if (onProgress) {
@@ -125,10 +127,8 @@ export async function analyzeQuoteImagesWithGemini(
     })
 
     if (error) {
-      // Edge Function のエラー詳細をログに記録
       console.error('Gemini Edge Function エラー:', error)
 
-      // 詳細メッセージの取得試行
       let detailMsg = error.message
       try {
         if ((error as any).context) {
@@ -139,42 +139,42 @@ export async function analyzeQuoteImagesWithGemini(
         // ignore
       }
 
-      // ユーザー向けの分かりやすいエラーメッセージ
       const userMessage = detailMsg?.includes('GEMINI_API_KEY')
         ? 'AI解析サービスのAPIキーが未設定です。管理者に連絡してください。'
         : detailMsg?.includes('high demand')
-          ? '現在AIサービスが一時的に混み合っています。数秒後にもう一度「✨ AI自動抽出」を押してください。'
-          : detailMsg || 'AI画像解析に失敗しました。品目を手動で入力してください。'
+          ? '現在AIサーバーが一時的に混み合っています。数秒後にもう一度「✨ AI自動抽出」を押してください。'
+          : detailMsg || 'AI画像解析に失敗しました。'
 
       if (onProgress) {
         onProgress(`⚠️ ${userMessage}`)
       }
 
-      // エラー時は空配列を返す（偽のAI結果を返さない）
-      return []
+      return { items: [], error: userMessage }
     }
 
     if (data && Array.isArray(data.items) && data.items.length > 0) {
-      return data.items.map((item: any) => ({
+      const items = data.items.map((item: any) => ({
         ...item,
         unit: item.unit || '点',
         reason: item.reason || 'AI画像解析により特定',
       }))
+      return { items }
     }
 
     // AIが品目を検出できなかった場合
     if (onProgress) {
-      onProgress('AI解析で品目を検出できませんでした。写真を確認し、品目を手動で入力してください。')
+      onProgress('⚠️ 写真から品目を検出できませんでした。')
     }
-    return []
+    return { items: [], error: '写真から品目を検出できませんでした。' }
   } catch (err: any) {
     console.error('Edge Function 接続エラー:', err)
+    const errText = 'AI解析サービスに接続できません。ネットワークをご確認ください。'
 
     if (onProgress) {
-      onProgress('⚠️ AI解析サービスに接続できません。ネットワークを確認するか、品目を手動で入力してください。')
+      onProgress(`⚠️ ${errText}`)
     }
 
-    // 接続エラー時も空配列を返す（偽の結果を返さない）
-    return []
+    return { items: [], error: errText }
   }
 }
+
