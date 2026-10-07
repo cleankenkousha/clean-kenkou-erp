@@ -53,16 +53,27 @@ interface MobileQuoteModalProps {
   initialData?: InitialQuoteData | null
 }
 
+// 単位の表記ゆれ正規化（全角「㎏」「㎥」を「kg」「m3」へ統一）
+const normalizeUnit = (unit?: string): string => {
+  if (!unit) return '点'
+  const trimmed = unit.trim()
+  if (trimmed === '㎏' || trimmed.toLowerCase() === 'kg') return 'kg'
+  if (trimmed === '㎥' || trimmed.toLowerCase() === 'm3') return 'm3'
+  return trimmed
+}
+
 // AI検出品目を自社の登録単価マスタ(masterItems)と高精度照合し、自社の登録品名・単価・単位・体積を優先適用する関数
 const matchMasterItem = (
   aiItem: { name: string; quantity: number; unit?: string; volume?: number; unitPrice?: number; reason?: string },
   masterList: any[]
 ) => {
   const reason = aiItem.reason || ''
+  const aiUnit = normalizeUnit(aiItem.unit)
+
   if (!masterList || masterList.length === 0) {
     return {
       name: aiItem.name,
-      unit: aiItem.unit || '点',
+      unit: aiUnit,
       unitPrice: aiItem.unitPrice || 3000,
       volume: aiItem.volume !== undefined ? aiItem.volume : 0.4,
       reason,
@@ -74,9 +85,10 @@ const matchMasterItem = (
   // 1. 完全一致チェック
   const exactMatch = masterList.find((m) => m.name.trim() === aiName)
   if (exactMatch) {
+    const matchedUnit = normalizeUnit(exactMatch.unit || aiUnit)
     return {
       name: exactMatch.name,
-      unit: exactMatch.unit || aiItem.unit || '点',
+      unit: matchedUnit,
       unitPrice: exactMatch.price,
       volume: exactMatch.volume !== undefined ? exactMatch.volume : (aiItem.volume || 0.4),
       reason: reason || '社内マスタ完全一致',
@@ -86,9 +98,10 @@ const matchMasterItem = (
   // 2. 双方向部分一致チェック (マスタ名がAI名に含まれる、またはAI名がマスタ名に含まれる)
   const partialMatch = masterList.find((m) => aiName.includes(m.name) || m.name.includes(aiName))
   if (partialMatch) {
+    const matchedUnit = normalizeUnit(partialMatch.unit || aiUnit)
     return {
       name: partialMatch.name,
-      unit: partialMatch.unit || aiItem.unit || '点',
+      unit: matchedUnit,
       unitPrice: partialMatch.price,
       volume: partialMatch.volume !== undefined ? partialMatch.volume : (aiItem.volume || 0.4),
       reason: reason || '社内マスタ部分照合',
@@ -97,6 +110,36 @@ const matchMasterItem = (
 
   // 3. 詳細なシノニム・同義語カテゴリ別高精度マッチンググループ
   const synonymGroups: { keywords: string[]; masterMatchKeywords: string[] }[] = [
+    // 重量制品目（kg単価：木くず、可燃性粗大ごみ、雑ゴミ、プラ等）
+    {
+      keywords: ['木くず', '木屑', '廃材', '木材', '角材', '板材', '剪定枝', '枝木', '木片', '木工家具解体', '木片ごみ'],
+      masterMatchKeywords: ['木くず'],
+    },
+    {
+      keywords: ['可燃性粗大ごみ', '可燃粗大', '可燃性粗大', '粗大ごみ', '粗大ゴミ', '大型粗大', '不用品山積み', 'ゴミ山', '残置物', '大型ごみ'],
+      masterMatchKeywords: ['可燃性粗大ごみ', '雑ゴミ（可燃物など）', '雑ゴミ'],
+    },
+    {
+      keywords: ['雑ゴミ', '可燃物', '可燃ゴミ', '一般ゴミ', '生活ゴミ', '袋ゴミ', '不用品袋'],
+      masterMatchKeywords: ['雑ゴミ（可燃物など）', '雑ゴミ', '可燃性粗大ごみ', '可燃物・不用品袋'],
+    },
+    {
+      keywords: ['プラスチック', 'プラごみ', '廃プラ', '塩ビ', 'ポリ容器', 'PP', 'PE', 'プラスチック類'],
+      masterMatchKeywords: ['プラスチック類'],
+    },
+    {
+      keywords: ['ガラス', '陶磁器', '陶器', '食器', '茶碗', '植木鉢', 'せともの', '陶器くず'],
+      masterMatchKeywords: ['ガラス・陶磁器'],
+    },
+    {
+      keywords: ['コンクリ', 'コンクリート', 'ブロック', 'レンガ', '瓦', '石', 'セメント'],
+      masterMatchKeywords: ['コンクリ・ブロック'],
+    },
+    {
+      keywords: ['鉄くず', '金属くず', 'スクラップ', 'アルミ', 'トタン', 'スチール', '金物'],
+      masterMatchKeywords: ['鉄くず'],
+    },
+    // 特定個別品目（点・台単価）
     {
       keywords: ['除湿機', '衣類乾燥除湿機', '加湿器', '空気清浄機', '扇風機', 'ヒーター', 'ストーブ', '電子レンジ', '炊飯器', '掃除機', '食洗機', '小型家電'],
       masterMatchKeywords: ['除湿機', '乾燥機', '加湿器', '小型家電', '中型家電', '家電'],
@@ -115,23 +158,31 @@ const matchMasterItem = (
     },
     {
       keywords: ['エアコン', 'クーラー', '室外機'],
-      masterMatchKeywords: ['エアコン', '家電'],
+      masterMatchKeywords: ['エアコン', 'エアコン（単品）', '家電'],
     },
     {
-      keywords: ['ソファ', 'ソファー', 'カウチ'],
-      masterMatchKeywords: ['ソファ', 'ソファー', '家具'],
+      keywords: ['ソファ', 'ソファー', 'カウチ', '応接セット'],
+      masterMatchKeywords: ['ソファー（大）', 'ソファー（小）', 'ソファ', 'ソファー', '家具'],
     },
     {
-      keywords: ['ベッド', 'マットレス', '布団'],
-      masterMatchKeywords: ['ベッド', 'シングルベッド', 'マットレス', '家具'],
+      keywords: ['ベッド', 'マットレス', '布団', 'スプリングマット'],
+      masterMatchKeywords: ['スプリングマット', 'ベッド', 'シングルベッド', 'マットレス', '家具'],
     },
     {
       keywords: ['タンス', 'チェスト', 'キャビネット', '棚', 'ラック', '本棚', '食器棚'],
       masterMatchKeywords: ['タンス', '棚', 'キャビネット', '家具'],
     },
     {
-      keywords: ['段ボール', 'ダンボール', '紙箱', '古紙'],
-      masterMatchKeywords: ['段ボール', 'ダンボール', '古紙', '可燃不用品', '日用品'],
+      keywords: ['椅子', 'チェア', 'パイプ椅子', 'オフィスチェア', '事務イス'],
+      masterMatchKeywords: ['椅子（事務系も含む）', 'パイプ椅子'],
+    },
+    {
+      keywords: ['消火器'],
+      masterMatchKeywords: ['消火器'],
+    },
+    {
+      keywords: ['段ボール', 'ダンボール', '紙箱', '古紙', '新聞', '雑誌'],
+      masterMatchKeywords: ['紙類', '段ボール', 'ダンボール', '古紙', '日用品'],
     },
     {
       keywords: ['タイヤ', 'ホイール'],
@@ -149,22 +200,23 @@ const matchMasterItem = (
       for (const masterKw of group.masterMatchKeywords) {
         const match = masterList.find((m) => m.name.includes(masterKw))
         if (match) {
+          const matchedUnit = normalizeUnit(match.unit || aiUnit)
           return {
             name: match.name,
-            unit: match.unit || aiItem.unit || '点',
+            unit: matchedUnit,
             unitPrice: match.price,
             volume: match.volume !== undefined ? match.volume : (aiItem.volume || 0.4),
-            reason: reason || `カテゴリ同義語「${matchedKeyword}」より判定`,
+            reason: reason || `カテゴリ同義語「${matchedKeyword}」より社内マスタ「${match.name}」判定`,
           }
         }
       }
     }
   }
 
-  // 4. マスタに該当品目がない場合は、AIが正しく認識した名前（aiItem.name）をそのまま維持
+  // 4. マスタに該当品目がない場合は、AIが認識した単位・単価を適用
   return {
     name: aiItem.name,
-    unit: aiItem.unit || '点',
+    unit: aiUnit,
     unitPrice: aiItem.unitPrice || 3000,
     volume: aiItem.volume !== undefined ? aiItem.volume : 0.4,
     reason: reason || 'AI直接検出品目',
@@ -173,13 +225,13 @@ const matchMasterItem = (
 
 // 単位（kg / m3 / 個数系）に応じた品目の小計体積(m3)算出ヘルパー
 const calcItemVolume = (item: { unit?: string; volume: number; quantity: number }): number => {
-  const unit = item.unit || '点'
+  const unit = normalizeUnit(item.unit)
   const qty = Number(item.quantity) || 0
   const vol = Number(item.volume) || 0
 
   if (unit === 'kg') {
-    // kg単位の場合、体積に入力された数値は該当重量(500kg等)全体の概算体積m3として採用
-    return vol
+    // kg単位の場合、体積が設定されていればそれを採用。未設定・0なら比重目安（約0.005m3/kg = 200kgで1m3）で算出
+    return vol > 0 ? vol : Math.round(qty * 0.005 * 10) / 10
   }
   if (unit === 'm3') {
     // m3単位の場合、数量に入力された数値がm3体積そのもの
@@ -382,11 +434,20 @@ export const MobileQuoteModal: React.FC<MobileQuoteModalProps> = ({
 
       const mappedItems: QuoteItem[] = result.items.map((item, idx) => {
         const matched = matchMasterItem(item, masterItems)
+        const normUnit = normalizeUnit(matched.unit)
+        let qty = Number(item.quantity) || 1
+
+        // kg単位の品目で、もしAIから数量1（点数カウント）が返ってきた場合の安全セーフガード
+        if (normUnit === 'kg' && qty <= 1) {
+          const estimatedKg = matched.volume > 0 ? Math.round(matched.volume * 200) : 50
+          qty = estimatedKg
+        }
+
         return {
           id: Date.now().toString() + '-' + idx,
           name: matched.name,
-          quantity: item.quantity || 1,
-          unit: matched.unit,
+          quantity: qty,
+          unit: normUnit,
           volume: matched.volume,
           unitPrice: matched.unitPrice,
           reason: matched.reason,
@@ -419,11 +480,18 @@ export const MobileQuoteModal: React.FC<MobileQuoteModalProps> = ({
     setItems((prev) =>
       prev.map((item) => {
         if (item.id !== itemId) return item
+        const normUnit = normalizeUnit(targetMaster.unit || item.unit)
+        let newQty = item.quantity
+        // kg品目への変更で数量が1のままの場合は概算重量（50kg等）を初期設定
+        if (normUnit === 'kg' && newQty <= 1) {
+          newQty = item.volume > 0 ? Math.round(item.volume * 200) : 50
+        }
         return {
           ...item,
           name: targetMaster.name,
           unitPrice: targetMaster.price,
-          unit: targetMaster.unit || item.unit || '点',
+          unit: normUnit,
+          quantity: newQty,
           volume: targetMaster.volume !== undefined ? targetMaster.volume : item.volume,
           reason: `自社単価マスタ「${targetMaster.name}」へ1タップ補正`,
         }
@@ -433,11 +501,13 @@ export const MobileQuoteModal: React.FC<MobileQuoteModalProps> = ({
 
   const handleAddItem = (preset?: { name: string; unit?: string; volume?: number; unitPrice: number }) => {
     const firstMaster = masterItems && masterItems.length > 0 ? masterItems[0] : null
+    const initialUnit = normalizeUnit(preset?.unit || (firstMaster?.unit || '点'))
+    const initialQty = initialUnit === 'kg' ? 50 : 1
     const newItem: QuoteItem = {
       id: Date.now().toString(),
       name: preset ? preset.name : (firstMaster ? firstMaster.name : '新規不用品'),
-      quantity: 1,
-      unit: preset?.unit || (firstMaster?.unit || '点'),
+      quantity: initialQty,
+      unit: initialUnit,
       volume: preset?.volume !== undefined ? preset.volume : (firstMaster?.volume !== undefined ? firstMaster.volume : 0.4),
       unitPrice: preset ? preset.unitPrice : (firstMaster ? firstMaster.price : 3000),
       reason: '手動追加品目',
@@ -449,10 +519,15 @@ export const MobileQuoteModal: React.FC<MobileQuoteModalProps> = ({
     setItems((prev) =>
       prev.map((item) => {
         if (item.id !== id) return item
-        return {
+        const updated = {
           ...item,
-          [field]: value,
+          [field]: field === 'unit' ? normalizeUnit(String(value)) : value,
         }
+        // 単位をkgに変更した際に数量が1のままなら50kgへ補正
+        if (field === 'unit' && normalizeUnit(String(value)) === 'kg' && item.quantity <= 1) {
+          updated.quantity = item.volume > 0 ? Math.round(item.volume * 200) : 50
+        }
+        return updated
       })
     )
   }
@@ -608,6 +683,7 @@ export const MobileQuoteModal: React.FC<MobileQuoteModalProps> = ({
           name: it.name,
           price: it.unitPrice,
           quantity: it.quantity,
+          unit: it.unit,
           volume: it.volume,
         })),
         itemsSubtotal,
@@ -827,8 +903,13 @@ export const MobileQuoteModal: React.FC<MobileQuoteModalProps> = ({
                           detItem.name.includes('冷蔵庫') ? '🧊' :
                           detItem.name.includes('洗濯機') ? '🧺' :
                           detItem.name.includes('エアコン') ? '❄️' :
+                          detItem.name.includes('木くず') || detItem.name.includes('木材') || detItem.name.includes('廃材') ? '🪵' :
+                          detItem.name.includes('粗大') || detItem.name.includes('雑ゴミ') ? '🗑️' :
+                          detItem.name.includes('プラスチック') || detItem.name.includes('プラ') ? '🧴' :
+                          detItem.name.includes('コンクリ') || detItem.name.includes('ブロック') ? '🧱' :
+                          detItem.name.includes('ガラス') || detItem.name.includes('陶') ? '🏺' :
                           detItem.name.includes('ソファ') || detItem.name.includes('椅子') ? '🛋️' :
-                          detItem.name.includes('ベッド') || detItem.name.includes('布団') ? '🛏️' :
+                          detItem.name.includes('ベッド') || detItem.name.includes('布団') || detItem.name.includes('マット') ? '🛏️' :
                           detItem.name.includes('段ボール') || detItem.name.includes('箱') ? '📦' :
                           detItem.name.includes('タイヤ') ? '🛞' :
                           detItem.name.includes('金属') || detItem.name.includes('鉄') ? '⚙️' :
@@ -1205,72 +1286,92 @@ export const MobileQuoteModal: React.FC<MobileQuoteModalProps> = ({
                           </div>
 
                         {/* 数量・単位・体積・単価入力 */}
-                        <div className="grid grid-cols-4 gap-2 text-xs">
-                          <div>
-                            <label className="text-[10px] text-sub font-semibold block mb-0.5">数量</label>
-                            <Input
-                              type="number"
-                              min="1"
-                              value={item.quantity}
-                              onChange={(e) => handleUpdateItem(item.id, 'quantity', parseInt(e.target.value) || 1)}
-                              className="text-xs bg-white text-center font-bold"
-                            />
-                          </div>
+                        {(() => {
+                          const isKgItem = normalizeUnit(item.unit) === 'kg'
+                          const isM3Item = normalizeUnit(item.unit) === 'm3'
 
-                          <div>
-                            <label className="text-[10px] text-sub font-semibold block mb-0.5">単位</label>
-                            <select
-                              className="w-full text-xs px-1.5 py-1.5 border border-slate-300 rounded-lg bg-white font-bold text-slate-800 focus:outline-none"
-                              value={item.unit || '点'}
-                              onChange={(e) => handleUpdateItem(item.id, 'unit', e.target.value)}
-                            >
-                              <option value="点">点</option>
-                              <option value="個">個</option>
-                              <option value="台">台</option>
-                              <option value="箱">箱</option>
-                              <option value="袋">袋</option>
-                              <option value="kg">kg</option>
-                              <option value="本">本</option>
-                              <option value="枚">枚</option>
-                              <option value="m3">m3</option>
-                            </select>
-                          </div>
+                          return (
+                            <>
+                              <div className="grid grid-cols-4 gap-2 text-xs">
+                                <div>
+                                  <label className="text-[10px] text-sub font-semibold block mb-0.5">
+                                    {isKgItem ? '重量 (kg)' : isM3Item ? '体積 (m³)' : '数量'}
+                                  </label>
+                                  <Input
+                                    type="number"
+                                    min="1"
+                                    step={isKgItem ? '10' : '1'}
+                                    value={item.quantity}
+                                    onChange={(e) => handleUpdateItem(item.id, 'quantity', parseInt(e.target.value) || 1)}
+                                    className="text-xs bg-white text-center font-bold"
+                                  />
+                                </div>
 
-                          <div>
-                            <label className="text-[10px] text-sub font-semibold block mb-0.5">
-                              {item.unit === 'kg' ? '概算体積(m3)' : item.unit === 'm3' ? '体積(m3)' : '体積(m3/点)'}
-                            </label>
-                            <Input
-                              type="number"
-                              step="0.1"
-                              min="0"
-                              value={item.volume}
-                              onChange={(e) => handleUpdateItem(item.id, 'volume', parseFloat(e.target.value) || 0)}
-                              className="text-xs bg-white text-center font-bold text-blue-700"
-                            />
-                          </div>
+                                <div>
+                                  <label className="text-[10px] text-sub font-semibold block mb-0.5">単位</label>
+                                  <select
+                                    className="w-full text-xs px-1.5 py-1.5 border border-slate-300 rounded-lg bg-white font-bold text-slate-800 focus:outline-none"
+                                    value={normalizeUnit(item.unit)}
+                                    onChange={(e) => handleUpdateItem(item.id, 'unit', e.target.value)}
+                                  >
+                                    <option value="点">点</option>
+                                    <option value="個">個</option>
+                                    <option value="台">台</option>
+                                    <option value="箱">箱</option>
+                                    <option value="袋">袋</option>
+                                    <option value="kg">kg (重量制)</option>
+                                    <option value="本">本</option>
+                                    <option value="枚">枚</option>
+                                    <option value="m3">m3 (容積制)</option>
+                                  </select>
+                                </div>
 
-                          <div>
-                            <label className="text-[10px] text-sub font-semibold block mb-0.5">単価 (円)</label>
-                            <Input
-                              type="number"
-                              step="500"
-                              min="0"
-                              value={item.unitPrice}
-                              onChange={(e) => handleUpdateItem(item.id, 'unitPrice', parseInt(e.target.value) || 0)}
-                              className="text-xs bg-white text-right font-bold"
-                            />
-                          </div>
-                        </div>
+                                <div>
+                                  <label className="text-[10px] text-sub font-semibold block mb-0.5">
+                                    {isKgItem ? '概算体積(m³)' : isM3Item ? '体積(m³)' : '体積(m³/点)'}
+                                  </label>
+                                  <Input
+                                    type="number"
+                                    step="0.1"
+                                    min="0"
+                                    value={item.volume}
+                                    onChange={(e) => handleUpdateItem(item.id, 'volume', parseFloat(e.target.value) || 0)}
+                                    placeholder={isKgItem ? String(Math.round(item.quantity * 0.005 * 10) / 10) : '0.4'}
+                                    className="text-xs bg-white text-center font-bold text-blue-700"
+                                  />
+                                </div>
 
-                        <div className="flex items-center justify-between pt-1 border-t border-slate-200 text-[11px] text-sub">
-                          <span>
-                            小計体積: <strong className="text-blue-700">{calcItemVolume(item).toFixed(1)} m3</strong>
-                          </span>
-                          <span>
-                            小計金額: <strong className="text-main">¥{(item.unitPrice * item.quantity).toLocaleString()}</strong>
-                          </span>
-                        </div>
+                                <div>
+                                  <label className="text-[10px] text-sub font-semibold block mb-0.5">
+                                    {isKgItem ? '単価 (円/kg)' : isM3Item ? '単価 (円/m³)' : '単価 (円)'}
+                                  </label>
+                                  <Input
+                                    type="number"
+                                    step={isKgItem ? '5' : '500'}
+                                    min="0"
+                                    value={item.unitPrice}
+                                    onChange={(e) => handleUpdateItem(item.id, 'unitPrice', parseInt(e.target.value) || 0)}
+                                    className="text-xs bg-white text-right font-bold"
+                                  />
+                                </div>
+                              </div>
+
+                              <div className="flex items-center justify-between pt-1 border-t border-slate-200 text-[11px] text-sub">
+                                <span>
+                                  小計体積: <strong className="text-blue-700">{calcItemVolume(item).toFixed(1)} m³</strong>
+                                </span>
+                                <span>
+                                  小計金額: <strong className="text-main">¥{(item.unitPrice * item.quantity).toLocaleString()}</strong>
+                                  {isKgItem && (
+                                    <span className="text-[10px] text-slate-500 font-normal ml-1">
+                                      ({item.quantity}kg × ¥{item.unitPrice})
+                                    </span>
+                                  )}
+                                </span>
+                              </div>
+                            </>
+                          )
+                        })()}
                       </div>
                     )
                   }))}

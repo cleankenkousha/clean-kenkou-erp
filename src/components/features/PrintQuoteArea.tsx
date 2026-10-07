@@ -8,6 +8,7 @@ export interface PrintQuoteItem {
   category?: string
   price: number
   quantity: number
+  unit?: string
   volume: number
 }
 
@@ -140,17 +141,31 @@ export const PrintQuoteArea: React.FC<PrintQuoteAreaProps> = ({ quote }) => {
                 </td>
               </tr>
             ) : (
-              quote.items.map((item, idx) => (
-                <tr key={idx}>
-                  <td className="py-1.5 px-2 font-semibold text-slate-900">{item.name}</td>
-                  <td className="py-1.5 px-2 text-center">{item.quantity}</td>
-                  <td className="py-1.5 px-2 text-right">¥{item.price.toLocaleString()}</td>
-                  <td className="py-1.5 px-2 text-right">{(item.volume * item.quantity).toFixed(1)} m³</td>
-                  <td className="py-1.5 px-2 text-right font-bold">
-                    ¥{(item.price * item.quantity).toLocaleString()}
-                  </td>
-                </tr>
-              ))
+              quote.items.map((item, idx) => {
+                const isKg = item.unit === 'kg'
+                const isM3 = item.unit === 'm3'
+                const displayVol = isKg
+                  ? (item.volume > 0 ? item.volume : item.quantity * 0.005)
+                  : isM3
+                  ? item.quantity
+                  : item.volume * item.quantity
+
+                return (
+                  <tr key={idx}>
+                    <td className="py-1.5 px-2 font-semibold text-slate-900">{item.name}</td>
+                    <td className="py-1.5 px-2 text-center">
+                      {item.quantity} {item.unit || ''}
+                    </td>
+                    <td className="py-1.5 px-2 text-right">
+                      ¥{item.price.toLocaleString()}{isKg ? '/kg' : ''}
+                    </td>
+                    <td className="py-1.5 px-2 text-right">{displayVol.toFixed(1)} m³</td>
+                    <td className="py-1.5 px-2 text-right font-bold">
+                      ¥{(item.price * item.quantity).toLocaleString()}
+                    </td>
+                  </tr>
+                )
+              })
             )}
           </tbody>
         </table>

@@ -10,6 +10,7 @@ export interface QuoteItem {
   category?: string
   price: number
   quantity: number
+  unit?: string
   volume: number
 }
 
@@ -232,17 +233,31 @@ export const QuotePrintModal: React.FC<QuotePrintModalProps> = ({
                     </td>
                   </tr>
                 ) : (
-                  quoteData.items.map((item, idx) => (
-                    <tr key={idx} className="hover:bg-slate-50/50">
-                      <td className="py-2 px-3 font-semibold text-slate-900">{item.name}</td>
-                      <td className="py-2 px-3 text-center text-slate-700 font-medium">{item.quantity}</td>
-                      <td className="py-2 px-3 text-right text-slate-600">¥{item.price.toLocaleString()}</td>
-                      <td className="py-2 px-3 text-right text-slate-500">{(item.volume * item.quantity).toFixed(1)} m³</td>
-                      <td className="py-2 px-3 text-right font-bold text-slate-900">
-                        ¥{(item.price * item.quantity).toLocaleString()}
-                      </td>
-                    </tr>
-                  ))
+                  quoteData.items.map((item, idx) => {
+                    const isKg = item.unit === 'kg'
+                    const isM3 = item.unit === 'm3'
+                    const displayVol = isKg
+                      ? (item.volume > 0 ? item.volume : item.quantity * 0.005)
+                      : isM3
+                      ? item.quantity
+                      : item.volume * item.quantity
+
+                    return (
+                      <tr key={idx} className="hover:bg-slate-50/50">
+                        <td className="py-2 px-3 font-semibold text-slate-900">{item.name}</td>
+                        <td className="py-2 px-3 text-center text-slate-700 font-medium">
+                          {item.quantity} {item.unit || ''}
+                        </td>
+                        <td className="py-2 px-3 text-right text-slate-600">
+                          ¥{item.price.toLocaleString()}{isKg ? '/kg' : ''}
+                        </td>
+                        <td className="py-2 px-3 text-right text-slate-500">{displayVol.toFixed(1)} m³</td>
+                        <td className="py-2 px-3 text-right font-bold text-slate-900">
+                          ¥{(item.price * item.quantity).toLocaleString()}
+                        </td>
+                      </tr>
+                    )
+                  })
                 )}
               </tbody>
             </table>

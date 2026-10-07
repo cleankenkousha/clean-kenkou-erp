@@ -20,7 +20,9 @@ export const DEFAULT_ITEMS: ItemPriceMaster[] = [
   { id: '7', category: '日用品・梱包', name: '段ボール（Mサイズ相当）', unit: '箱', price: 800, volume: 0.1 },
   { id: '8', category: '家具・収納', name: 'タンス / チェスト', unit: '点', price: 7000, volume: 1.2 },
   { id: '9', category: '４家電', name: 'エアコン', unit: '台', price: 2500, volume: 0.5 },
-  { id: '10', category: 'その他', name: '可燃物・不用品袋', unit: '袋', price: 500, volume: 0.1 },
+  { id: '10', category: 'その他自社処理', name: '木くず', unit: 'kg', price: 40, volume: 0.5 },
+  { id: '11', category: 'その他自社処理', name: '可燃性粗大ごみ', unit: 'kg', price: 45, volume: 0.5 },
+  { id: '12', category: 'その他', name: '可燃物・不用品袋', unit: '袋', price: 500, volume: 0.1 },
 ]
 
 export interface UsePriceMasterReturn {
@@ -82,7 +84,7 @@ export const usePriceMaster = (): UsePriceMasterReturn => {
           id: String(d.id),
           category: d.category || '',
           name: d.name || '',
-          unit: d.unit || 'kg',
+          unit: (d.unit || 'kg').replace(/㎏/g, 'kg'),
           price: Number(d.price) || 0,
           volume: volumeMap.get(d.name) || 0.5,
         }))
