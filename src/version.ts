@@ -6,6 +6,6 @@
  * クライアントのキャッシュ状態を即座に確認できます。
  */
 
-export const APP_VERSION = 'v1.1.3'
-export const APP_BUILD_DATE = '2026.10.07-10:25'
-export const APP_DESCRIPTION = 'AI見積もり木くず・粗大ごみ等のkg重量単価算定対応 & 単位表示改善'
+export const APP_VERSION = 'v1.1.4'
+export const APP_BUILD_DATE = '2026.10.07-11:15'
+export const APP_DESCRIPTION = 'AI見積もりの再現性向上(temperature:0.1固定・重複排除・算定安定化)'

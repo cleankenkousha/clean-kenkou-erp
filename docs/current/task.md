@@ -1,11 +1,11 @@
 # Clean KENKOU ERP - 作業進捗および次回残課題ログ
 
-**最終更新日時**: 2026-10-07 10:45
+**最終更新日時**: 2026-10-07 11:20
 
-**現在のバージョン**: v1.1.3
+**現在のバージョン**: v1.1.4
 
 **ステータス**: 
-AI見積もりの木くず・可燃性粗大ごみ等における「Kg重量単価算定」への仕様改修、単位正規化、UI/印刷の単位表示改善、システム変更時のバージョン更新義務ルールの定義盛り込み、および本番環境（Supabase Edge Functions v7 / Netlify v1.1.3）へのデプロイが完了。
+AI見積もり機能における「同一現場写真の再判定で見積金額がブレる（毎回金額が変わる）」問題に対し、Gemini APIの `temperature: 0.1` 固定化、複数枚写真（最大10枚）間における重複排除プロンプトの厳格化、決定論的算定ルールの設計書反映を行い、Supabase Edge Function（Version 8）および Netlify フロントエンド（v1.1.4）へのデプロイを完了。
 
 ---
 
@@ -53,9 +53,20 @@ AI見積もりの木くず・可燃性粗大ごみ等における「Kg重量単�
 
 * `src/version.ts`: `v1.1.3`（2026.10.07-10:25）へインクリメント。
 * `package.json`: `"version": "1.1.3"` へ更新。
-* `public/sw.js`: `CACHE_NAME = 'kenkou-erp-v1.1.3'` へ更新（古いPWAキャッシュの自動破棄）。
-* `npm run build`: TypeScriptコンパイル・Viteビルド正常完了（エラー0件）。
-* GitHub `main` ブランチへプッシュし、Netlify 自動デプロイを発火・完了。
+* `public/sw.js`: `CACHE_NAME = 'kenkou-erp-v1.1.3'` へ更新。
+* GitHub `main` ブランチへプッシュし、Netlify 自動デプロイを完了。
+
+### 1-7. AI見積もりの再現性向上・同一写真判定ブレの解消（v1.1.4）【完了】
+
+* **課題**: 同じ現場写真群（10枚等）を判定させるたびに見積金額や検出品目が変動する現象が発生。
+* **原因分析**:
+  1. `generationConfig` の `temperature` が未指定（デフォルト1.0）だったため、トークンサンプリング時に毎回ランダムな推論が走り、推定重量や品目リストがブレていた。
+  2. 複数枚（最大10枚）の写真において、同一の不用品（同じ木くずの山や大型家具など）が別アングルから写っている際の重複排除ルールが不足していた。
+* **対応**:
+  1. **設計書の先行反映**: `docs/06_AI_Design_Guide.md` に 2.5節「見積結果の再現性・決定論的算定ルール」を新設。`temperature: 0.1` の決定論的モード固定、写真間重複排除の原則を明文化。
+  2. **Edge Function 改修**: `supabase/functions/gemini-analyze/index.ts` の `generationConfig` に `temperature: 0.1` を追加。プロンプトに「複数枚写真における重複排除・現場全体の一元算定」「再現性のある客観的算定」を最重要項目として厳格指示。
+  3. **デプロイ**: `deploy_edge_function` で Supabase クラウド環境（Version 8）へデプロイ完了。
+  4. **バージョン更新**: `src/version.ts`, `package.json`, `public/sw.js` を `v1.1.4`（2026.10.07-11:15）へ更新。
 
 ---
 
@@ -64,9 +75,9 @@ AI見積もりの木くず・可燃性粗大ごみ等における「Kg重量単�
 | 機能・コンポーネント | 状況 | 備考 |
 | :--- | :--- | :--- |
 | データベース（Supabase PostgreSQL） | 稼働中 | RLS有効、`price_master` 連携 |
-| Edge Function `gemini-analyze` | **Version 7 稼働中** | kg重量推定指示追加、`verify_jwt: false` |
-| フロントエンド（Netlify本番環境） | **v1.1.3 デプロイ済み** | `https://unrivaled-dusk-7a7e01.netlify.app` |
-| 開発・設計ガードスキル | **更新完了** | バージョン更新義務・重量制算定ルール定義済み |
+| Edge Function `gemini-analyze` | **Version 8 稼働中** | `temperature: 0.1` 固定、重複排除強化、`verify_jwt: false` |
+| フロントエンド（Netlify本番環境） | **v1.1.4 デプロイ中** | `https://unrivaled-dusk-7a7e01.netlify.app` |
+| 開発・設計ガードスキル | **適用中** | バージョン更新義務・重量制算定ルール・再現性ルール定義済み |
 | 牛若丸連携 | 役割分離を維持 | 定期ルート配車との重複なし |
 
 ---
