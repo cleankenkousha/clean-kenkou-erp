@@ -6,6 +6,7 @@
  * クライアントのキャッシュ状態を即座に確認できます。
  */
 
-export const APP_VERSION = 'v1.1.4'
-export const APP_BUILD_DATE = '2026.10.07-11:15'
-export const APP_DESCRIPTION = 'AI見積もりの再現性向上(temperature:0.1固定・重複排除・算定安定化)'
+export const APP_VERSION = 'v1.1.5'
+export const APP_BUILD_DATE = '2026.10.12-15:15'
+export const APP_DESCRIPTION = 'AI見積もりの個別品目柔軟抽出対応(仏壇・小型家電・家具等の網羅同定・Edge Function v9・カメラ権限適正化)'
+

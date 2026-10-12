@@ -185,6 +185,14 @@ const matchMasterItem = (
       masterMatchKeywords: ['紙類', '段ボール', 'ダンボール', '古紙', '日用品'],
     },
     {
+      keywords: ['机', 'デスク', '座卓', 'テーブル', 'ちゃぶ台', '文机', 'ローテーブル'],
+      masterMatchKeywords: ['学習机', '机', 'デスク', 'テーブル', '座卓', '家具'],
+    },
+    {
+      keywords: ['仏壇', '神棚', '経机', '位牌', '仏具'],
+      masterMatchKeywords: ['仏壇', '神棚', '特別品目'],
+    },
+    {
       keywords: ['タイヤ', 'ホイール'],
       masterMatchKeywords: ['タイヤ'],
     },

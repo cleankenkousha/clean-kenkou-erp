@@ -20,7 +20,7 @@
     # リファラー情報の制限
     Referrer-Policy = "strict-origin-when-cross-origin"
     # カメラ・マイク・位置情報等の制限
-    Permissions-Policy = "camera=(), microphone=(), geolocation=(), payment=()"
+    Permissions-Policy = "camera=(self), microphone=(), geolocation=(), payment=()"
     # Content Security Policy
     # - Supabase API・Realtime・Auth を明示許可
     # - Google Fonts を許可
