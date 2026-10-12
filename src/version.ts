@@ -6,8 +6,8 @@
  * クライアントのキャッシュ状態を即座に確認できます。
  */
 
-export const APP_VERSION = 'v1.1.6'
-export const APP_BUILD_DATE = '2026.10.12-15:40'
-export const APP_DESCRIPTION = 'AI見積もりの最大20枚並列解析対応・複数部屋エリア重複制御・大括り化防止(Edge Function v10)'
+export const APP_VERSION = 'v1.1.7'
+export const APP_BUILD_DATE = '2026.10.12-16:05'
+export const APP_DESCRIPTION = '総体積(総㎥)連動の搬出作業費自動加算計算式(総㎥×¥1,500)および明細・見積印刷連携'
 
 

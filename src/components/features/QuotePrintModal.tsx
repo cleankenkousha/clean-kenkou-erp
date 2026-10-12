@@ -32,6 +32,8 @@ export interface QuoteData {
   disassemblyFee?: number
   appliedPack?: string
   totalVolume: number
+  volumeWorkFee?: number
+  workFeePerM3?: number
   grandTotal: number
   notes?: string
 }
@@ -280,6 +282,12 @@ export const QuotePrintModal: React.FC<QuotePrintModalProps> = ({
                   <p className="flex justify-between text-amber-800 font-medium">
                     <span>階段手押し作業加算:</span>
                     <span>+¥{quoteData.autoStairFee.toLocaleString()}</span>
+                  </p>
+                ) : null}
+                {quoteData.volumeWorkFee ? (
+                  <p className="flex justify-between text-blue-800 font-medium">
+                    <span>搬出作業費 ({quoteData.totalVolume.toFixed(1)}m³ × ¥{(quoteData.workFeePerM3 || 1500).toLocaleString()}):</span>
+                    <span>+¥{quoteData.volumeWorkFee.toLocaleString()}</span>
                   </p>
                 ) : null}
                 {quoteData.disassemblyFee ? (

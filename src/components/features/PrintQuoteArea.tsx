@@ -30,6 +30,8 @@ export interface PrintQuoteData {
   disassemblyFee?: number
   appliedPack?: string
   totalVolume: number
+  volumeWorkFee?: number
+  workFeePerM3?: number
   grandTotal: number
   notes?: string
   signature?: string | null
@@ -184,6 +186,12 @@ export const PrintQuoteArea: React.FC<PrintQuoteAreaProps> = ({ quote }) => {
               <p className="flex justify-between text-amber-900 font-medium">
                 <span>階段手押し費:</span>
                 <span>+¥{quote.autoStairFee.toLocaleString()}</span>
+              </p>
+            ) : null}
+            {quote.volumeWorkFee ? (
+              <p className="flex justify-between text-blue-900 font-medium">
+                <span>搬出作業費 ({quote.totalVolume.toFixed(1)}m³ × ¥{(quote.workFeePerM3 || 1500).toLocaleString()}):</span>
+                <span>+¥{quote.volumeWorkFee.toLocaleString()}</span>
               </p>
             ) : null}
             {quote.disassemblyFee ? (

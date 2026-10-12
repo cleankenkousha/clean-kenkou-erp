@@ -573,6 +573,16 @@ export const MobileQuoteModal: React.FC<MobileQuoteModalProps> = ({
     }
   }, [totalVolume])
 
+  // 作業費（総㎥ × 単価/㎥）の算出 (社内単価マスタの作業費、フォールバック¥1,500/㎥)
+  const workFeePerM3 = React.useMemo(() => {
+    const workMaster = masterItems.find((m) => m.name === '作業費' || m.name.includes('作業費'))
+    return workMaster?.price ?? 1500
+  }, [masterItems])
+
+  const volumeWorkFee = React.useMemo(() => {
+    return Math.round(totalVolume * workFeePerM3)
+  }, [totalVolume, workFeePerM3])
+
   // 作業搬出費用（階段料金 ＋ 特殊工賃 ＋ その他実費）
   const workExpenses = autoStairFee + (Number(disassemblyFee) || 0) + (Number(expenses) || 0)
 
@@ -588,7 +598,7 @@ export const MobileQuoteModal: React.FC<MobileQuoteModalProps> = ({
   // 単品積み上げとトラックパックのお得度比較
   const isPackDiscounted = packPrice !== null && itemsSubtotal > packPrice
   const effectiveItemsCost = isPackDiscounted ? packPrice : itemsSubtotal
-  const grandTotal = effectiveItemsCost + (Number(baseFee) || 0) + workExpenses
+  const grandTotal = effectiveItemsCost + volumeWorkFee + (Number(baseFee) || 0) + workExpenses
 
   const [printQuoteData, setPrintQuoteData] = useState<PrintQuoteData | null>(null)
 
@@ -634,6 +644,8 @@ export const MobileQuoteModal: React.FC<MobileQuoteModalProps> = ({
         disassemblyFee,
         appliedPack: activePackName,
         totalVolume: Math.round(totalVolume * 100) / 100,
+        volumeWorkFee,
+        workFeePerM3,
         grandTotal,
         notes,
         imagesCount: capturedImages.length,
@@ -704,6 +716,8 @@ export const MobileQuoteModal: React.FC<MobileQuoteModalProps> = ({
         disassemblyFee: Number(disassemblyFee) || 0,
         appliedPack: activePackName,
         totalVolume,
+        volumeWorkFee,
+        workFeePerM3,
         grandTotal,
         notes,
       }
@@ -1072,6 +1086,19 @@ export const MobileQuoteModal: React.FC<MobileQuoteModalProps> = ({
                     <span className="font-bold text-amber-700">+¥{autoStairFee.toLocaleString()}</span>
                   </div>
                 )}
+
+                {/* 搬出作業費バナー (総㎥連動算定) */}
+                <div className="p-2.5 bg-blue-50 border border-blue-200 rounded-lg text-xs text-blue-900 flex items-center justify-between font-semibold">
+                  <div>
+                    <span>搬出作業費 (総㎥連動):</span>
+                    <span className="text-[10px] text-blue-700 block font-normal">
+                      総 {totalVolume.toFixed(1)} m³ × ¥{workFeePerM3.toLocaleString()}/m³
+                    </span>
+                  </div>
+                  <span className="font-bold text-blue-800 text-sm">
+                    +¥{volumeWorkFee.toLocaleString()}
+                  </span>
+                </div>
 
                 <div>
                   <label className="text-[11px] font-semibold text-sub block mb-1">
@@ -1462,6 +1489,13 @@ export const MobileQuoteModal: React.FC<MobileQuoteModalProps> = ({
                     </div>
                   )}
 
+                  {volumeWorkFee > 0 && (
+                    <div className="flex justify-between items-center text-cyan-200">
+                      <span>📦 搬出作業費 ({totalVolume.toFixed(1)}m³ × ¥{workFeePerM3.toLocaleString()}):</span>
+                      <span className="font-semibold">+¥{volumeWorkFee.toLocaleString()}</span>
+                    </div>
+                  )}
+
                   {disassemblyFee > 0 && (
                     <div className="flex justify-between items-center text-blue-200">
                       <span>⚙️ 特殊作業費 (エアコン・解体):</span>
@@ -1596,6 +1630,8 @@ export const MobileQuoteModal: React.FC<MobileQuoteModalProps> = ({
                 disassemblyFee: Number(disassemblyFee) || 0,
                 appliedPack: activePackName,
                 totalVolume,
+                volumeWorkFee,
+                workFeePerM3,
                 grandTotal,
                 notes,
                 signature,

@@ -156,6 +156,8 @@ export const Jobs: React.FC = () => {
             disassemblyFee: parsed.disassemblyFee,
             appliedPack: parsed.appliedPack,
             totalVolume: parsed.totalVolume || 0,
+            volumeWorkFee: parsed.volumeWorkFee || 0,
+            workFeePerM3: parsed.workFeePerM3 || 1500,
             grandTotal: parsed.grandTotal || 0,
             notes: parsed.notes,
           }
