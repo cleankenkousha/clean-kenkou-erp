@@ -6,7 +6,8 @@
  * クライアントのキャッシュ状態を即座に確認できます。
  */
 
-export const APP_VERSION = 'v1.1.5'
-export const APP_BUILD_DATE = '2026.10.12-15:15'
-export const APP_DESCRIPTION = 'AI見積もりの個別品目柔軟抽出対応(仏壇・小型家電・家具等の網羅同定・Edge Function v9・カメラ権限適正化)'
+export const APP_VERSION = 'v1.1.6'
+export const APP_BUILD_DATE = '2026.10.12-15:40'
+export const APP_DESCRIPTION = 'AI見積もりの最大20枚並列解析対応・複数部屋エリア重複制御・大括り化防止(Edge Function v10)'
+
 
