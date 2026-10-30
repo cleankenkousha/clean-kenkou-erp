@@ -80,8 +80,8 @@ Supabase 一時停止（Paused）からの復旧後、スタッフ個別のロ�
    * **内容**: 現在 `company_settings` / `price_master` はログイン済みスタッフ全員が更新可能（現場からの単価調整等を考慮）。もし管理者のみに限定したい場合は、RLS の `UPDATE / DELETE` 条件を `admin` ロールのみに絞る。
 2. **案件ステータス変更・見積保存・請求発行時の操作履歴（`activity_logs`）記録対象の拡大**
    * **内容**: 現在は「ログイン」「ログアウト」「新規受付登録」「アカウント設定」を自動記録中。必要に応じて「見積確定」「回収完了」「請求書発行」なども履歴タブに記録するよう拡張する。
-3. **不要テーブル（`course_records` / `course_photos`）の整理確認**
-   * **内容**: 現在は RLS でロック済み（実害なし）。以前のプロジェクトで今後一切使用しないことが確定すれば、バックアップ確認のうえテーブル削除（DROP）を検討。
+3. **不要テーブル（`course_records` / `course_photos`）の整理【完了（2026-10-30 16:42）】**
+   * **内容**: 委託コースアプリ側の接続先分離・修正とあわせ、Clean KENKOU ERP 側に誤って作成されていた `course_records` / `course_photos` テーブルの削除（DROP）が完了。全9テーブルすべてが Clean KENKOU ERP 専用かつ RLS 有効のクリーン状態であることを確認済。
 4. **Supabase Auth の漏えいパスワード保護（Leaked Password Protection）**
    * **内容**: Supabase Pro プラン以上へ移行する機会があれば、Dashboard ＞ Auth ＞ Password Security から有効化する。
 
