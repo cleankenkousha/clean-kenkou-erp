@@ -79,6 +79,29 @@ export const Settings: React.FC = () => {
   const [isSavingAccount, setIsSavingAccount] = useState(false)
   const [accountModalMsg, setAccountModalMsg] = useState<{ text: string; isError: boolean } | null>(null)
 
+  // 現在ログイン中のユーザー情報（権限判定用）
+  const [currentAuthUserId, setCurrentAuthUserId] = useState<string | null>(null)
+  const [currentAuthEmail, setCurrentAuthEmail] = useState<string | null>(null)
+
+  useEffect(() => {
+    supabase.auth.getUser().then(({ data }) => {
+      if (data.user) {
+        setCurrentAuthUserId(data.user.id)
+        setCurrentAuthEmail(data.user.email || null)
+      }
+    })
+  }, [])
+
+  // 管理者(admin)アカウントが既に1名以上セットアップ済みか、および現在のログインユーザーが管理者か判定
+  const hasConfiguredAdmin = profiles.some((p) => p.role === 'admin' && Boolean(p.auth_user_id))
+  const currentStaffProfile = profiles.find(
+    (p) =>
+      (currentAuthUserId && (p.auth_user_id === currentAuthUserId || p.id === currentAuthUserId)) ||
+      (currentAuthEmail && p.email?.toLowerCase() === currentAuthEmail.toLowerCase())
+  )
+  // 初回セットアップ中（まだadminのパスワードが未設定）は全員操作可、admin設定完了後はadminのみ操作可
+  const canManageStaffAccounts = !hasConfiguredAdmin || currentStaffProfile?.role === 'admin'
+
   // 3. ログイン・操作履歴（activity_logs）
   const [activityLogs, setActivityLogs] = useState<ActivityLog[]>([])
   const [isLoadingLogs, setIsLoadingLogs] = useState(false)
@@ -622,21 +645,23 @@ export const Settings: React.FC = () => {
                                 <ShieldCheck className="w-3 h-3 mr-1" />
                                 {roleInfo.label}
                               </span>
-                              <select
-                                value={profile.role}
-                                onChange={async (e) => {
-                                  await updateProfile(profile.id, { role: e.target.value as StaffRole })
-                                  setIsSavedStaff(true)
-                                  setTimeout(() => setIsSavedStaff(false), 4000)
-                                }}
-                                className="p-1 border border-border rounded text-[11px] bg-white text-main font-medium focus:outline-none focus:ring-1 focus:ring-slate-900"
-                              >
-                                <option value="operator">現場作業員</option>
-                                <option value="dispatcher">配車担当</option>
-                                <option value="sales">営業担当</option>
-                                <option value="clerk">事務担当</option>
-                                <option value="admin">管理者</option>
-                              </select>
+                              {canManageStaffAccounts && (
+                                <select
+                                  value={profile.role}
+                                  onChange={async (e) => {
+                                    await updateProfile(profile.id, { role: e.target.value as StaffRole })
+                                    setIsSavedStaff(true)
+                                    setTimeout(() => setIsSavedStaff(false), 4000)
+                                  }}
+                                  className="p-1 border border-border rounded text-[11px] bg-white text-main font-medium focus:outline-none focus:ring-1 focus:ring-slate-900"
+                                >
+                                  <option value="operator">現場作業員</option>
+                                  <option value="dispatcher">配車担当</option>
+                                  <option value="sales">営業担当</option>
+                                  <option value="clerk">事務担当</option>
+                                  <option value="admin">管理者</option>
+                                </select>
+                              )}
                             </div>
                           </td>
                           <td className="py-3 px-4">
@@ -667,42 +692,48 @@ export const Settings: React.FC = () => {
                             </div>
                           </td>
                           <td className="py-3 px-4 text-right space-x-1.5 whitespace-nowrap">
-                            <Button
-                              type="button"
-                              variant="primary"
-                              size="sm"
-                              onClick={() => openAccountModal(profile)}
-                              className="text-[11px] py-1.5 px-2.5 bg-slate-900 hover:bg-slate-800 text-white font-bold shadow-xs"
-                              title="このスタッフのログインIDとパスワードを直接設定・変更します"
-                            >
-                              <Key className="w-3.5 h-3.5 mr-1 text-amber-400" />
-                              パスワード設定
-                            </Button>
-                            <Button
-                              type="button"
-                              variant="outline"
-                              size="sm"
-                              onClick={async () => {
-                                const newName = prompt('表示名を入力してください', profile.display_name || '')
-                                if (newName !== null && newName.trim()) {
-                                  await updateProfile(profile.id, { display_name: newName.trim() })
-                                  setIsSavedStaff(true)
-                                  setTimeout(() => setIsSavedStaff(false), 4000)
-                                }
-                              }}
-                              className="text-[11px] py-1 px-2"
-                            >
-                              名前変更
-                            </Button>
-                            <Button
-                              type="button"
-                              variant="outline"
-                              size="sm"
-                              onClick={() => handleDeleteStaff(profile.id, profile.display_name || 'スタッフ')}
-                              className="hover:bg-rose-50 hover:text-rose-700 hover:border-rose-200 py-1 px-2"
-                            >
-                              <Trash2 className="w-3 h-3 text-rose-500" />
-                            </Button>
+                            {canManageStaffAccounts ? (
+                              <>
+                                <Button
+                                  type="button"
+                                  variant="primary"
+                                  size="sm"
+                                  onClick={() => openAccountModal(profile)}
+                                  className="text-[11px] py-1.5 px-2.5 bg-slate-900 hover:bg-slate-800 text-white font-bold shadow-xs"
+                                  title="このスタッフのログインIDとパスワードを直接設定・変更します"
+                                >
+                                  <Key className="w-3.5 h-3.5 mr-1 text-amber-400" />
+                                  パスワード設定
+                                </Button>
+                                <Button
+                                  type="button"
+                                  variant="outline"
+                                  size="sm"
+                                  onClick={async () => {
+                                    const newName = prompt('表示名を入力してください', profile.display_name || '')
+                                    if (newName !== null && newName.trim()) {
+                                      await updateProfile(profile.id, { display_name: newName.trim() })
+                                      setIsSavedStaff(true)
+                                      setTimeout(() => setIsSavedStaff(false), 4000)
+                                    }
+                                  }}
+                                  className="text-[11px] py-1 px-2"
+                                >
+                                  名前変更
+                                </Button>
+                                <Button
+                                  type="button"
+                                  variant="outline"
+                                  size="sm"
+                                  onClick={() => handleDeleteStaff(profile.id, profile.display_name || 'スタッフ')}
+                                  className="hover:bg-rose-50 hover:text-rose-700 hover:border-rose-200 py-1 px-2"
+                                >
+                                  <Trash2 className="w-3 h-3 text-rose-500" />
+                                </Button>
+                              </>
+                            ) : (
+                              <span className="text-[11px] text-sub">管理者のみ変更可</span>
+                            )}
                           </td>
                         </tr>
                       )

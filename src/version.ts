@@ -6,6 +6,6 @@
  * クライアントのキャッシュ状態を即座に確認できます。
  */
 
-export const APP_VERSION = 'v1.1.8'
-export const APP_BUILD_DATE = '2026.10.30-14:43'
-export const APP_DESCRIPTION = 'スタッフ別パスワード直接設定機能・ワンタップログイン・ログインおよび受付操作履歴管理機能の追加'
+export const APP_VERSION = 'v1.1.9'
+export const APP_BUILD_DATE = '2026.10.30-15:20'
+export const APP_DESCRIPTION = 'セキュリティ強化（RLS認証必須化・Edge Function JWT検証＆管理者権限ガード・DBインデックス最適化）'
