@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react'
+import React, { useState, useEffect, useMemo } from 'react'
 import { NavLink, useNavigate, useLocation } from 'react-router-dom'
 import {
   LayoutDashboard,
@@ -14,6 +14,8 @@ import {
   Calendar,
 } from 'lucide-react'
 import { supabase } from '../../lib/supabase'
+import { recordActivityLog } from '../../lib/activityLogger'
+import { useProfiles } from '../../hooks/useProfiles'
 import { useViewMode } from '../../hooks/useViewMode'
 import { APP_VERSION, APP_BUILD_DATE } from '../../version'
 
@@ -43,14 +45,15 @@ const mobileNavItems: NavItem[] = [
   { label: '設定・品目', path: '/settings', icon: Settings },
 ]
 
-
 export const Layout: React.FC<LayoutProps> = ({ children }) => {
   const navigate = useNavigate()
   const location = useLocation()
   const { isMobileMode, toggleViewMode } = useViewMode()
+  const { profiles } = useProfiles()
 
   // パスワード変更モーダル状態
   const [isPasswordModalOpen, setIsPasswordModalOpen] = useState(false)
+  const [currentUserId, setCurrentUserId] = useState<string | null>(null)
   const [currentUserEmail, setCurrentUserEmail] = useState<string | null>(null)
   const [newPassword, setNewPassword] = useState('')
   const [confirmPassword, setConfirmPassword] = useState('')
@@ -60,14 +63,35 @@ export const Layout: React.FC<LayoutProps> = ({ children }) => {
   // ログインユーザー情報の取得
   useEffect(() => {
     supabase.auth.getUser().then(({ data }) => {
-      if (data.user?.email) {
-        setCurrentUserEmail(data.user.email)
+      if (data.user) {
+        setCurrentUserId(data.user.id)
+        setCurrentUserEmail(data.user.email || null)
       }
     })
   }, [])
 
+  // ログイン中のスタッフプロフィール特定
+  const currentStaffProfile = useMemo(() => {
+    if (!currentUserId && !currentUserEmail) return null
+    return (
+      profiles.find((p) => p.auth_user_id === currentUserId) ||
+      profiles.find((p) => p.id === currentUserId) ||
+      (currentUserEmail
+        ? profiles.find((p) => p.email?.toLowerCase() === currentUserEmail.toLowerCase())
+        : undefined) ||
+      null
+    )
+  }, [profiles, currentUserId, currentUserEmail])
+
   const handleLogout = async () => {
     try {
+      await recordActivityLog({
+        actionType: 'logout',
+        description: 'システムからログアウトしました',
+        profileId: currentStaffProfile?.id || null,
+        staffName: currentStaffProfile?.display_name || null,
+        staffEmail: currentUserEmail,
+      })
       await supabase.auth.signOut()
       navigate('/login', { replace: true })
     } catch (err) {
@@ -94,6 +118,13 @@ export const Layout: React.FC<LayoutProps> = ({ children }) => {
       if (error) {
         setPasswordMsg({ text: `変更に失敗しました: ${error.message}`, isError: true })
       } else {
+        await recordActivityLog({
+          actionType: 'account_update',
+          description: '自身のログインパスワードを変更しました',
+          profileId: currentStaffProfile?.id || null,
+          staffName: currentStaffProfile?.display_name || null,
+          staffEmail: currentUserEmail,
+        })
         setPasswordMsg({ text: '✅ パスワードを正常に変更しました！', isError: false })
         setNewPassword('')
         setConfirmPassword('')
@@ -178,7 +209,6 @@ export const Layout: React.FC<LayoutProps> = ({ children }) => {
             type="button"
             onClick={handleToggleViewMode}
             className={`flex items-center space-x-1.5 px-2.5 py-1.5 rounded-lg text-xs font-bold transition-all border shadow-sm ${
-
               isMobileMode
                 ? 'bg-purple-50 text-purple-700 border-purple-200 hover:bg-purple-100'
                 : 'bg-blue-50 text-blue-700 border-blue-200 hover:bg-blue-100'
@@ -208,17 +238,28 @@ export const Layout: React.FC<LayoutProps> = ({ children }) => {
           </div>
 
           <div className="hidden lg:flex flex-col text-right text-xs">
-            <span className="font-medium text-main">有限会社クリーン健康社</span>
-            <span className="text-[10px] text-sub font-mono">{APP_VERSION} ({APP_BUILD_DATE})</span>
+            <span className="font-bold text-main">
+              {currentStaffProfile?.display_name
+                ? `${currentStaffProfile.display_name} さん`
+                : currentUserEmail || '有限会社クリーン健康社'}
+            </span>
+            <span className="text-[10px] text-sub font-mono">
+              {currentUserEmail || `${APP_VERSION} (${APP_BUILD_DATE})`}
+            </span>
           </div>
 
           <button
             type="button"
             onClick={() => setIsPasswordModalOpen(true)}
-            className="p-2 rounded-full bg-slate-100 text-main hover:bg-slate-200 transition-colors border border-border min-h-[36px] min-w-[36px] flex items-center justify-center cursor-pointer"
+            className="px-2.5 py-1.5 rounded-lg bg-slate-100 text-main hover:bg-slate-200 transition-colors border border-border min-h-[36px] flex items-center space-x-1.5 cursor-pointer text-xs font-semibold"
             title="アカウント・パスワード変更"
           >
-            <User className="w-4 h-4" />
+            <User className="w-4 h-4 text-slate-700" />
+            {currentStaffProfile?.display_name && (
+              <span className="hidden sm:inline lg:hidden">
+                {currentStaffProfile.display_name}
+              </span>
+            )}
           </button>
 
           <button
@@ -238,7 +279,6 @@ export const Layout: React.FC<LayoutProps> = ({ children }) => {
         {children}
       </main>
 
-
       {/* パスワード変更モーダル */}
       {isPasswordModalOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-xs animate-in fade-in">
@@ -246,11 +286,9 @@ export const Layout: React.FC<LayoutProps> = ({ children }) => {
             <div className="flex items-center justify-between border-b border-border pb-3">
               <div>
                 <h2 className="text-base font-bold text-main">パスワードの変更</h2>
-                {currentUserEmail && (
-                  <p className="text-[11px] text-sub truncate mt-0.5">
-                    ログイン中: {currentUserEmail}
-                  </p>
-                )}
+                <p className="text-[11px] text-sub truncate mt-0.5">
+                  ログイン中: {currentStaffProfile?.display_name ? `${currentStaffProfile.display_name} (${currentUserEmail})` : currentUserEmail}
+                </p>
               </div>
               <button
                 type="button"
@@ -323,7 +361,6 @@ export const Layout: React.FC<LayoutProps> = ({ children }) => {
       {/* スマホ・タブレット用固定ボトムナビゲーション */}
       <nav className={`${isMobileMode ? 'flex' : 'md:hidden flex'} fixed bottom-0 left-0 right-0 h-16 bg-white/95 backdrop-blur-md border-t border-border items-center justify-around z-40 px-1 shadow-lg`}>
         {navItems.map((item) => {
-
           const Icon = item.icon
 
           return (
@@ -348,4 +385,3 @@ export const Layout: React.FC<LayoutProps> = ({ children }) => {
     </div>
   )
 }
-

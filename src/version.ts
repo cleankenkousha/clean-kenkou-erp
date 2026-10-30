@@ -6,8 +6,6 @@
  * クライアントのキャッシュ状態を即座に確認できます。
  */
 
-export const APP_VERSION = 'v1.1.7'
-export const APP_BUILD_DATE = '2026.10.12-16:05'
-export const APP_DESCRIPTION = '総体積(総㎥)連動の搬出作業費自動加算計算式(総㎥×¥1,500)および明細・見積印刷連携'
-
-
+export const APP_VERSION = 'v1.1.8'
+export const APP_BUILD_DATE = '2026.10.30-14:43'
+export const APP_DESCRIPTION = 'スタッフ別パスワード直接設定機能・ワンタップログイン・ログインおよび受付操作履歴管理機能の追加'

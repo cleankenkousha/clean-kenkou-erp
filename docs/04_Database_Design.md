@@ -21,10 +21,14 @@
 
 システムを利用する社員・オペレーターの情報を管理するテーブル。
 
-* `id`: UUID (Primary Key, `auth.users.id` と連携)
+* `id`: UUID (Primary Key)
+* `auth_user_id`: UUID (Nullable, `auth.users.id` と連携)
 * `display_name`: 表示名（例：山田太郎）
-* `role`: 権限（`admin`, `operator`）
+* `role`: 権限（`admin`, `sales`, `dispatcher`, `operator`, `clerk`）
+* `email`: ログイン用メールアドレス（例：`chiba@kenkou.co.jp`）
+* `last_login_at`: 最終ログイン日時
 * `created_at`: 作成日時
+* `updated_at`: 更新日時
 
 ### 2.2 customers (顧客マスター)
 
@@ -45,13 +49,26 @@
 * `id`: UUID (Primary Key)
 * `customer_id`: UUID (Foreign Key -> `customers.id`)
 * `title`: 案件の概要（例：本社オフィス粗大ゴミ回収）
-* `status`: 案件の進行状態（`received`, `quoting`, `arranged`, `collected`, `billed`, `completed`, `pending`, `cancelled`）
+* `status`: 案件の進行状態（`received`, `quoting`, `arranged`, `scheduled`, `collected`, `billed`, `completed`, `pending`, `cancelled`）
 * `received_at`: 受付日時
 * `scheduled_date`: 回収予定日（未定の場合はNull許容）
 * `assigned_to`: UUID (Foreign Key -> `profiles.id` / 担当者)
 * `notes`: 備考・特記事項
 * `created_at`: 作成日時
 * `updated_at`: 更新日時
+
+### 2.4 activity_logs (ログイン・操作履歴テーブル)
+
+システムへのログイン履歴および案件作成・ステータス変更などの操作履歴を記録するテーブル。
+
+* `id`: UUID (Primary Key)
+* `profile_id`: UUID (Foreign Key -> `profiles.id`, Nullable)
+* `staff_name`: 操作時点のスタッフ表示名
+* `staff_email`: 操作時点のメールアドレス
+* `action_type`: アクション種別（`login`, `logout`, `job_create`, `job_update`, `account_update` 等）
+* `description`: 操作内容の要約テキスト
+* `metadata`: 補足情報 (JSONB)
+* `created_at`: 記録日時
 
 ## 第3章：拡張テーブル定義（Phase2以降向け設計）
 

@@ -5,9 +5,11 @@ export type StaffRole = 'admin' | 'sales' | 'dispatcher' | 'operator' | 'clerk' 
 
 export interface Profile {
   id: string
+  auth_user_id?: string | null
   display_name: string | null
   role: StaffRole
   email?: string | null
+  last_login_at?: string | null
   created_at?: string
   updated_at?: string
 }
@@ -43,7 +45,7 @@ const isUuid = (str: string) =>
 
 const VALID_ROLES = ['admin', 'sales', 'dispatcher', 'operator', 'clerk']
 
-const DEFAULT_PROFILES: Profile[] = [
+export const DEFAULT_PROFILES: Profile[] = [
   { id: '00000000-0000-4000-8000-000000000001', display_name: '千葉正和', role: 'admin', email: 'chiba@kenkou.co.jp' },
   { id: '00000000-0000-4000-8000-000000000002', display_name: '川上大輝', role: 'dispatcher', email: 'kawakami@kenkou.co.jp' },
   { id: '00000000-0000-4000-8000-000000000003', display_name: '廣田龍之介', role: 'sales', email: 'hirota@kenkou.co.jp' },
@@ -53,7 +55,6 @@ const DEFAULT_PROFILES: Profile[] = [
   { id: '00000000-0000-4000-8000-000000000007', display_name: '矢部川麻衣子', role: 'clerk', email: 'yabegawa@kenkou.co.jp' },
   { id: '00000000-0000-4000-8000-000000000008', display_name: '中原知美', role: 'operator', email: 'nakahara@kenkou.co.jp' },
 ]
-
 
 export const useProfiles = (): UseProfilesReturn => {
   const [profiles, setProfiles] = useState<Profile[]>([])
@@ -73,7 +74,6 @@ export const useProfiles = (): UseProfilesReturn => {
     if (showLoading) setIsLoading(true)
     setError(null)
 
-    // ローカルストレージの保存済みプロファイル
     let localSaved: Profile[] = []
     try {
       const stored = localStorage.getItem(LOCAL_STORAGE_KEY)
@@ -111,31 +111,41 @@ export const useProfiles = (): UseProfilesReturn => {
 
       // 1. 社内基本8名をまず登録
       for (const p of DEFAULT_PROFILES) {
-        profileMap.set(p.display_name!, p)
+        profileMap.set(p.display_name!, { ...p })
       }
 
       // 2. ローカルに保存されているカスタムプロファイルで上書き・追加
       for (const p of localSaved) {
         if (p.display_name) {
-          const validId = isUuid(p.id) ? p.id : crypto.randomUUID()
+          const existing = profileMap.get(p.display_name)
+          const validId = isUuid(p.id) ? p.id : existing?.id || crypto.randomUUID()
           const validRole = VALID_ROLES.includes(p.role) ? p.role : 'operator'
           profileMap.set(p.display_name, {
+            ...existing,
             id: validId,
             display_name: p.display_name,
             role: validRole,
+            email: p.email || existing?.email || null,
+            auth_user_id: p.auth_user_id || existing?.auth_user_id || null,
+            last_login_at: p.last_login_at || existing?.last_login_at || null,
           })
         }
       }
 
-      // 3. Supabase DB のプロファイル（中原知美 など）で最新化・統合
+      // 3. Supabase DB のプロファイルで最新化・統合
       for (const p of dbProfiles) {
         if (p.display_name) {
-          const validId = isUuid(p.id) ? p.id : crypto.randomUUID()
+          const existing = profileMap.get(p.display_name)
+          const validId = isUuid(p.id) ? p.id : existing?.id || crypto.randomUUID()
           const validRole = VALID_ROLES.includes(p.role) ? p.role : 'operator'
           profileMap.set(p.display_name, {
+            ...existing,
             id: validId,
             display_name: p.display_name,
             role: validRole,
+            email: p.email || existing?.email || null,
+            auth_user_id: p.auth_user_id || existing?.auth_user_id || null,
+            last_login_at: p.last_login_at || existing?.last_login_at || null,
           })
         }
       }
@@ -144,12 +154,13 @@ export const useProfiles = (): UseProfilesReturn => {
       setProfiles(combined)
       saveLocalProfiles(combined)
 
-      // 全8名以上のプロファイルを Supabase DB へ自動保存・同期(upsert)
+      // 全プロファイルを Supabase DB へ自動保存・同期(upsert)
       if (combined.length > 0) {
         const toUpsert = combined.map((p) => ({
           id: p.id,
           display_name: p.display_name,
           role: VALID_ROLES.includes(p.role) ? p.role : 'operator',
+          email: p.email || null,
           updated_at: new Date().toISOString(),
         }))
 
@@ -159,18 +170,23 @@ export const useProfiles = (): UseProfilesReturn => {
 
         if (upsertErr) {
           console.warn('Supabase profile auto-sync notice:', upsertErr.message)
-        } else {
-          console.log(`✅ Auto-synced ${toUpsert.length} company profiles to Supabase DB!`)
         }
       }
     } catch (err: any) {
       console.warn('Supabase profiles fetch warning, using default/local state:', err)
       const fallbackMap = new Map<string, Profile>()
       for (const p of DEFAULT_PROFILES) {
-        fallbackMap.set(p.display_name!, p)
+        fallbackMap.set(p.display_name!, { ...p })
       }
       for (const p of localSaved) {
-        if (p.display_name) fallbackMap.set(p.display_name, p)
+        if (p.display_name) {
+          const existing = fallbackMap.get(p.display_name)
+          fallbackMap.set(p.display_name, {
+            ...existing,
+            ...p,
+            email: p.email || existing?.email || null,
+          })
+        }
       }
       setProfiles(Array.from(fallbackMap.values()))
     } finally {
@@ -180,28 +196,29 @@ export const useProfiles = (): UseProfilesReturn => {
 
   const syncAllProfiles = useCallback(async (): Promise<{ success: boolean; message: string }> => {
     try {
-      // 1. 社内基本8名をベースにプロファイルマップを構築
       const profileMap = new Map<string, Profile>()
 
       for (const p of DEFAULT_PROFILES) {
         profileMap.set(p.display_name!, { ...p })
       }
 
-      // 2. 現在の profiles ステートに存在するプロファイルで上書き・追加
       for (const p of profiles) {
         if (p.display_name) {
           const existing = profileMap.get(p.display_name)
           const validId = isUuid(p.id) ? p.id : existing?.id || crypto.randomUUID()
           const validRole = VALID_ROLES.includes(p.role) ? p.role : 'operator'
           profileMap.set(p.display_name, {
+            ...existing,
             id: validId,
             display_name: p.display_name,
             role: validRole,
+            email: p.email || existing?.email || null,
+            auth_user_id: p.auth_user_id || existing?.auth_user_id || null,
+            last_login_at: p.last_login_at || existing?.last_login_at || null,
           })
         }
       }
 
-      // 3. Supabase DB に既に存在するデータ（中原知美の既存ID等）があれば優先統合
       try {
         const { data: dbData } = await supabase.from('profiles').select('*')
         const dbList = (dbData as Profile[]) || []
@@ -210,11 +227,17 @@ export const useProfiles = (): UseProfilesReturn => {
             const current = profileMap.get(item.display_name)
             if (current) {
               current.id = isUuid(item.id) ? item.id : current.id
+              current.email = item.email || current.email || null
+              current.auth_user_id = item.auth_user_id || current.auth_user_id || null
+              current.last_login_at = item.last_login_at || current.last_login_at || null
             } else {
               profileMap.set(item.display_name, {
                 id: item.id,
                 display_name: item.display_name,
                 role: VALID_ROLES.includes(item.role) ? item.role : 'operator',
+                email: item.email || null,
+                auth_user_id: item.auth_user_id || null,
+                last_login_at: item.last_login_at || null,
               })
             }
           }
@@ -229,6 +252,7 @@ export const useProfiles = (): UseProfilesReturn => {
         id: isUuid(p.id) ? p.id : crypto.randomUUID(),
         display_name: p.display_name || '名前未設定',
         role: VALID_ROLES.includes(p.role) ? p.role : 'operator',
+        email: p.email || null,
         updated_at: new Date().toISOString(),
       }))
 
@@ -296,14 +320,13 @@ export const useProfiles = (): UseProfilesReturn => {
                 id: validId,
                 display_name: profileToSave.display_name,
                 role: validRole,
+                email: profileToSave.email || null,
                 updated_at: new Date().toISOString(),
               },
             ])
 
           if (upsertErr) {
             console.warn('Supabase upsert profile warning:', upsertErr.message)
-          } else {
-            console.log(`✅ Profile updated on Supabase: ${profileToSave.display_name}`)
           }
         } catch (err: any) {
           console.error('Failed to update profile on Supabase:', err)
@@ -321,11 +344,17 @@ export const useProfiles = (): UseProfilesReturn => {
 
       const newId = crypto.randomUUID()
       const validRole = VALID_ROLES.includes(role) ? role : 'operator'
+      const cleanEmail = email?.trim()
+        ? email.trim().includes('@')
+          ? email.trim().toLowerCase()
+          : `${email.trim().toLowerCase()}@kenkou.co.jp`
+        : null
+
       const newStaff: Profile = {
         id: newId,
         display_name: trimmedName,
         role: validRole,
-        email: email?.trim() || null,
+        email: cleanEmail,
         created_at: new Date().toISOString(),
       }
 
@@ -343,15 +372,13 @@ export const useProfiles = (): UseProfilesReturn => {
               id: newId,
               display_name: trimmedName,
               role: validRole,
-              email: email?.trim() || null,
+              email: cleanEmail,
               updated_at: new Date().toISOString(),
             },
           ])
 
         if (insertErr) {
           console.warn('Supabase insert profile warning:', insertErr.message)
-        } else {
-          console.log(`✅ Staff added to Supabase: ${trimmedName}`)
         }
         return newStaff
       } catch (err: any) {
@@ -361,7 +388,6 @@ export const useProfiles = (): UseProfilesReturn => {
     },
     []
   )
-
 
   const deleteStaff = useCallback(
     async (id: string): Promise<boolean> => {
@@ -401,4 +427,3 @@ export const useProfiles = (): UseProfilesReturn => {
     syncAllProfiles,
   }
 }
-

@@ -1,7 +1,9 @@
 import React, { useState } from 'react'
 import { useNavigate, useLocation } from 'react-router-dom'
-import { Activity, AlertCircle } from 'lucide-react'
+import { Activity, AlertCircle, UserCheck } from 'lucide-react'
 import { supabase } from '../lib/supabase'
+import { recordActivityLog } from '../lib/activityLogger'
+import { DEFAULT_PROFILES } from '../hooks/useProfiles'
 import { Input, Button } from '../components/ui'
 
 export const Login: React.FC = () => {
@@ -14,30 +16,50 @@ export const Login: React.FC = () => {
   const location = useLocation()
   const from = (location.state as { from?: Location })?.from?.pathname || '/'
 
+  // スタッフIDのみ（例: chiba）で入力された場合も自動で @kenkou.co.jp を補完
+  const normalizeLoginEmail = (raw: string) => {
+    const trimmed = raw.trim().toLowerCase()
+    if (!trimmed) return ''
+    return trimmed.includes('@') ? trimmed : `${trimmed}@kenkou.co.jp`
+  }
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     setErrorMessage(null)
 
-    if (!email.trim() || !password.trim()) {
-      setErrorMessage('メールアドレスとパスワードを入力してください。')
+    const loginEmail = normalizeLoginEmail(email)
+
+    if (!loginEmail || !password.trim()) {
+      setErrorMessage('ログインID（メールアドレス）とパスワードを入力してください。')
       return
     }
 
     setIsLoading(true)
 
     try {
-      const { error } = await supabase.auth.signInWithPassword({
-        email: email.trim(),
+      const { data, error } = await supabase.auth.signInWithPassword({
+        email: loginEmail,
         password,
       })
 
       if (error) {
         if (error.message.includes('Invalid login credentials')) {
-          setErrorMessage('メールアドレスまたはパスワードが正しくありません。')
+          setErrorMessage(
+            'メールアドレス（ID）またはパスワードが正しくありません。（※まだパスワードを設定していないスタッフは、システム設定＞担当者・スタッフ管理からパスワードを設定してください）'
+          )
         } else {
           setErrorMessage(error.message || 'ログイン中にエラーが発生しました。')
         }
         return
+      }
+
+      // ログイン成功時、ログイン記録（activity_logs）を残す
+      if (data.user) {
+        await recordActivityLog({
+          actionType: 'login',
+          description: 'システムにログインしました',
+          staffEmail: data.user.email || loginEmail,
+        })
       }
 
       // 成功時、要求されていたページまたはダッシュボードへ遷移
@@ -68,23 +90,50 @@ export const Login: React.FC = () => {
 
         {/* エラーメッセージ */}
         {errorMessage && (
-          <div className="p-3 bg-rose-50 border border-rose-200 rounded-lg text-rose-800 text-xs font-medium flex items-center space-x-2 animate-in fade-in duration-200">
-            <AlertCircle className="w-4 h-4 text-rose-600 flex-shrink-0" />
+          <div className="p-3 bg-rose-50 border border-rose-200 rounded-lg text-rose-800 text-xs font-medium flex items-start space-x-2 animate-in fade-in duration-200">
+            <AlertCircle className="w-4 h-4 text-rose-600 flex-shrink-0 mt-0.5" />
             <span>{errorMessage}</span>
           </div>
         )}
+
+        {/* スタッフ クイック選択（ワンタップでID入力） */}
+        <div className="space-y-1.5">
+          <label className="block text-[11px] font-bold text-sub flex items-center gap-1">
+            <UserCheck className="w-3.5 h-3.5 text-slate-600" />
+            <span>スタッフ名からワンタップ入力:</span>
+          </label>
+          <div className="flex flex-wrap gap-1.5">
+            {DEFAULT_PROFILES.map((staff) => (
+              <button
+                key={staff.id}
+                type="button"
+                onClick={() => {
+                  if (staff.email) setEmail(staff.email)
+                }}
+                className={`px-2.5 py-1 rounded-md text-xs font-semibold border transition-colors ${
+                  normalizeLoginEmail(email) === staff.email
+                    ? 'bg-slate-900 text-white border-slate-900'
+                    : 'bg-slate-50 text-slate-700 border-slate-200 hover:bg-slate-100'
+                }`}
+              >
+                {staff.display_name}
+              </button>
+            ))}
+          </div>
+        </div>
 
         {/* ログインフォーム */}
         <form onSubmit={handleSubmit} className="space-y-4">
           <div className="space-y-1">
             <Input
-              type="email"
-              label="メールアドレス"
-              placeholder="example@kenkou.co.jp"
+              type="text"
+              label="ログインID / メールアドレス"
+              placeholder="例: chiba または chiba@kenkou.co.jp"
               value={email}
               onChange={(e) => setEmail(e.target.value)}
               required
-              autoComplete="email"
+              autoComplete="username"
+              helperText="※「chiba」などのIDのみでもログインできます（@kenkou.co.jp が自動補完されます）"
             />
           </div>
 

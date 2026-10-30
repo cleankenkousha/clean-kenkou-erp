@@ -14,6 +14,7 @@ import {
 } from 'lucide-react'
 import { Input, Button, MapLink } from '../ui'
 import { supabase } from '../../lib/supabase'
+import { recordActivityLog } from '../../lib/activityLogger'
 import { useProfiles, getRoleInfo } from '../../hooks/useProfiles'
 import { useCustomers } from '../../hooks/useCustomers'
 
@@ -27,6 +28,29 @@ export const JobReceptionForm: React.FC = () => {
   const [estimatedAmount, setEstimatedAmount] = useState('')
   const [preferredDate, setPreferredDate] = useState('')
   const [assignedTo, setAssignedTo] = useState('')
+  const [currentStaffName, setCurrentStaffName] = useState<string | null>(null)
+  const [currentStaffProfileId, setCurrentStaffProfileId] = useState<string | null>(null)
+
+  // ログイン中のスタッフを取得して初期担当者として自動セット
+  useEffect(() => {
+    if (profiles.length === 0) return
+    supabase.auth.getUser().then(({ data }) => {
+      const authUser = data.user
+      if (!authUser) return
+      const matched =
+        profiles.find((p) => p.auth_user_id === authUser.id) ||
+        profiles.find((p) => p.id === authUser.id) ||
+        (authUser.email
+          ? profiles.find((p) => p.email?.toLowerCase() === authUser.email?.toLowerCase())
+          : undefined)
+
+      if (matched) {
+        setCurrentStaffName(matched.display_name || null)
+        setCurrentStaffProfileId(matched.id)
+        setAssignedTo((prev) => prev || matched.id)
+      }
+    })
+  }, [profiles])
 
   // 営業マンスケジュール連携
   const [syncSchedule, setSyncSchedule] = useState(false)
@@ -185,6 +209,7 @@ export const JobReceptionForm: React.FC = () => {
 
       const jobTitle = wasteType ? `${wasteType} 回収依頼` : `${customerName}様 スポット回収`
       const notesDetail = [
+        currentStaffName ? `受付担当: ${currentStaffName}` : '',
         estimatedAmount ? `概算の量: ${estimatedAmount}` : '',
         preferredDate ? `希望日時: ${preferredDate}` : '',
         scheduleNotes ? `特記事項: ${scheduleNotes}` : '',
@@ -193,7 +218,7 @@ export const JobReceptionForm: React.FC = () => {
         .join(' / ')
 
       // 案件のステータスと担当者
-      const finalAssignedTo = syncSchedule && selectedSalesStaff ? selectedSalesStaff : assignedTo || null
+      const finalAssignedTo = syncSchedule && selectedSalesStaff ? selectedSalesStaff : assignedTo || currentStaffProfileId || null
       const finalStatus = syncSchedule ? 'quoting' : 'received'
 
       const { data: jobData, error: jobError } = await supabase
@@ -214,6 +239,19 @@ export const JobReceptionForm: React.FC = () => {
       if (jobError) {
         throw new Error(`案件情報の登録に失敗しました: ${jobError.message}`)
       }
+
+      // 操作履歴を記録
+      await recordActivityLog({
+        actionType: 'job_create',
+        description: `新規受付登録: ${customerName}様「${jobTitle}」`,
+        profileId: currentStaffProfileId,
+        staffName: currentStaffName,
+        metadata: {
+          job_id: jobData?.id,
+          customer_name: customerName,
+          waste_type: wasteType,
+        },
+      })
 
       // 営業マンのスケジュール（staff_schedules）への自動登録
       if (syncSchedule && selectedSalesStaff) {
