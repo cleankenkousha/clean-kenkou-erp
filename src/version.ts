@@ -6,6 +6,6 @@
  * クライアントのキャッシュ状態を即座に確認できます。
  */
 
-export const APP_VERSION = 'v1.1.9'
-export const APP_BUILD_DATE = '2026.10.30-15:20'
-export const APP_DESCRIPTION = 'セキュリティ強化（RLS認証必須化・Edge Function JWT検証＆管理者権限ガード・DBインデックス最適化）'
+export const APP_VERSION = 'v1.2.0'
+export const APP_BUILD_DATE = '2026.11.04-16:52'
+export const APP_DESCRIPTION = 'スタッフ氏名変更・削除時に初期データが復活する不具合の解消および桑村りな様への名簿更新'
