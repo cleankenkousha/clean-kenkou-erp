@@ -6,6 +6,6 @@
  * クライアントのキャッシュ状態を即座に確認できます。
  */
 
-export const APP_VERSION = 'v1.2.0'
-export const APP_BUILD_DATE = '2026.11.04-16:52'
-export const APP_DESCRIPTION = 'スタッフ氏名変更・削除時に初期データが復活する不具合の解消および桑村りな様への名簿更新'
+export const APP_VERSION = 'v1.2.1'
+export const APP_BUILD_DATE = '2026.11.04-17:11'
+export const APP_DESCRIPTION = '担当者・スタッフ管理画面の管理者専用表示化およびテスト用共通アカウント(test@example.com)の完全廃止'

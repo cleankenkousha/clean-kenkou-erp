@@ -99,8 +99,15 @@ export const Settings: React.FC = () => {
       (currentAuthUserId && (p.auth_user_id === currentAuthUserId || p.id === currentAuthUserId)) ||
       (currentAuthEmail && p.email?.toLowerCase() === currentAuthEmail.toLowerCase())
   )
-  // 初回セットアップ中（まだadminのパスワードが未設定）は全員操作可、admin設定完了後はadminのみ操作可
+  // 初回セットアップ中（まだadminのパスワードが未設定）は全員操作可、admin設定完了後はadminのみ操作・表示可
   const canManageStaffAccounts = !hasConfiguredAdmin || currentStaffProfile?.role === 'admin'
+
+  // 管理者以外のスタッフがログインした際、初期タブが 'staff' の場合は 'company' に自動で切り替える
+  useEffect(() => {
+    if (!isLoadingProfiles && !canManageStaffAccounts && activeTab === 'staff') {
+      setActiveTab('company')
+    }
+  }, [isLoadingProfiles, canManageStaffAccounts, activeTab])
 
   // 3. ログイン・操作履歴（activity_logs）
   const [activityLogs, setActivityLogs] = useState<ActivityLog[]>([])
@@ -435,18 +442,20 @@ export const Settings: React.FC = () => {
 
       {/* 2. Navigation Tabs */}
       <div className="flex items-center space-x-2 border-b border-border bg-white px-4 rounded-xl border shadow-sm overflow-x-auto">
-        <button
-          type="button"
-          onClick={() => setActiveTab('staff')}
-          className={`flex items-center space-x-2 py-3 px-4 text-xs font-semibold border-b-2 transition-colors whitespace-nowrap ${
-            activeTab === 'staff'
-              ? 'border-slate-900 text-slate-900 font-bold'
-              : 'border-transparent text-sub hover:text-main'
-          }`}
-        >
-          <Users className="w-4 h-4" />
-          <span>担当者・スタッフ管理（パスワード設定）</span>
-        </button>
+        {canManageStaffAccounts && (
+          <button
+            type="button"
+            onClick={() => setActiveTab('staff')}
+            className={`flex items-center space-x-2 py-3 px-4 text-xs font-semibold border-b-2 transition-colors whitespace-nowrap ${
+              activeTab === 'staff'
+                ? 'border-slate-900 text-slate-900 font-bold'
+                : 'border-transparent text-sub hover:text-main'
+            }`}
+          >
+            <Users className="w-4 h-4" />
+            <span>担当者・スタッフ管理（管理者専用）</span>
+          </button>
+        )}
 
         <button
           type="button"
@@ -503,8 +512,8 @@ export const Settings: React.FC = () => {
 
       {/* 3. Tab Contents */}
 
-      {/* Tab 1: 担当者・スタッフ管理 */}
-      {activeTab === 'staff' && (
+      {/* Tab 1: 担当者・スタッフ管理（管理者専用） */}
+      {activeTab === 'staff' && canManageStaffAccounts && (
         <div className="bg-white p-6 rounded-xl border border-border shadow-sm space-y-6">
           <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 border-b border-border pb-4">
             <div>
