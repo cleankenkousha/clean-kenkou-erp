@@ -28,6 +28,7 @@ export interface QuoteData {
   workExpenses?: number
   floorLevel?: string | number
   hasElevator?: boolean
+  hasCarryOut?: boolean
   autoStairFee?: number
   disassemblyFee?: number
   appliedPack?: string
@@ -273,14 +274,14 @@ export const QuotePrintModal: React.FC<QuotePrintModalProps> = ({
               </p>
               <div className="space-y-1 text-[11px] text-slate-600">
                 <p className="flex justify-between">
-                  <span>階段階数 / エレベーター:</span>
+                  <span>作業階数 / 運び出し:</span>
                   <strong className="text-slate-900">
-                    {quoteData.floorLevel || 1}階 ({quoteData.hasElevator ? 'エレベーター有' : 'エレベーター無'})
+                    {String(quoteData.floorLevel || '1F').replace('F', '')}階 ({(quoteData.hasCarryOut ?? true) ? '運び出しあり' : '運び出しなし'})
                   </strong>
                 </p>
                 {quoteData.autoStairFee ? (
                   <p className="flex justify-between text-amber-800 font-medium">
-                    <span>階段手押し作業加算:</span>
+                    <span>階段手下ろし作業加算:</span>
                     <span>+¥{quoteData.autoStairFee.toLocaleString()}</span>
                   </p>
                 ) : null}

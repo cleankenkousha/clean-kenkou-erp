@@ -26,6 +26,7 @@ export interface PrintQuoteData {
   workExpenses?: number
   floorLevel?: string | number
   hasElevator?: boolean
+  hasCarryOut?: boolean
   autoStairFee?: number
   disassemblyFee?: number
   appliedPack?: string
@@ -177,14 +178,14 @@ export const PrintQuoteArea: React.FC<PrintQuoteAreaProps> = ({ quote }) => {
           <div className="bg-slate-50 p-2.5 rounded border border-slate-300 space-y-1">
             <p className="font-bold border-b border-slate-300 pb-0.5 text-slate-900">搬出・作業条件</p>
             <p className="flex justify-between">
-              <span>階数 / エレベーター:</span>
+              <span>作業階数 / 運び出し:</span>
               <strong className="text-slate-900">
-                {quote.floorLevel || 1}階 ({quote.hasElevator ? 'エレベーター有' : 'エレベーター無'})
+                {String(quote.floorLevel || '1F').replace('F', '')}階 ({(quote.hasCarryOut ?? true) ? '運び出しあり' : '運び出しなし'})
               </strong>
             </p>
             {quote.autoStairFee ? (
               <p className="flex justify-between text-amber-900 font-medium">
-                <span>階段手押し費:</span>
+                <span>階段手下ろし作業費:</span>
                 <span>+¥{quote.autoStairFee.toLocaleString()}</span>
               </p>
             ) : null}

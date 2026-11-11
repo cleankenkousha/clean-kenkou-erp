@@ -6,6 +6,6 @@
  * クライアントのキャッシュ状態を即座に確認できます。
  */
 
-export const APP_VERSION = 'v1.2.1'
-export const APP_BUILD_DATE = '2026.11.04-17:11'
-export const APP_DESCRIPTION = '担当者・スタッフ管理画面の管理者専用表示化およびテスト用共通アカウント(test@example.com)の完全廃止'
+export const APP_VERSION = 'v1.2.2'
+export const APP_BUILD_DATE = '2026.11.11-16:26'
+export const APP_DESCRIPTION = '見積作成画面の「エレベーター」を「運び出し（あり・なし）」へ変更（ありの場合のみ総㎥連動作業費を適用）および「運搬作業費」入力欄の廃止'

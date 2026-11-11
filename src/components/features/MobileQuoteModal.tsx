@@ -274,11 +274,10 @@ export const MobileQuoteModal: React.FC<MobileQuoteModalProps> = ({
 
   // 作業搬出環境・費用State
   const [floorLevel, setFloorLevel] = useState<'1F' | '2F' | '3F' | '4F' | '5F'>('1F')
-  const [hasElevator, setHasElevator] = useState<boolean>(true)
+  const [hasCarryOut, setHasCarryOut] = useState<boolean>(true)
   const [disassemblyFee, setDisassemblyFee] = useState<number>(0)
   const [applyTruckPack, setApplyTruckPack] = useState<'auto' | 'none' | 'light' | '2t_short' | '2t_long'>('auto')
 
-  const [baseFee, setBaseFee] = useState<number>(0)
   const [expenses, setExpenses] = useState<number>(0)
   const [notes, setNotes] = useState('')
   const [signature, setSignature] = useState<string | null>(null)
@@ -286,9 +285,8 @@ export const MobileQuoteModal: React.FC<MobileQuoteModalProps> = ({
   const [isSaving, setIsSaving] = useState(false)
   const [errorMsg, setErrorMsg] = useState<string | null>(null)
 
-  // 階段作業費の自動算出 (エレベーター無しの場合)
+  // 階段作業費の自動算出 (2階以上の場合)
   const autoStairFee = React.useMemo(() => {
-    if (hasElevator) return 0
     switch (floorLevel) {
       case '2F': return 3000
       case '3F': return 6000
@@ -296,7 +294,7 @@ export const MobileQuoteModal: React.FC<MobileQuoteModalProps> = ({
       case '5F': return 12000
       default: return 0
     }
-  }, [floorLevel, hasElevator])
+  }, [floorLevel])
 
   // 全データを初期化・クリアするハンドラー
   const handleResetAll = useCallback(() => {
@@ -305,10 +303,9 @@ export const MobileQuoteModal: React.FC<MobileQuoteModalProps> = ({
     setAiMessage(null)
     setAiDetectedItems([])
     setFloorLevel('1F')
-    setHasElevator(true)
+    setHasCarryOut(true)
     setDisassemblyFee(0)
     setApplyTruckPack('auto')
-    setBaseFee(0)
     setExpenses(0)
     setNotes('')
     setSignature(null)
@@ -580,8 +577,9 @@ export const MobileQuoteModal: React.FC<MobileQuoteModalProps> = ({
   }, [masterItems])
 
   const volumeWorkFee = React.useMemo(() => {
+    if (!hasCarryOut) return 0
     return Math.round(totalVolume * workFeePerM3)
-  }, [totalVolume, workFeePerM3])
+  }, [hasCarryOut, totalVolume, workFeePerM3])
 
   // 作業搬出費用（階段料金 ＋ 特殊工賃 ＋ その他実費）
   const workExpenses = autoStairFee + (Number(disassemblyFee) || 0) + (Number(expenses) || 0)
@@ -598,7 +596,7 @@ export const MobileQuoteModal: React.FC<MobileQuoteModalProps> = ({
   // 単品積み上げとトラックパックのお得度比較
   const isPackDiscounted = packPrice !== null && itemsSubtotal > packPrice
   const effectiveItemsCost = isPackDiscounted ? packPrice : itemsSubtotal
-  const grandTotal = effectiveItemsCost + volumeWorkFee + (Number(baseFee) || 0) + workExpenses
+  const grandTotal = effectiveItemsCost + volumeWorkFee + workExpenses
 
   const [printQuoteData, setPrintQuoteData] = useState<PrintQuoteData | null>(null)
 
@@ -635,11 +633,11 @@ export const MobileQuoteModal: React.FC<MobileQuoteModalProps> = ({
         quoteType: 'mobile_ai_quote',
         items,
         itemsSubtotal,
-        baseFee,
+        baseFee: 0,
         expenses,
         workExpenses,
         floorLevel,
-        hasElevator,
+        hasCarryOut,
         autoStairFee,
         disassemblyFee,
         appliedPack: activePackName,
@@ -707,11 +705,11 @@ export const MobileQuoteModal: React.FC<MobileQuoteModalProps> = ({
           volume: it.volume,
         })),
         itemsSubtotal,
-        baseFee: Number(baseFee) || 0,
+        baseFee: 0,
         expenses: Number(expenses) || 0,
         workExpenses,
         floorLevel,
-        hasElevator,
+        hasCarryOut,
         autoStairFee,
         disassemblyFee: Number(disassemblyFee) || 0,
         appliedPack: activePackName,
@@ -1058,23 +1056,23 @@ export const MobileQuoteModal: React.FC<MobileQuoteModalProps> = ({
                       onChange={(e) => setFloorLevel(e.target.value as any)}
                       className="w-full p-2 border border-slate-300 rounded-lg bg-white font-bold text-slate-800"
                     >
-                      <option value="1F">1階 (戸建て/1F)</option>
-                      <option value="2F">2階</option>
-                      <option value="3F">3階</option>
-                      <option value="4F">4階</option>
-                      <option value="5F">5階以上</option>
+                      <option value="1F">1階 (戸建て/1F・階段なし)</option>
+                      <option value="2F">2階 (階段作業 +¥3,000)</option>
+                      <option value="3F">3階 (階段作業 +¥6,000)</option>
+                      <option value="4F">4階 (階段作業 +¥9,000)</option>
+                      <option value="5F">5階以上 (階段作業 +¥12,000)</option>
                     </select>
                   </div>
 
                   <div>
-                    <label className="text-[11px] font-semibold text-sub block mb-1">エレベーター</label>
+                    <label className="text-[11px] font-semibold text-sub block mb-1">運び出し</label>
                     <select
-                      value={hasElevator ? 'true' : 'false'}
-                      onChange={(e) => setHasElevator(e.target.value === 'true')}
+                      value={hasCarryOut ? 'true' : 'false'}
+                      onChange={(e) => setHasCarryOut(e.target.value === 'true')}
                       className="w-full p-2 border border-slate-300 rounded-lg bg-white font-bold text-slate-800"
                     >
-                      <option value="true">あり (エレベーター使用可)</option>
-                      <option value="false">なし (階段手下ろし作業)</option>
+                      <option value="true">あり (総㎥連動を適用)</option>
+                      <option value="false">なし (運び出し作業なし)</option>
                     </select>
                   </div>
                 </div>
@@ -1082,23 +1080,30 @@ export const MobileQuoteModal: React.FC<MobileQuoteModalProps> = ({
                 {/* 階段作業費バナー */}
                 {autoStairFee > 0 && (
                   <div className="p-2.5 bg-amber-50 border border-amber-200 rounded-lg text-xs text-amber-900 flex items-center justify-between font-semibold">
-                    <span>階段手下ろし作業費 ({floorLevel}・エレベーター無):</span>
+                    <span>階段手下ろし作業費 ({floorLevel}):</span>
                     <span className="font-bold text-amber-700">+¥{autoStairFee.toLocaleString()}</span>
                   </div>
                 )}
 
-                {/* 搬出作業費バナー (総㎥連動算定) */}
-                <div className="p-2.5 bg-blue-50 border border-blue-200 rounded-lg text-xs text-blue-900 flex items-center justify-between font-semibold">
-                  <div>
-                    <span>搬出作業費 (総㎥連動):</span>
-                    <span className="text-[10px] text-blue-700 block font-normal">
-                      総 {totalVolume.toFixed(1)} m³ × ¥{workFeePerM3.toLocaleString()}/m³
+                {/* 搬出作業費バナー (運び出しありの場合のみ総㎥連動算定) */}
+                {hasCarryOut ? (
+                  <div className="p-2.5 bg-blue-50 border border-blue-200 rounded-lg text-xs text-blue-900 flex items-center justify-between font-semibold">
+                    <div>
+                      <span>搬出作業費 (運び出しあり・総㎥連動):</span>
+                      <span className="text-[10px] text-blue-700 block font-normal">
+                        総 {totalVolume.toFixed(1)} m³ × ¥{workFeePerM3.toLocaleString()}/m³
+                      </span>
+                    </div>
+                    <span className="font-bold text-blue-800 text-sm">
+                      +¥{volumeWorkFee.toLocaleString()}
                     </span>
                   </div>
-                  <span className="font-bold text-blue-800 text-sm">
-                    +¥{volumeWorkFee.toLocaleString()}
-                  </span>
-                </div>
+                ) : (
+                  <div className="p-2.5 bg-slate-50 border border-slate-200 rounded-lg text-xs text-slate-500 flex items-center justify-between font-medium">
+                    <span>搬出作業費 (運び出しなし):</span>
+                    <span className="font-bold text-slate-600">¥0 (総㎥連動なし)</span>
+                  </div>
+                )}
 
                 <div>
                   <label className="text-[11px] font-semibold text-sub block mb-1">
@@ -1412,24 +1417,8 @@ export const MobileQuoteModal: React.FC<MobileQuoteModalProps> = ({
                   }))}
                 </div>
 
-                {/* 運搬作業費 & 諸経費 */}
-                <div className="pt-2 grid grid-cols-1 sm:grid-cols-2 gap-3">
-                  <div className="p-3 bg-slate-100/90 border border-slate-200 rounded-xl space-y-1">
-                    <label className="font-bold text-xs text-main block">運搬作業費 (円)</label>
-                    <div className="flex items-center space-x-1">
-                      <span className="text-xs font-bold text-slate-600">¥</span>
-                      <input
-                        type="number"
-                        step="500"
-                        min="0"
-                        value={baseFee}
-                        onChange={(e) => setBaseFee(parseInt(e.target.value) || 0)}
-                        placeholder="0"
-                        className="w-full px-3 py-1.5 border border-border rounded-lg text-right font-bold bg-white text-xs text-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500"
-                      />
-                    </div>
-                  </div>
-
+                {/* 諸経費 */}
+                <div className="pt-2">
                   <div className="p-3 bg-amber-50/70 border border-amber-200 rounded-xl space-y-1">
                     <label className="font-bold text-xs text-amber-900 block">諸経費 (円)</label>
                     <div className="flex items-center space-x-1">
@@ -1451,7 +1440,7 @@ export const MobileQuoteModal: React.FC<MobileQuoteModalProps> = ({
                   <label className="text-[11px] font-semibold text-sub block mb-1">現場備考・特記事項</label>
                   <textarea
                     rows={2}
-                    placeholder="搬出環境（階段・エレベーター有無など）や追記事項..."
+                    placeholder="搬出環境（階段・運び出し有無など）や追記事項..."
                     value={notes}
                     onChange={(e) => setNotes(e.target.value)}
                     className="w-full p-2 text-xs border border-border rounded-lg bg-white focus:outline-none focus:ring-2 focus:ring-slate-900"
@@ -1500,13 +1489,6 @@ export const MobileQuoteModal: React.FC<MobileQuoteModalProps> = ({
                     <div className="flex justify-between items-center text-blue-200">
                       <span>⚙️ 特殊作業費 (エアコン・解体):</span>
                       <span className="font-semibold">+¥{disassemblyFee.toLocaleString()}</span>
-                    </div>
-                  )}
-
-                  {baseFee > 0 && (
-                    <div className="flex justify-between items-center">
-                      <span>運搬作業基本費:</span>
-                      <span className="font-semibold text-white">¥{baseFee.toLocaleString()}</span>
                     </div>
                   )}
 
@@ -1621,11 +1603,11 @@ export const MobileQuoteModal: React.FC<MobileQuoteModalProps> = ({
                   volume: it.volume,
                 })),
                 itemsSubtotal,
-                baseFee: Number(baseFee) || 0,
+                baseFee: 0,
                 expenses: Number(expenses) || 0,
                 workExpenses,
                 floorLevel,
-                hasElevator,
+                hasCarryOut,
                 autoStairFee,
                 disassemblyFee: Number(disassemblyFee) || 0,
                 appliedPack: activePackName,
