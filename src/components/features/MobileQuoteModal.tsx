@@ -547,7 +547,7 @@ export const MobileQuoteModal: React.FC<MobileQuoteModalProps> = ({
   }
 
   const totalVolume = items.reduce((sum, item) => sum + calcItemVolume(item), 0)
-  const itemsSubtotal = items.reduce((sum, item) => sum + (Number(item.unitPrice) || 0) * (Number(item.quantity) || 1), 0)
+  const itemsSubtotal = items.reduce((sum, item) => sum + (Number(item.unitPrice) || 0) * (Number(item.quantity) || 0), 0)
 
   // トラック積載量＆適合シミュレーション計算
   const truckPackOptions = React.useMemo(() => {
@@ -1115,8 +1115,12 @@ export const MobileQuoteModal: React.FC<MobileQuoteModalProps> = ({
                       type="number"
                       step="1000"
                       min="0"
-                      value={disassemblyFee}
-                      onChange={(e) => setDisassemblyFee(parseInt(e.target.value) || 0)}
+                      value={disassemblyFee === 0 ? '' : disassemblyFee}
+                      onFocus={(e) => e.target.select()}
+                      onChange={(e) => {
+                        const val = e.target.value
+                        setDisassemblyFee(val === '' ? 0 : parseInt(val, 10) || 0)
+                      }}
                       placeholder="0"
                       className="w-full px-3 py-1.5 border border-slate-300 rounded-lg text-right font-bold bg-white text-xs text-slate-800"
                     />
@@ -1339,10 +1343,15 @@ export const MobileQuoteModal: React.FC<MobileQuoteModalProps> = ({
                                   </label>
                                   <Input
                                     type="number"
-                                    min="1"
-                                    step={isKgItem ? '10' : '1'}
-                                    value={item.quantity}
-                                    onChange={(e) => handleUpdateItem(item.id, 'quantity', parseInt(e.target.value) || 1)}
+                                    min="0"
+                                    step={isM3Item ? '0.1' : '1'}
+                                    value={item.quantity === 0 ? '' : item.quantity}
+                                    onFocus={(e) => e.target.select()}
+                                    onChange={(e) => {
+                                      const val = e.target.value
+                                      handleUpdateItem(item.id, 'quantity', val === '' ? 0 : parseFloat(val) || 0)
+                                    }}
+                                    placeholder="0"
                                     className="text-xs bg-white text-center font-bold"
                                   />
                                 </div>
@@ -1374,8 +1383,12 @@ export const MobileQuoteModal: React.FC<MobileQuoteModalProps> = ({
                                     type="number"
                                     step="0.1"
                                     min="0"
-                                    value={item.volume}
-                                    onChange={(e) => handleUpdateItem(item.id, 'volume', parseFloat(e.target.value) || 0)}
+                                    value={item.volume === 0 ? '' : item.volume}
+                                    onFocus={(e) => e.target.select()}
+                                    onChange={(e) => {
+                                      const val = e.target.value
+                                      handleUpdateItem(item.id, 'volume', val === '' ? 0 : parseFloat(val) || 0)
+                                    }}
                                     placeholder={isKgItem ? String(Math.round(item.quantity * 0.005 * 10) / 10) : '0.4'}
                                     className="text-xs bg-white text-center font-bold text-blue-700"
                                   />
@@ -1389,8 +1402,13 @@ export const MobileQuoteModal: React.FC<MobileQuoteModalProps> = ({
                                     type="number"
                                     step={isKgItem ? '5' : '500'}
                                     min="0"
-                                    value={item.unitPrice}
-                                    onChange={(e) => handleUpdateItem(item.id, 'unitPrice', parseInt(e.target.value) || 0)}
+                                    value={item.unitPrice === 0 ? '' : item.unitPrice}
+                                    onFocus={(e) => e.target.select()}
+                                    onChange={(e) => {
+                                      const val = e.target.value
+                                      handleUpdateItem(item.id, 'unitPrice', val === '' ? 0 : parseInt(val, 10) || 0)
+                                    }}
+                                    placeholder="0"
                                     className="text-xs bg-white text-right font-bold"
                                   />
                                 </div>
@@ -1401,10 +1419,10 @@ export const MobileQuoteModal: React.FC<MobileQuoteModalProps> = ({
                                   小計体積: <strong className="text-blue-700">{calcItemVolume(item).toFixed(1)} m³</strong>
                                 </span>
                                 <span>
-                                  小計金額: <strong className="text-main">¥{(item.unitPrice * item.quantity).toLocaleString()}</strong>
+                                  小計金額: <strong className="text-main">¥{((Number(item.unitPrice) || 0) * (Number(item.quantity) || 0)).toLocaleString()}</strong>
                                   {isKgItem && (
                                     <span className="text-[10px] text-slate-500 font-normal ml-1">
-                                      ({item.quantity}kg × ¥{item.unitPrice})
+                                      ({item.quantity || 0}kg × ¥{item.unitPrice || 0})
                                     </span>
                                   )}
                                 </span>
@@ -1427,8 +1445,12 @@ export const MobileQuoteModal: React.FC<MobileQuoteModalProps> = ({
                         type="number"
                         step="500"
                         min="0"
-                        value={expenses}
-                        onChange={(e) => setExpenses(parseInt(e.target.value) || 0)}
+                        value={expenses === 0 ? '' : expenses}
+                        onFocus={(e) => e.target.select()}
+                        onChange={(e) => {
+                          const val = e.target.value
+                          setExpenses(val === '' ? 0 : parseInt(val, 10) || 0)
+                        }}
                         placeholder="0"
                         className="w-full px-3 py-1.5 border border-amber-300 rounded-lg text-right font-bold bg-white text-xs text-amber-900 focus:outline-none focus:ring-2 focus:ring-amber-500"
                       />
@@ -1600,6 +1622,7 @@ export const MobileQuoteModal: React.FC<MobileQuoteModalProps> = ({
                   name: it.name,
                   price: it.unitPrice,
                   quantity: it.quantity,
+                  unit: it.unit,
                   volume: it.volume,
                 })),
                 itemsSubtotal,

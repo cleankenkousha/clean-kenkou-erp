@@ -144,6 +144,7 @@ export const Jobs: React.FC = () => {
               name: it.name || '',
               price: it.unitPrice || it.price || 0,
               quantity: it.quantity || 1,
+              unit: it.unit,
               volume: it.volume || 0,
             })),
             itemsSubtotal: parsed.itemsSubtotal || 0,

@@ -237,13 +237,17 @@ export const QuotePrintModal: React.FC<QuotePrintModalProps> = ({
                   </tr>
                 ) : (
                   quoteData.items.map((item, idx) => {
-                    const isKg = item.unit === 'kg'
-                    const isM3 = item.unit === 'm3'
+                    const rawUnit = (item.unit || '').trim()
+                    const normUnit = rawUnit.toLowerCase()
+                    const isKg = normUnit === 'kg' || rawUnit === '㎏'
+                    const isM3 = normUnit === 'm3' || rawUnit === '㎥'
+                    const qty = Number(item.quantity) || 0
+                    const vol = Number(item.volume) || 0
                     const displayVol = isKg
-                      ? (item.volume > 0 ? item.volume : item.quantity * 0.005)
+                      ? (vol > 0 ? vol : Math.round(qty * 0.005 * 10) / 10)
                       : isM3
-                      ? item.quantity
-                      : item.volume * item.quantity
+                      ? qty
+                      : vol * qty
 
                     return (
                       <tr key={idx} className="hover:bg-slate-50/50">
