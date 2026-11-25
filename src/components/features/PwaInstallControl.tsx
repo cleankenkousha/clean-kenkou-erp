@@ -234,21 +234,21 @@ export const PwaInstallControl: React.FC<PwaInstallControlProps> = ({ variant = 
               </div>
 
               {/* Android タブレット・スマホ */}
-              <div className="p-3 rounded-xl border border-border space-y-1.5">
+              <div className="p-3 rounded-xl border-2 border-brand-main bg-brand-soft/40 space-y-2">
                 <div className="font-bold text-brand-text flex items-center gap-1.5">
                   <Smartphone className="w-4 h-4" />
-                  <span>📱 Android タブレット・スマホ（Chrome）の場合</span>
+                  <span>📱 Android タブレットで「インストールしています…」のままアイコンが出ない場合</span>
                 </div>
-                <ol className="list-decimal list-inside space-y-1 text-slate-700 leading-relaxed">
-                  <li>Chrome 右上の <strong>「⋮」</strong>（縦3点）をタップ → <strong>「ホーム画面に追加」</strong> → <strong>「インストール」</strong> を押します。</li>
-                  <li>
-                    <strong>【重要】アイコンが出るまで 1〜3分お待ちください</strong>：
-                    Android では裏で Google サーバーが専用アプリ（緑色アイコン）を生成するため、<strong>完了してホーム画面にアイコンが現れるまで 1〜3分ほどタイムラグ</strong>があります。
-                  </li>
-                  <li>
-                    <strong>ホーム画面に見当たらない場合</strong>：ホーム画面を左右にスワイプして<strong>2ページ目・3ページ目の空き枠</strong>を見るか、画面下から上にスワイプして<strong>「すべてのアプリ一覧（ドロワー）」</strong>を開くと「健康社ERP」が入っています（長押しでホーム画面へ移動できます）。
-                  </li>
-                </ol>
+                <div className="space-y-1.5 text-slate-800 leading-relaxed">
+                  <p className="font-bold text-brand-text bg-white p-2 rounded-lg border border-brand-border">
+                    💡 一番確実・1秒でアイコンを作る方法（おすすめ）：<br />
+                    Chrome 右上の「⋮」→「ホーム画面に追加」を押した際、「インストール」ではなく右側の <strong>『ショートカットを追加』</strong> を選んでください。Googleサーバーの待機なしで <strong>1秒で緑色のアイコンがホーム画面に追加</strong> されます。
+                  </p>
+                  <p className="text-[11px] text-slate-700 pt-1">
+                    <strong>※なぜ「インストール」だとアイコンが出ないのか？：</strong><br />
+                    ホーム画面から古いアイコンを消しても、タブレット本体の <strong>「設定（歯車マーク）＞ アプリと通知（または アプリ）＞ すべてのアプリ」</strong> の中に古い『健康社ERP』が残っていると、Android が「すでにインストール済み」と判定して新しいアイコンを作らないためです。設定のアプリ一覧から古い『健康社ERP』をアンインストールすると「インストール」も通るようになります。
+                  </p>
+                </div>
               </div>
 
               {/* Windows PC */}
