@@ -1,16 +1,23 @@
-// Clean KENKOU ERP - Service Worker (最軽量版)
+// Clean KENKOU ERP - Service Worker (最軽量・キャッシュ即時刷新版)
 // 方針: install を絶対にブロックしない
-//       キャッシュはすべて「後から」lazily 行う
-// これにより「インストールしています」フリーズを解消します
+//       マニフェスト・アイコン・HTMLは常にネットワークから最新を取得する
 
-const CACHE_NAME = 'kenkou-erp-v1.2.4';
+const CACHE_NAME = 'kenkou-erp-v1.2.5';
 
 // ============================================================
-// install: 即座に完了させる（キャッシュ処理は一切しない）
+// install: 即座に完了させる
 // ============================================================
 self.addEventListener('install', () => {
-  // event.waitUntil() を使わないことで install が瞬時に完了する
   self.skipWaiting();
+});
+
+// ============================================================
+// message: SKIP_WAITING 等に即応
+// ============================================================
+self.addEventListener('message', (event) => {
+  if (event.data && event.data.type === 'SKIP_WAITING') {
+    self.skipWaiting();
+  }
 });
 
 // ============================================================
@@ -31,7 +38,7 @@ self.addEventListener('activate', (event) => {
 });
 
 // ============================================================
-// fetch: ネットワークファースト、失敗時のみキャッシュから返す
+// fetch: ネットワークファースト、アイコン・manifestは常に最新取得
 // ============================================================
 self.addEventListener('fetch', (event) => {
   const { request } = event;
@@ -49,10 +56,32 @@ self.addEventListener('fetch', (event) => {
   ];
   if (BYPASS_HOSTS.some((h) => request.url.includes(h))) return;
 
-  // SPA ナビゲーション（画面遷移）: キャッシュの index.html を優先
+  const url = new URL(request.url);
+
+  // マニフェストやアイコン類はブラウザキャッシュをバイパスして最新を取得
+  if (
+    url.pathname.endsWith('manifest.json') ||
+    url.pathname.includes('icon-') ||
+    url.pathname.includes('apple-touch-icon') ||
+    url.pathname.includes('favicon')
+  ) {
+    event.respondWith(
+      fetch(request, { cache: 'no-cache' }).catch(() => caches.match(request))
+    );
+    return;
+  }
+
+  // SPA ナビゲーション（画面遷移）: 常に最新の index.html をネットワーク優先で取得
   if (request.mode === 'navigate') {
     event.respondWith(
-      fetch(request)
+      fetch(request, { cache: 'no-cache' })
+        .then((response) => {
+          if (response.ok && response.status === 200) {
+            const clone = response.clone();
+            caches.open(CACHE_NAME).then((cache) => cache.put('/index.html', clone));
+          }
+          return response;
+        })
         .catch(() => caches.match('/index.html'))
     );
     return;
@@ -62,7 +91,6 @@ self.addEventListener('fetch', (event) => {
   event.respondWith(
     fetch(request)
       .then((response) => {
-        // 正常レスポンスだけキャッシュに保存（エラーや外部レスポンスは保存しない）
         if (
           response.ok &&
           response.type === 'basic' &&
@@ -73,9 +101,6 @@ self.addEventListener('fetch', (event) => {
         }
         return response;
       })
-      .catch(() =>
-        // オフライン時はキャッシュから返す
-        caches.match(request)
-      )
+      .catch(() => caches.match(request))
   );
 });

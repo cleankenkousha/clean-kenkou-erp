@@ -22,13 +22,13 @@
     # カメラ・マイク・位置情報等の制限
     Permissions-Policy = "camera=(self), microphone=(), geolocation=(), payment=()"
     # Content Security Policy
-    # - Supabase API・Realtime・Auth を明示許可
-    # - Google Fonts を許可
-    # - data: URI (電子サイン描画に必要)
-    # - style-src の 'unsafe-inline' はTailwind/Vite産のスタイルに対応するため許可
-    # - script-src から 'unsafe-inline' を除去（インラインスクリプトは外部ファイルに移行済み）
-    # - connect-src の blob: data: はAI見積で写真(blob URL)をBase64化する際の fetch() に必須
     Content-Security-Policy = "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' data: blob: https:; connect-src 'self' blob: data: https://cnwlcxfhxaugqtatibav.supabase.co wss://cnwlcxfhxaugqtatibav.supabase.co https://cnwlcxfhxaugqtatibav.supabase.co:*; frame-ancestors 'none'; object-src 'none'; base-uri 'self';"
+
+# index.html は常に最新を取得
+[[headers]]
+  for = "/index.html"
+  [headers.values]
+    Cache-Control = "no-cache, no-store, must-revalidate"
 
 # sw.js は絶対にキャッシュしない（常に最新を取得）
 [[headers]]
@@ -38,16 +38,38 @@
     Content-Type = "application/javascript; charset=utf-8"
     Service-Worker-Allowed = "/"
 
-# manifest.json も短めのキャッシュにする
+# register-sw.js も常に最新を取得
+[[headers]]
+  for = "/register-sw.js"
+  [headers.values]
+    Cache-Control = "no-store, no-cache, must-revalidate"
+    Content-Type = "application/javascript; charset=utf-8"
+
+# manifest.json も常に最新を取得
 [[headers]]
   for = "/manifest.json"
   [headers.values]
-    Cache-Control = "no-cache"
+    Cache-Control = "no-store, no-cache, must-revalidate"
     Content-Type = "application/manifest+json; charset=utf-8"
+
+# PWAアイコン・ファビコン類もキャッシュによる旧アイコン残りを防止
+[[headers]]
+  for = "/*.png"
+  [headers.values]
+    Cache-Control = "public, max-age=0, must-revalidate"
+
+[[headers]]
+  for = "/*.ico"
+  [headers.values]
+    Cache-Control = "public, max-age=0, must-revalidate"
+
+[[headers]]
+  for = "/*.svg"
+  [headers.values]
+    Cache-Control = "public, max-age=0, must-revalidate"
 
 # SPA ルーティング用リダイレクト
 [[redirects]]
   from = "/*"
   to = "/index.html"
   status = 200
-

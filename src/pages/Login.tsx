@@ -5,6 +5,8 @@ import { supabase } from '../lib/supabase'
 import { recordActivityLog } from '../lib/activityLogger'
 import { DEFAULT_PROFILES } from '../hooks/useProfiles'
 import { Input, Button } from '../components/ui'
+import { PwaInstallControl } from '../components/features/PwaInstallControl'
+import { APP_VERSION } from '../version'
 
 export const Login: React.FC = () => {
   const [email, setEmail] = useState('')
@@ -159,10 +161,13 @@ export const Login: React.FC = () => {
           </Button>
         </form>
 
+        {/* アプリインストール & キャッシュ強制更新コントロール */}
+        <PwaInstallControl variant="login" />
+
         {/* フッター情報 */}
         <div className="text-center pt-2 border-t border-border">
           <p className="text-[11px] text-sub">
-            有限会社クリーン健康社 &copy; Clean KENKOU ERP
+            有限会社クリーン健康社 &copy; Clean KENKOU ERP ({APP_VERSION})
           </p>
         </div>
       </div>

@@ -17,6 +17,7 @@ import { supabase } from '../../lib/supabase'
 import { recordActivityLog } from '../../lib/activityLogger'
 import { useProfiles } from '../../hooks/useProfiles'
 import { useViewMode } from '../../hooks/useViewMode'
+import { PwaInstallControl } from '../features/PwaInstallControl'
 import { APP_VERSION, APP_BUILD_DATE } from '../../version'
 
 interface LayoutProps {
@@ -204,6 +205,9 @@ export const Layout: React.FC<LayoutProps> = ({ children }) => {
 
         {/* User Info, 表示モード切替 & ログアウトボタン (右端) */}
         <div className="flex items-center space-x-2 md:space-x-3">
+          {/* 📲 PWAインストール / アイコン・カラー最新化ボタン */}
+          <PwaInstallControl variant="header" />
+
           {/* 💻 PC / 📱 モバイル 表示切り替えボタン */}
           <button
             type="button"

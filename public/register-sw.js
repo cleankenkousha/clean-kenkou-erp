@@ -1,11 +1,21 @@
-// Service Worker 登録スクリプト（PWA対応）
-// タブレットでのインストールフリーズを防ぐため、
-// アプリ本体の読み込みを絶対にブロックしない設計
+// Service Worker 登録 & PWA インストールプロンプト早期捕捉スクリプト
+window.__deferredPwaPrompt = null;
+
+window.addEventListener('beforeinstallprompt', function(e) {
+  // Chrome標準のミニバー自動消滅を防ぎ、画面内の「アプリをインストール」ボタンから確実に呼べるよう保持
+  e.preventDefault();
+  window.__deferredPwaPrompt = e;
+  window.dispatchEvent(new Event('pwa-install-ready'));
+});
+
 if ('serviceWorker' in navigator) {
   window.addEventListener('load', function() {
-    navigator.serviceWorker.register('/sw.js', { scope: '/' })
+    navigator.serviceWorker.register('/sw.js?v=1.2.5', { scope: '/', updateViaCache: 'none' })
       .then(function(reg) {
         console.log('[PWA] SW registered, scope:', reg.scope);
+        // 起動時に毎回SWの更新チェックを実行
+        reg.update().catch(function() {});
+
         if (reg.waiting) {
           reg.waiting.postMessage({ type: 'SKIP_WAITING' });
         }
