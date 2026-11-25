@@ -157,18 +157,18 @@ export const Layout: React.FC<LayoutProps> = ({ children }) => {
     <div className="flex flex-col h-screen w-screen overflow-hidden bg-surface font-sans antialiased">
 
       {/* Header (上部ナビゲーション: 高さ 56px, bg-white backdrop-blur-sm) */}
-      <header className="h-14 flex-shrink-0 bg-white border-b border-border px-3 md:px-6 flex items-center justify-between z-10">
+      <header className="h-14 flex-shrink-0 bg-white border-t-[3px] border-t-brand-main border-b border-border px-3 md:px-6 flex items-center justify-between z-10">
         <div className="flex items-center space-x-3 md:space-x-6">
           {/* App Brand Header */}
           <div className="flex items-center space-x-2">
-            <div className="p-1.5 bg-slate-900 text-white rounded-md">
+            <div className="p-1.5 bg-brand-main text-white rounded-md shadow-xs">
               <Activity className="w-4 h-4" />
             </div>
             <span className="font-bold text-main tracking-tight text-sm md:text-base">
               Clean KENKOU ERP
             </span>
             {isMobileMode && (
-              <span className="text-[10px] bg-blue-100 text-blue-800 px-1.5 py-0.5 rounded font-bold">
+              <span className="text-[10px] bg-brand-soft text-brand-text border border-brand-border px-1.5 py-0.5 rounded font-bold">
                 携帯・タブレット版
               </span>
             )}
@@ -188,8 +188,8 @@ export const Layout: React.FC<LayoutProps> = ({ children }) => {
                     className={({ isActive }) =>
                       `flex items-center space-x-2 px-3 py-1.5 rounded-md text-sm font-medium transition-colors ${
                         isActive
-                          ? 'bg-slate-900 text-white shadow-sm'
-                          : 'text-sub hover:bg-slate-100 hover:text-main'
+                          ? 'bg-brand-main text-white shadow-sm'
+                          : 'text-sub hover:bg-brand-soft hover:text-brand-text'
                       }`
                     }
                   >
@@ -321,7 +321,7 @@ export const Layout: React.FC<LayoutProps> = ({ children }) => {
                   onChange={(e) => setNewPassword(e.target.value)}
                   required
                   autoFocus
-                  className="w-full p-2 border border-border rounded-lg text-xs bg-white text-main focus:ring-2 focus:ring-slate-900"
+                  className="w-full p-2 border border-border rounded-lg text-xs bg-white text-main focus:ring-2 focus:ring-brand-main"
                 />
               </div>
 
@@ -333,7 +333,7 @@ export const Layout: React.FC<LayoutProps> = ({ children }) => {
                   value={confirmPassword}
                   onChange={(e) => setConfirmPassword(e.target.value)}
                   required
-                  className="w-full p-2 border border-border rounded-lg text-xs bg-white text-main focus:ring-2 focus:ring-slate-900"
+                  className="w-full p-2 border border-border rounded-lg text-xs bg-white text-main focus:ring-2 focus:ring-brand-main"
                 />
               </div>
 
@@ -348,7 +348,7 @@ export const Layout: React.FC<LayoutProps> = ({ children }) => {
                 <button
                   type="submit"
                   disabled={isUpdatingPassword}
-                  className="px-3 py-1.5 bg-slate-900 hover:bg-slate-800 text-white rounded-lg text-xs font-bold shadow-xs disabled:opacity-50"
+                  className="px-3 py-1.5 bg-brand-main hover:bg-brand-hover text-white rounded-lg text-xs font-bold shadow-xs disabled:opacity-50"
                 >
                   {isUpdatingPassword ? '変更中...' : 'パスワードを変更'}
                 </button>
@@ -371,7 +371,7 @@ export const Layout: React.FC<LayoutProps> = ({ children }) => {
               className={({ isActive }) =>
                 `flex flex-col items-center justify-center py-1 px-2.5 rounded-lg text-[10px] font-medium transition-all min-h-[44px] min-w-[48px] ${
                   isActive
-                    ? 'text-slate-900 font-bold bg-slate-100'
+                    ? 'text-brand-text font-bold bg-brand-soft'
                     : 'text-sub hover:text-main'
                 }`
               }

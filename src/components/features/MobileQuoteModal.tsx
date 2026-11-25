@@ -741,9 +741,9 @@ export const MobileQuoteModal: React.FC<MobileQuoteModalProps> = ({
         }`}
       >
         {/* Header */}
-        <div className="flex items-center justify-between px-5 py-4 bg-slate-900 text-white border-b border-slate-800">
+        <div className="flex items-center justify-between px-5 py-4 bg-emerald-900 text-white border-b border-emerald-800">
           <div className="flex items-center space-x-3">
-            <div className="p-2 bg-blue-600 rounded-xl shadow-inner">
+            <div className="p-2 bg-brand-main rounded-xl shadow-inner">
               <Calculator className="w-6 h-6 text-white" />
             </div>
             <div>
@@ -751,11 +751,11 @@ export const MobileQuoteModal: React.FC<MobileQuoteModalProps> = ({
                 <h2 className="text-base sm:text-lg font-bold tracking-tight">
                   {isMobileMode ? '携帯・タブレット概算見積' : 'PC版 概算見積作成 (AI算定・撮影連動)'}
                 </h2>
-                <span className="px-2 py-0.5 bg-blue-500/30 text-blue-200 border border-blue-400/40 rounded-full text-[10px] font-mono font-bold tracking-wide">
+                <span className="px-2 py-0.5 bg-emerald-400/20 text-emerald-100 border border-emerald-300/40 rounded-full text-[10px] font-mono font-bold tracking-wide">
                   {APP_VERSION}
                 </span>
               </div>
-              <p className="text-xs text-slate-300">単価マスタ連動・写真読み込み・AI自動体積算定を行えます</p>
+              <p className="text-xs text-emerald-100/80">単価マスタ連動・写真読み込み・AI自動体積算定を行えます</p>
             </div>
           </div>
           <div className="flex items-center space-x-2">
@@ -1217,7 +1217,7 @@ export const MobileQuoteModal: React.FC<MobileQuoteModalProps> = ({
                     <select
                       value={applyTruckPack}
                       onChange={(e) => setApplyTruckPack(e.target.value as any)}
-                      className="bg-slate-900 text-white text-[11px] font-bold px-2 py-1 rounded border border-slate-700 focus:outline-none"
+                      className="bg-brand-hover text-white text-[11px] font-bold px-2 py-1 rounded border border-emerald-600 focus:outline-none"
                     >
                       <option value="auto">✨ AI最適自動判定</option>
                       <option value="none">適用なし (単品積み上げ)</option>
@@ -1277,7 +1277,7 @@ export const MobileQuoteModal: React.FC<MobileQuoteModalProps> = ({
                             <div className="flex flex-col sm:flex-row gap-1.5 flex-1">
                               {/* 品目マスタドロップダウン */}
                               <select
-                                className="text-xs px-2 py-1 border border-slate-300 rounded-lg bg-white font-medium text-slate-800 focus:outline-none focus:ring-1 focus:ring-slate-900"
+                                className="text-xs px-2 py-1 border border-slate-300 rounded-lg bg-white font-medium text-slate-800 focus:outline-none focus:ring-1 focus:ring-brand-main"
                                 onChange={(e) => {
                                   if (e.target.value) {
                                     handleApplyMasterCorrection(item.id, e.target.value)
@@ -1465,7 +1465,7 @@ export const MobileQuoteModal: React.FC<MobileQuoteModalProps> = ({
                     placeholder="搬出環境（階段・運び出し有無など）や追記事項..."
                     value={notes}
                     onChange={(e) => setNotes(e.target.value)}
-                    className="w-full p-2 text-xs border border-border rounded-lg bg-white focus:outline-none focus:ring-2 focus:ring-slate-900"
+                    className="w-full p-2 text-xs border border-border rounded-lg bg-white focus:outline-none focus:ring-2 focus:ring-brand-main"
                   />
                 </div>
               </div>

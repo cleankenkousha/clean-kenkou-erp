@@ -16,7 +16,7 @@ const Schedule = lazy(() => import('./pages/Schedule').then((m) => ({ default: m
 // ページ読み込み中のフォールバック表示
 const PageLoadingFallback: React.FC = () => (
   <div className="flex items-center justify-center min-h-[50vh] text-xs text-sub space-x-2">
-    <div className="w-5 h-5 border-2 border-slate-900 border-t-transparent rounded-full animate-spin" />
+    <div className="w-5 h-5 border-2 border-brand-main border-t-transparent rounded-full animate-spin" />
     <span>画面を読み込んでいます...</span>
   </div>
 )

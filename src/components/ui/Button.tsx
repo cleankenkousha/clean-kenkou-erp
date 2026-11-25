@@ -21,10 +21,10 @@ export const Button = forwardRef<HTMLButtonElement, ButtonProps>(
     ref
   ) => {
     const baseStyles =
-      'inline-flex items-center justify-center font-medium transition-colors focus:outline-none focus:ring-2 focus:ring-slate-900 focus:ring-offset-2 disabled:opacity-50 disabled:cursor-not-allowed rounded-md'
+      'inline-flex items-center justify-center font-medium transition-colors focus:outline-none focus:ring-2 focus:ring-brand-main focus:ring-offset-2 disabled:opacity-50 disabled:cursor-not-allowed rounded-md'
 
     const variantStyles = {
-      primary: 'bg-slate-900 text-white hover:bg-slate-800 shadow-sm',
+      primary: 'bg-brand-main text-white hover:bg-brand-hover shadow-sm',
       secondary: 'bg-slate-100 text-main hover:bg-slate-200 border border-border',
       outline: 'bg-white text-main border border-border hover:bg-slate-50',
       ghost: 'bg-transparent text-sub hover:bg-slate-100 hover:text-main',

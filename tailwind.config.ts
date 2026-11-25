@@ -8,11 +8,22 @@ export default {
   theme: {
     extend: {
       colors: {
-        // Brand / Primary (主幹色)
+        // Brand / Primary (主幹色: クリーン健康社公式イメージカラー 緑系)
         primary: {
-          50: '#F8FAFC',
-          500: '#0F172A',
-          DEFAULT: '#0F172A',
+          50: '#ECFDF5',
+          200: '#A7F3D0',
+          500: '#059669',
+          600: '#059669',
+          700: '#047857',
+          DEFAULT: '#059669',
+        },
+        brand: {
+          main: '#059669',
+          hover: '#047857',
+          soft: '#ECFDF5',
+          border: '#A7F3D0',
+          text: '#047857',
+          onPrimary: '#FFFFFF',
         },
         // Neutral (ベース/テキスト)
         surface: '#F9FAFB',

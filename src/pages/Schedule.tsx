@@ -309,7 +309,7 @@ export const Schedule: React.FC = () => {
         {/* 左側：タイトル＆日付ナビ */}
         <div className="flex flex-wrap items-center gap-3">
           <div className="flex items-center space-x-2">
-            <div className="p-2 bg-slate-900 text-white rounded-lg shadow-sm">
+            <div className="p-2 bg-brand-main text-white rounded-lg shadow-sm">
               <CalendarIcon className="w-5 h-5" />
             </div>
             <div>
@@ -332,7 +332,7 @@ export const Schedule: React.FC = () => {
               onClick={() => setViewMode('day')}
               className={`px-3 py-1.5 rounded-md transition-all ${
                 viewMode === 'day'
-                  ? 'bg-white text-slate-900 shadow-xs'
+                  ? 'bg-white text-brand-text shadow-xs'
                   : 'text-slate-600 hover:text-slate-900'
               }`}
             >
@@ -343,7 +343,7 @@ export const Schedule: React.FC = () => {
               onClick={() => setViewMode('week')}
               className={`px-3 py-1.5 rounded-md transition-all ${
                 viewMode === 'week'
-                  ? 'bg-white text-slate-900 shadow-xs'
+                  ? 'bg-white text-brand-text shadow-xs'
                   : 'text-slate-600 hover:text-slate-900'
               }`}
             >
@@ -394,7 +394,7 @@ export const Schedule: React.FC = () => {
           <select
             value={selectedStaffFilter}
             onChange={(e) => setSelectedStaffFilter(e.target.value)}
-            className="p-2 border border-border rounded-lg text-xs bg-white font-medium text-main focus:ring-2 focus:ring-slate-900"
+            className="p-2 border border-border rounded-lg text-xs bg-white font-medium text-main focus:ring-2 focus:ring-brand-main"
           >
             <option value="all">営業担当 全員表示 ({salesProfiles.length}名)</option>
             {salesProfiles.map((p) => (
@@ -502,7 +502,7 @@ export const Schedule: React.FC = () => {
               </p>
               <Link
                 to="/settings"
-                className="inline-flex items-center px-4 py-2 bg-slate-900 text-white rounded-lg text-xs font-semibold hover:bg-slate-800 transition-colors shadow-sm"
+                className="inline-flex items-center px-4 py-2 bg-brand-main text-white rounded-lg text-xs font-semibold hover:bg-brand-hover transition-colors shadow-sm"
               >
                 担当者・スタッフ管理へ移動
               </Link>
@@ -1040,7 +1040,7 @@ export const Schedule: React.FC = () => {
                     value={appointmentForm.profileId}
                     onChange={(e) => setAppointmentForm({ ...appointmentForm, profileId: e.target.value })}
                     required
-                    className="w-full p-2 border border-border rounded-lg text-xs bg-white text-main font-semibold focus:ring-2 focus:ring-slate-900"
+                    className="w-full p-2 border border-border rounded-lg text-xs bg-white text-main font-semibold focus:ring-2 focus:ring-brand-main"
                   >
                     <option value="">担当営業を選択...</option>
                     {salesProfiles.map((p) => (
@@ -1134,7 +1134,7 @@ export const Schedule: React.FC = () => {
                   placeholder="例: 2階からのタンス搬出、軽トラ1台分、見積もり希望日時の候補など"
                   value={appointmentForm.notes || ''}
                   onChange={(e) => setAppointmentForm({ ...appointmentForm, notes: e.target.value })}
-                  className="w-full p-2 border border-border rounded-lg text-xs bg-white text-main focus:ring-2 focus:ring-slate-900"
+                  className="w-full p-2 border border-border rounded-lg text-xs bg-white text-main focus:ring-2 focus:ring-brand-main"
                 />
               </div>
 
@@ -1195,7 +1195,7 @@ export const Schedule: React.FC = () => {
                   value={simpleForm.profileId}
                   onChange={(e) => setSimpleForm({ ...simpleForm, profileId: e.target.value })}
                   required
-                  className="w-full p-2 border border-border rounded-lg text-xs bg-white text-main font-semibold focus:ring-2 focus:ring-slate-900"
+                  className="w-full p-2 border border-border rounded-lg text-xs bg-white text-main font-semibold focus:ring-2 focus:ring-brand-main"
                 >
                   <option value="">対象営業を選択...</option>
                   {salesProfiles.map((p) => (
@@ -1211,7 +1211,7 @@ export const Schedule: React.FC = () => {
                 <select
                   value={simpleForm.scheduleType}
                   onChange={(e) => setSimpleForm({ ...simpleForm, scheduleType: e.target.value as ScheduleType })}
-                  className="w-full p-2 border border-border rounded-lg text-xs bg-white text-main font-semibold focus:ring-2 focus:ring-slate-900"
+                  className="w-full p-2 border border-border rounded-lg text-xs bg-white text-main font-semibold focus:ring-2 focus:ring-brand-main"
                 >
                   <option value="away">外出・移動</option>
                   <option value="meeting">打合せ・会議</option>
@@ -1270,7 +1270,7 @@ export const Schedule: React.FC = () => {
                   placeholder="備考など"
                   value={simpleForm.notes}
                   onChange={(e) => setSimpleForm({ ...simpleForm, notes: e.target.value })}
-                  className="w-full p-2 border border-border rounded-lg text-xs bg-white text-main focus:ring-2 focus:ring-slate-900"
+                  className="w-full p-2 border border-border rounded-lg text-xs bg-white text-main focus:ring-2 focus:ring-brand-main"
                 />
               </div>
             </div>

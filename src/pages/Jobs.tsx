@@ -556,7 +556,7 @@ export const Jobs: React.FC = () => {
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-white p-4 md:p-5 rounded-xl border border-border shadow-sm">
         <div>
           <div className="flex items-center space-x-2">
-            <div className="p-2 bg-slate-900 text-white rounded-lg">
+            <div className="p-2 bg-brand-main text-white rounded-lg">
               <Briefcase className="w-5 h-5" />
             </div>
             <h1 className="text-lg md:text-xl font-bold text-main tracking-tight">
@@ -575,7 +575,7 @@ export const Jobs: React.FC = () => {
           {/* 新規受付ボタン (出先・携帯対応: 前のグリーンカラー) */}
           <Button
             type="button"
-            className="bg-[#10b981] hover:bg-[#059669] text-white font-bold py-2 px-3 text-xs shadow-md flex items-center space-x-1 transition-all"
+            className="bg-brand-main hover:bg-brand-hover text-white font-bold py-2 px-3 text-xs shadow-md flex items-center space-x-1 transition-all"
             onClick={() => setIsNewTaskOpen(true)}
           >
             <Plus className="w-4 h-4 mr-0.5 stroke-[2.5]" />
@@ -696,7 +696,7 @@ export const Jobs: React.FC = () => {
             <select
               value={staffFilter}
               onChange={(e) => setStaffFilter(e.target.value)}
-              className="p-2 border border-border rounded-lg text-xs bg-white text-main font-medium focus:outline-none focus:ring-2 focus:ring-slate-900 w-full sm:w-auto"
+              className="p-2 border border-border rounded-lg text-xs bg-white text-main font-medium focus:outline-none focus:ring-2 focus:ring-brand-main w-full sm:w-auto"
             >
               <option value="all">すべての担当者</option>
               <option value="unassigned">未割当のみ</option>

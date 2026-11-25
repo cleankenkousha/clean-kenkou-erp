@@ -424,15 +424,15 @@ export const NewTaskModal: React.FC<NewTaskModalProps> = ({ isOpen, onClose, onS
           <div className="flex items-center space-x-2">
             <button
               type="button"
-              className="btn-secondary text-xs"
-              style={{ background: '#0284c7', color: 'white', borderColor: '#0284c7' }}
+              className="btn-secondary text-xs font-semibold"
+              style={{ background: '#ECFDF5', color: '#047857', borderColor: '#059669' }}
               onClick={() => handleFormSubmit(true)}
             >
               🖨️ 登録して指示書を印刷
             </button>
             <button
               type="button"
-              className="btn-primary text-xs font-bold bg-slate-900 hover:bg-slate-800"
+              className="btn-primary text-xs font-bold bg-brand-main hover:bg-brand-hover"
               onClick={() => handleFormSubmit(false)}
             >
               登録する

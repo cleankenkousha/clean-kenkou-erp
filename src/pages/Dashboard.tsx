@@ -416,7 +416,7 @@ export const Dashboard: React.FC = () => {
             <button
               id="newTaskBtn"
               className="btn-primary"
-              style={{ background: 'var(--success)' }}
+              style={{ background: 'var(--brand-main)' }}
               onClick={() => setIsNewTaskOpen(true)}
               aria-label="新規受付登録"
             >

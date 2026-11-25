@@ -81,7 +81,7 @@ export const Customers: React.FC = () => {
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-white p-5 rounded-xl border border-border shadow-sm">
         <div>
           <div className="flex items-center space-x-2">
-            <div className="p-2 bg-slate-900 text-white rounded-lg">
+            <div className="p-2 bg-brand-main text-white rounded-lg">
               <Users className="w-5 h-5" />
             </div>
             <h1 className="text-xl font-bold text-main tracking-tight">顧客管理</h1>

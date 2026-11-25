@@ -93,7 +93,7 @@ export const CustomerModal: React.FC<CustomerModalProps> = ({
         {/* Header */}
         <div className="px-6 py-4 border-b border-border flex items-center justify-between bg-slate-50/80">
           <div className="flex items-center space-x-2">
-            <div className="p-2 bg-slate-900 text-white rounded-lg">
+            <div className="p-2 bg-brand-main text-white rounded-lg">
               <User className="w-5 h-5" />
             </div>
             <div>

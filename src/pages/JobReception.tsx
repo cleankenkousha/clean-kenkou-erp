@@ -10,7 +10,7 @@ export const JobReception: React.FC = () => {
         <div>
           <div className="flex items-center space-x-2">
             <h1 className="text-2xl font-bold text-main">新規案件受付</h1>
-            <span className="bg-slate-900 text-white text-xs px-2.5 py-0.5 rounded-full font-medium flex items-center space-x-1">
+            <span className="bg-brand-main text-white text-xs px-2.5 py-0.5 rounded-full font-medium flex items-center space-x-1">
               <PhoneCall className="w-3 h-3 mr-1" />
               電話受付 30秒対応
             </span>

@@ -309,7 +309,7 @@ export const JobReceptionForm: React.FC = () => {
     >
       <div className="flex items-center justify-between pb-4 border-b border-border">
         <div className="flex items-center space-x-2">
-          <div className="p-1.5 bg-slate-900 text-white rounded">
+          <div className="p-1.5 bg-brand-main text-white rounded">
             <Phone className="w-4 h-4" />
           </div>
           <div>
@@ -652,7 +652,7 @@ export const JobReceptionForm: React.FC = () => {
           <select
             value={assignedTo}
             onChange={(e) => setAssignedTo(e.target.value)}
-            className="w-full p-2.5 bg-white border border-border rounded-lg text-xs font-medium text-main focus:outline-none focus:ring-2 focus:ring-slate-900"
+            className="w-full p-2.5 bg-white border border-border rounded-lg text-xs font-medium text-main focus:outline-none focus:ring-2 focus:ring-brand-main"
           >
             <option value="">-- 未割当（担当者を選択） --</option>
             {profiles.map((p) => (

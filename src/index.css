@@ -6,8 +6,14 @@
     --bg-color: #f8fafc;
     --text-main: #1e293b;
     --text-muted: #64748b;
-    --accent: #0284c7;
-    --accent-hover: #0369a1;
+    --brand-main: #059669;
+    --brand-hover: #047857;
+    --brand-soft: #ECFDF5;
+    --brand-border: #A7F3D0;
+    --brand-text: #047857;
+    --brand-on-primary: #FFFFFF;
+    --accent: #059669;
+    --accent-hover: #047857;
     --card-bg: #ffffff;
     --lane-bg: #f1f5f9;
     --border: #e2e8f0;
@@ -28,7 +34,7 @@ body {
     font-family: 'Inter', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
     background-color: var(--bg-color);
     background-image: 
-        radial-gradient(at 0% 0%, rgba(186, 230, 253, 0.4) 0px, transparent 50%), 
+        radial-gradient(at 0% 0%, rgba(167, 243, 208, 0.35) 0px, transparent 50%), 
         radial-gradient(at 100% 100%, rgba(209, 250, 229, 0.4) 0px, transparent 50%);
     background-attachment: fixed;
     color: var(--text-main);
@@ -64,7 +70,7 @@ body {
 .header-content h1 {
     font-size: 1.25rem;
     font-weight: 700;
-    background: linear-gradient(135deg, #0284c7, #7c3aed);
+    background: linear-gradient(135deg, #047857, #059669);
     -webkit-background-clip: text;
     -webkit-text-fill-color: transparent;
     letter-spacing: -0.02em;
@@ -125,7 +131,7 @@ body {
 }
 
 .tab-btn.active .tab-count {
-    background: #e0f2fe;
+    background: #ECFDF5;
     color: var(--accent);
 }
 
@@ -141,13 +147,13 @@ body {
     border-radius: 0.5rem;
     font-weight: 600;
     font-size: 0.875rem;
-    box-shadow: 0 4px 6px -1px rgba(2, 132, 199, 0.2), 0 2px 4px -2px rgba(2, 132, 199, 0.1);
+    box-shadow: 0 4px 6px -1px rgba(5, 150, 105, 0.2), 0 2px 4px -2px rgba(5, 150, 105, 0.1);
 }
 
 .btn-primary:hover {
     background: var(--accent-hover);
     transform: translateY(-1px);
-    box-shadow: 0 6px 10px -1px rgba(2, 132, 199, 0.3);
+    box-shadow: 0 6px 10px -1px rgba(5, 150, 105, 0.3);
 }
 
 .btn-secondary {
@@ -241,7 +247,7 @@ body {
 .task-card:hover {
     transform: translateY(-2px);
     border-color: var(--accent);
-    box-shadow: 0 10px 15px -3px rgba(2, 132, 199, 0.12), 0 4px 6px -2px rgba(2, 132, 199, 0.05);
+    box-shadow: 0 10px 15px -3px rgba(5, 150, 105, 0.12), 0 4px 6px -2px rgba(5, 150, 105, 0.05);
 }
 
 .task-id {
@@ -259,9 +265,9 @@ body {
     display: inline-flex;
     align-items: center;
     font-size: 0.7rem;
-    background: #e0f2fe;
-    color: #0284c7;
-    border: 1px solid #bae6fd;
+    background: #ECFDF5;
+    color: #047857;
+    border: 1px solid #A7F3D0;
     padding: 0.1rem 0.45rem;
     border-radius: 0.25rem;
     font-weight: 600;
@@ -419,7 +425,7 @@ body {
     font-size: 0.75rem;
     color: var(--accent);
     text-decoration: none;
-    background: rgba(2, 132, 199, 0.08);
+    background: rgba(5, 150, 105, 0.08);
     padding: 0.2rem 0.5rem;
     border-radius: 0.375rem;
     font-weight: 600;
@@ -427,7 +433,7 @@ body {
 }
 
 .map-link:hover {
-    background: rgba(2, 132, 199, 0.16);
+    background: rgba(5, 150, 105, 0.16);
 }
 
 .timeline-title {
@@ -472,7 +478,7 @@ body {
 .timeline-item.completed .timeline-dot {
     background: var(--accent);
     border-color: var(--accent);
-    box-shadow: 0 0 0 3px rgba(2, 132, 199, 0.2);
+    box-shadow: 0 0 0 3px rgba(5, 150, 105, 0.2);
 }
 
 .timeline-content {
@@ -518,7 +524,7 @@ body {
 .timeline-worker-input:focus {
     outline: none;
     border-color: var(--accent);
-    box-shadow: 0 0 0 2px rgba(2, 132, 199, 0.15);
+    box-shadow: 0 0 0 2px rgba(5, 150, 105, 0.15);
 }
 
 .timeline-input {
@@ -538,7 +544,7 @@ body {
 .timeline-input:focus {
     outline: none;
     border-color: var(--accent);
-    box-shadow: 0 0 0 2px rgba(2, 132, 199, 0.15);
+    box-shadow: 0 0 0 2px rgba(5, 150, 105, 0.15);
 }
 
 .status-toggle {
@@ -568,7 +574,7 @@ body {
     color: white;
     border-color: var(--accent);
     font-weight: 600;
-    box-shadow: 0 1px 2px rgba(2, 132, 199, 0.2);
+    box-shadow: 0 1px 2px rgba(5, 150, 105, 0.2);
 }
 
 .status-btn.active.active-unnecessary {
@@ -662,7 +668,7 @@ body {
 .form-input:focus {
     outline: none;
     border-color: var(--accent);
-    box-shadow: 0 0 0 2px rgba(2, 132, 199, 0.15);
+    box-shadow: 0 0 0 2px rgba(5, 150, 105, 0.15);
 }
 
 /* Print Container Styles */

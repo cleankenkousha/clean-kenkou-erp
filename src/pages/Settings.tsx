@@ -412,7 +412,7 @@ export const Settings: React.FC = () => {
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-white p-5 rounded-xl border border-border shadow-sm">
         <div>
           <div className="flex items-center space-x-2">
-            <div className="p-2 bg-slate-900 text-white rounded-lg">
+            <div className="p-2 bg-brand-main text-white rounded-lg">
               <SettingsIcon className="w-5 h-5" />
             </div>
             <h1 className="text-xl font-bold text-main tracking-tight">システム設定</h1>
@@ -448,7 +448,7 @@ export const Settings: React.FC = () => {
             onClick={() => setActiveTab('staff')}
             className={`flex items-center space-x-2 py-3 px-4 text-xs font-semibold border-b-2 transition-colors whitespace-nowrap ${
               activeTab === 'staff'
-                ? 'border-slate-900 text-slate-900 font-bold'
+                ? 'border-brand-main text-brand-text font-bold'
                 : 'border-transparent text-sub hover:text-main'
             }`}
           >
@@ -462,7 +462,7 @@ export const Settings: React.FC = () => {
           onClick={() => setActiveTab('logs')}
           className={`flex items-center space-x-2 py-3 px-4 text-xs font-semibold border-b-2 transition-colors whitespace-nowrap ${
             activeTab === 'logs'
-              ? 'border-slate-900 text-slate-900 font-bold'
+              ? 'border-brand-main text-brand-text font-bold'
               : 'border-transparent text-sub hover:text-main'
           }`}
         >
@@ -475,7 +475,7 @@ export const Settings: React.FC = () => {
           onClick={() => setActiveTab('company')}
           className={`flex items-center space-x-2 py-3 px-4 text-xs font-semibold border-b-2 transition-colors whitespace-nowrap ${
             activeTab === 'company'
-              ? 'border-slate-900 text-slate-900 font-bold'
+              ? 'border-brand-main text-brand-text font-bold'
               : 'border-transparent text-sub hover:text-main'
           }`}
         >
@@ -488,7 +488,7 @@ export const Settings: React.FC = () => {
           onClick={() => setActiveTab('items')}
           className={`flex items-center space-x-2 py-3 px-4 text-xs font-semibold border-b-2 transition-colors whitespace-nowrap ${
             activeTab === 'items'
-              ? 'border-slate-900 text-slate-900 font-bold'
+              ? 'border-brand-main text-brand-text font-bold'
               : 'border-transparent text-sub hover:text-main'
           }`}
         >
@@ -501,7 +501,7 @@ export const Settings: React.FC = () => {
           onClick={() => setActiveTab('backup')}
           className={`flex items-center space-x-2 py-3 px-4 text-xs font-semibold border-b-2 transition-colors whitespace-nowrap ${
             activeTab === 'backup'
-              ? 'border-slate-900 text-slate-900 font-bold'
+              ? 'border-brand-main text-brand-text font-bold'
               : 'border-transparent text-sub hover:text-main'
           }`}
         >
@@ -559,7 +559,7 @@ export const Settings: React.FC = () => {
                 <select
                   value={newStaffRole}
                   onChange={(e) => setNewStaffRole(e.target.value as StaffRole)}
-                  className="w-full p-2 border border-border rounded-lg text-xs bg-white text-main font-medium focus:outline-none focus:ring-2 focus:ring-slate-900"
+                  className="w-full p-2 border border-border rounded-lg text-xs bg-white text-main font-medium focus:outline-none focus:ring-2 focus:ring-brand-main"
                 >
                   <option value="operator">現場作業員</option>
                   <option value="dispatcher">配車担当</option>
@@ -662,7 +662,7 @@ export const Settings: React.FC = () => {
                                     setIsSavedStaff(true)
                                     setTimeout(() => setIsSavedStaff(false), 4000)
                                   }}
-                                  className="p-1 border border-border rounded text-[11px] bg-white text-main font-medium focus:outline-none focus:ring-1 focus:ring-slate-900"
+                                  className="p-1 border border-border rounded text-[11px] bg-white text-main font-medium focus:outline-none focus:ring-1 focus:ring-brand-main"
                                 >
                                   <option value="operator">現場作業員</option>
                                   <option value="dispatcher">配車担当</option>
@@ -708,7 +708,7 @@ export const Settings: React.FC = () => {
                                   variant="primary"
                                   size="sm"
                                   onClick={() => openAccountModal(profile)}
-                                  className="text-[11px] py-1.5 px-2.5 bg-slate-900 hover:bg-slate-800 text-white font-bold shadow-xs"
+                                  className="text-[11px] py-1.5 px-2.5 bg-brand-main hover:bg-brand-hover text-white font-bold shadow-xs"
                                   title="このスタッフのログインIDとパスワードを直接設定・変更します"
                                 >
                                   <Key className="w-3.5 h-3.5 mr-1 text-amber-400" />

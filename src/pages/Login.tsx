@@ -74,10 +74,10 @@ export const Login: React.FC = () => {
 
   return (
     <div className="min-h-screen flex items-center justify-center bg-surface p-4 font-sans antialiased">
-      <div className="w-full max-w-md bg-white rounded-2xl border border-border shadow-xl p-6 md:p-8 space-y-6">
+      <div className="w-full max-w-md bg-white rounded-2xl border border-border border-t-4 border-t-brand-main shadow-xl p-6 md:p-8 space-y-6">
         {/* ブランドヘッダー */}
         <div className="flex flex-col items-center text-center space-y-2">
-          <div className="p-3 bg-slate-900 text-white rounded-xl shadow-md">
+          <div className="p-3 bg-brand-main text-white rounded-xl shadow-md">
             <Activity className="w-8 h-8" />
           </div>
           <h1 className="text-2xl font-bold text-main tracking-tight pt-2">
@@ -112,7 +112,7 @@ export const Login: React.FC = () => {
                 }}
                 className={`px-2.5 py-1 rounded-md text-xs font-semibold border transition-colors ${
                   normalizeLoginEmail(email) === staff.email
-                    ? 'bg-slate-900 text-white border-slate-900'
+                    ? 'bg-brand-main text-white border-brand-main'
                     : 'bg-slate-50 text-slate-700 border-slate-200 hover:bg-slate-100'
                 }`}
               >

@@ -168,7 +168,7 @@ export const ExportModal: React.FC<ExportModalProps> = ({ isOpen, onClose, jobs 
             <select
               value={selectedMonth}
               onChange={(e) => setSelectedMonth(e.target.value)}
-              className="w-full text-xs p-2.5 bg-white border border-border rounded-lg focus:outline-none focus:ring-2 focus:ring-slate-900"
+              className="w-full text-xs p-2.5 bg-white border border-border rounded-lg focus:outline-none focus:ring-2 focus:ring-brand-main"
             >
               {months.map((m) => (
                 <option key={m.value} value={m.value}>
