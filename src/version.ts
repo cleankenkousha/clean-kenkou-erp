@@ -6,6 +6,6 @@
  * クライアントのキャッシュ状態を即座に確認できます。
  */
 
-export const APP_VERSION = 'v1.2.6'
-export const APP_BUILD_DATE = '2026.11.25-17:43'
-export const APP_DESCRIPTION = 'AndroidタブレットWebAPK互換のため全PWAアイコンを24bit RGB(透過なし)へ変換およびマニフェスト・SW構成の標準化'
+export const APP_VERSION = 'v1.2.7'
+export const APP_BUILD_DATE = '2026.11.26-11:13'
+export const APP_DESCRIPTION = 'Android WebAPK再インストール時の旧パッケージID衝突を回避する新マニフェストURL(manifest-erp.webmanifest)・新ID発行およびキャッシュヘッダー最適化'
