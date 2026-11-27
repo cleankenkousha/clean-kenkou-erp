@@ -28,6 +28,7 @@ export interface Job {
   status: JobStatus
   received_at?: string | null
   scheduled_date?: string | null
+  estimated_amount?: number | null
   assigned_to?: string | null
   notes?: string | null
   created_at: string

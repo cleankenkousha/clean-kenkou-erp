@@ -55,6 +55,7 @@ CREATE TABLE IF NOT EXISTS public.jobs (
     ),
     received_at TIMESTAMPTZ DEFAULT now(),
     scheduled_date DATE,
+    estimated_amount NUMERIC(12, 2),
     assigned_to UUID REFERENCES public.profiles(id) ON DELETE SET NULL,
     notes TEXT,
     created_at TIMESTAMPTZ NOT NULL DEFAULT now(),

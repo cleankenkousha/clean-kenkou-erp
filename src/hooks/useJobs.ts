@@ -119,7 +119,7 @@ export const useJobs = (): UseJobsReturn => {
     async (jobId: string, updates: Partial<Job>): Promise<boolean> => {
       try {
         // jobs テーブルの有効な更新可能カラムのみを安全に抽出 (ホワイトリスト)
-        const allowedKeys = ['title', 'status', 'scheduled_date', 'notes', 'assigned_to', 'received_at']
+        const allowedKeys = ['title', 'status', 'scheduled_date', 'estimated_amount', 'notes', 'assigned_to', 'received_at']
         const cleanUpdates: Record<string, any> = {}
 
         const isUuid = (str: string) =>
@@ -144,6 +144,13 @@ export const useJobs = (): UseJobsReturn => {
               } else if (typeof val === 'string') {
                 const isDate = /^\d{4}-\d{2}-\d{2}$/.test(val.trim())
                 cleanUpdates[key] = isDate ? val.trim() : null
+              }
+            } else if (key === 'estimated_amount') {
+              if (val === null || val === '') {
+                cleanUpdates[key] = null
+              } else {
+                const numVal = Number(val)
+                cleanUpdates[key] = Number.isFinite(numVal) && numVal >= 0 ? Math.round(numVal) : null
               }
             } else {
               cleanUpdates[key] = val

@@ -7,6 +7,20 @@ import { MapLink } from '../ui/MapLink'
 import { InitialQuoteData } from './MobileQuoteModal'
 import { SignaturePadModal } from './SignaturePadModal'
 import { InvoiceModal } from './InvoiceModal'
+import { parseJobNotes } from '../../lib/jobNotes'
+
+const getTodayLocalDateStr = (): string => {
+  const d = new Date()
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
+}
+
+const parseEstimatedAmountInput = (raw: string): number | null => {
+  const ascii = raw.replace(/[０-９]/g, (ch) => String.fromCharCode(ch.charCodeAt(0) - 0xfee0))
+  const cleaned = ascii.replace(/[,，、\s¥￥円]/g, '')
+  if (!cleaned) return null
+  if (!/^\d+$/.test(cleaned)) return null
+  return parseInt(cleaned, 10)
+}
 
 interface TaskDetailModalProps {
   task: ProcessTask | null
@@ -102,6 +116,8 @@ export const TaskDetailModal: React.FC<TaskDetailModalProps> = ({
   const [updater, setUpdater] = useState('')
   const [stepsData, setStepsData] = useState<StepsData>({})
   const [signature, setSignature] = useState<string | null>(null)
+  const [scheduledDate, setScheduledDate] = useState<string>('')
+  const [estimatedAmountInput, setEstimatedAmountInput] = useState<string>('')
   const [isSignatureModalOpen, setIsSignatureModalOpen] = useState(false)
   const [isInvoiceModalOpen, setIsInvoiceModalOpen] = useState(false)
 
@@ -111,6 +127,12 @@ export const TaskDetailModal: React.FC<TaskDetailModalProps> = ({
       setUpdater(task.updater || task.assignedTo || '')
       setStepsData(task.stepsData || {})
       setSignature(task.signature || null)
+      setScheduledDate(task.scheduledDate || '')
+      setEstimatedAmountInput(
+        task.estimatedAmount !== undefined && task.estimatedAmount !== null
+          ? String(task.estimatedAmount)
+          : ''
+      )
       setIsSignatureModalOpen(false)
       setIsInvoiceModalOpen(false)
     } else if (!isOpen) {
@@ -120,6 +142,8 @@ export const TaskDetailModal: React.FC<TaskDetailModalProps> = ({
   }, [task, isOpen])
 
   if (!isOpen || !task) return null
+
+  const formalQuoteTotal = parseJobNotes(task.rawNotes).quoteGrandTotal
 
   const handleOpenQuoteForThisTask = () => {
     if (onOpenQuoteWithData && task) {
@@ -141,6 +165,10 @@ export const TaskDetailModal: React.FC<TaskDetailModalProps> = ({
     // 失注・キャンセル時は過去の工程履歴を維持するため stepsData をリセットしない
     if (newStatus === '失注・キャンセル') {
       return
+    }
+
+    if (newStatus === '作業実施' && !scheduledDate) {
+      setScheduledDate(getTodayLocalDateStr())
     }
 
     const newRank = getStatusRank(newStatus)
@@ -244,6 +272,9 @@ export const TaskDetailModal: React.FC<TaskDetailModalProps> = ({
     }
 
     setStepsData(nextData)
+    if (stepId === 'work_execution' && statusVal === '済' && !scheduledDate) {
+      setScheduledDate(getTodayLocalDateStr())
+    }
     if (currentStatus !== '失注・キャンセル') {
       const suggestedStatus = computeTaskStatus(nextData)
       setCurrentStatus(suggestedStatus)
@@ -280,6 +311,12 @@ export const TaskDetailModal: React.FC<TaskDetailModalProps> = ({
       return
     }
 
+    const parsedEstimatedAmount = parseEstimatedAmountInput(estimatedAmountInput)
+    if (estimatedAmountInput.trim() && parsedEstimatedAmount === null) {
+      alert('予想見積金額は0以上の整数（例: 35000）で入力してください。')
+      return
+    }
+
     const nowStr = new Date().toISOString()
     const autoStatus = computeTaskStatus(stepsData)
 
@@ -311,6 +348,8 @@ export const TaskDetailModal: React.FC<TaskDetailModalProps> = ({
       stepsData: finalStepsData,
       assignedTo: updater.trim(),
       signature,
+      scheduledDate: scheduledDate || null,
+      estimatedAmount: parsedEstimatedAmount,
     }
 
     onSave(updatedTask)
@@ -410,6 +449,80 @@ export const TaskDetailModal: React.FC<TaskDetailModalProps> = ({
             <div className="info-group">
               <label>最終更新日時</label>
               <div className="info-value">{task.updatedAt || '未更新'}</div>
+            </div>
+
+            {/* 作業実施日 ＆ 見積金額（実施日ベース売上ダッシュボード連動） */}
+            <div
+              className="info-group bg-emerald-50/70 border border-emerald-200 rounded-xl p-3"
+              style={{ gridColumn: '1 / -1' }}
+            >
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div>
+                  <label htmlFor="modalScheduledDate" className="text-emerald-900 font-bold">
+                    作業実施日（売上・見積 基準月）
+                  </label>
+                  <div className="flex items-center gap-1.5 mt-1">
+                    <input
+                      type="date"
+                      id="modalScheduledDate"
+                      value={scheduledDate}
+                      onChange={(e) => setScheduledDate(e.target.value)}
+                      className="form-input text-xs bg-white"
+                      style={{ flex: 1 }}
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setScheduledDate(getTodayLocalDateStr())}
+                      className="px-2.5 py-1.5 text-[11px] font-bold bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg whitespace-nowrap"
+                    >
+                      今日
+                    </button>
+                    {scheduledDate && (
+                      <button
+                        type="button"
+                        onClick={() => setScheduledDate('')}
+                        className="px-2 py-1.5 text-[11px] font-semibold bg-white border border-slate-300 text-slate-600 hover:bg-slate-100 rounded-lg whitespace-nowrap"
+                      >
+                        クリア
+                      </button>
+                    )}
+                  </div>
+                  <p className="text-[10px] text-emerald-800/80 mt-1">
+                    日程確定・作業実施の月別グラフ基準日。翌月へ変更すると自動で翌月へ移動します。
+                  </p>
+                </div>
+
+                <div>
+                  <label htmlFor="modalEstimatedAmount" className="text-emerald-900 font-bold">
+                    {formalQuoteTotal > 0 ? '正式見積金額（AI/手入力見積）' : '予想見積金額（見積不要・見込み用／税込）'}
+                  </label>
+                  {formalQuoteTotal > 0 ? (
+                    <div className="mt-1 px-3 py-2 bg-white border border-emerald-300 rounded-lg flex items-center justify-between">
+                      <span className="text-sm font-black text-emerald-700">
+                        ¥{formalQuoteTotal.toLocaleString('ja-JP')}
+                      </span>
+                      <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-emerald-100 text-emerald-800">
+                        正式見積適用中
+                      </span>
+                    </div>
+                  ) : (
+                    <input
+                      type="text"
+                      id="modalEstimatedAmount"
+                      inputMode="numeric"
+                      value={estimatedAmountInput}
+                      onChange={(e) => setEstimatedAmountInput(e.target.value)}
+                      className="form-input text-xs bg-white mt-1"
+                      placeholder="例: 35000（見積不要案件の見込み額）"
+                    />
+                  )}
+                  <p className="text-[10px] text-emerald-800/80 mt-1">
+                    {formalQuoteTotal > 0
+                      ? '詳細見積・AI見積で保存された税込合計を自動参照しています。'
+                      : '見積不要案件でも金額を入れておくと月別見積合計に参入されます。'}
+                  </p>
+                </div>
+              </div>
             </div>
 
             {/* 担当者選択（登録済みスタッフからの選択 & 直接入力対応） */}
@@ -800,6 +913,8 @@ export const TaskDetailModal: React.FC<TaskDetailModalProps> = ({
                 customer_id: '',
                 title: task.taskType,
                 status: task.dbStatus || 'billed',
+                scheduled_date: scheduledDate || task.scheduledDate || null,
+                estimated_amount: parseEstimatedAmountInput(estimatedAmountInput) ?? task.estimatedAmount ?? null,
                 notes: task.rawNotes ?? (task.stepsData ? JSON.stringify(task.stepsData) : null),
                 created_at: task.receptionDate,
                 customers: {

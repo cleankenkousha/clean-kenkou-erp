@@ -73,6 +73,8 @@ export const Dashboard: React.FC = () => {
           receptionDate: job.created_at
             ? new Date(job.created_at).toLocaleDateString('ja-JP')
             : '',
+          scheduledDate: job.scheduled_date || null,
+          estimatedAmount: job.estimated_amount ?? null,
           updatedAt: job.updated_at || job.created_at || new Date().toISOString(),
           assignedTo: job.assigned_to || '',
           updater: job.profiles?.display_name || '',
@@ -212,6 +214,8 @@ export const Dashboard: React.FC = () => {
       const ok = await updateJobDetails(updatedTask.id, {
         title: updatedTask.taskType,
         status: dbStatus,
+        scheduled_date: updatedTask.scheduledDate ?? null,
+        estimated_amount: updatedTask.estimatedAmount ?? null,
         notes: mergedNotes,
         assigned_to: assignedUuid,
       })

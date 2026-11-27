@@ -1418,6 +1418,8 @@ export const Schedule: React.FC = () => {
               taskType: activeJob.title || '見積訪問案件',
               status: mapJobStatusToLane(activeJob.status, parsedNotes.stepsData),
               receptionDate: activeJob.scheduled_date || getLocalDateStr(activeJob.created_at),
+              scheduledDate: activeJob.scheduled_date || null,
+              estimatedAmount: activeJob.estimated_amount ?? null,
               assignedTo: activeJob.assigned_to || '',
               updater: updaterName,
               updatedAt: activeJob.updated_at || activeJob.created_at,
@@ -1452,6 +1454,8 @@ export const Schedule: React.FC = () => {
               const ok = await updateJobDetails(updated.id, {
                 title: updated.taskType,
                 status: mapLaneToJobStatus(updated.status, activeJob.status),
+                scheduled_date: updated.scheduledDate ?? null,
+                estimated_amount: updated.estimatedAmount ?? null,
                 notes: mergedNotes,
                 assigned_to: assignedUuid,
               })

@@ -6,6 +6,6 @@
  * クライアントのキャッシュ状態を即座に確認できます。
  */
 
-export const APP_VERSION = 'v1.3.1'
-export const APP_BUILD_DATE = '2026.11.27-17:15'
-export const APP_DESCRIPTION = 'Phase 2 修正: AI見積モデル/応答検証改善、スタッフ設定保護、受付・ログイン・スケジュール・PWA改善（H-4, H-10, H-14, H-16等）'
+export const APP_VERSION = 'v1.4.0'
+export const APP_BUILD_DATE = '2026.11.27-17:35'
+export const APP_DESCRIPTION = '実施日ベースの月別見積金額 vs 売上金額ダッシュボード（予想見積金額・案件詳細での作業実施日設定・クイック編集・確定請求連動対応）'

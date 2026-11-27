@@ -51,7 +51,8 @@
 * `title`: 案件の概要（例：本社オフィス粗大ゴミ回収）
 * `status`: 案件の進行状態（`received`, `quoting`, `arranged`, `scheduled`, `collected`, `billed`, `completed`, `pending`, `cancelled`）
 * `received_at`: 受付日時
-* `scheduled_date`: 回収予定日（未定の場合はNull許容）
+* `scheduled_date`: 作業実施日（日程確定〜作業実施の基準日。月別見積・売上ダッシュボードの集計基準月として使用。未定の場合はNull許容）
+* `estimated_amount`: 予想見積金額（税込・円、`NUMERIC(12, 2)`, Nullable、見積不要案件や概算見込み用）
 * `assigned_to`: UUID (Foreign Key -> `profiles.id` / 担当者)
 * `notes`: 備考・特記事項
 * `created_at`: 作成日時

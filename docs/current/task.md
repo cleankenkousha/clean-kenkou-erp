@@ -1,37 +1,34 @@
 # Clean KENKOU ERP - 作業進捗および次回残課題ログ
 
-**最終更新日時**: 2026-11-27 17:15
+**最終更新日時**: 2026-11-27 17:35
 
-**現在のバージョン**: v1.3.1
+**現在のバージョン**: v1.4.0
 
 **ステータス**:
-全システム監査に基づく **Phase 1（C-1〜C-12・主要 High バグ）** および **Phase 2（H-4, H-10, H-14, H-16 等・Edge Function 更新・RPC追加・スキーマ同期）** の修正をすべて完了し、ビルド検証・本番反映済み（v1.3.1）。
+**実施日ベースの月別見積金額 vs 売上金額ダッシュボード**（作業実施日 `scheduled_date`・予想見積 `estimated_amount` の入力対応、実施日ベース月別比較グラフ・月別サマリー表・案件別クイック編集）を実装・ビルド・反映済み（v1.4.0）。
 
 ---
 
-## 1. Phase 2 修正サマリー（2026-11-27 / v1.3.1）
+## 1. 本日の機能拡張サマリー（2026-11-27 / v1.4.0）
 
-1. **AI見積 Edge Function & クライアント強化（H-4）**:
-   * `supabase/functions/gemini-analyze/index.ts` (Version 12 デプロイ済): 実在モデル順（`gemini-2.5-flash` / `gemini-2.5-flash-lite` / `gemini-2.0-flash`）へ修正し、思考パート (`thought: true`) 除外・要素スキーマ検証・`kg` 品目のマスタ体積出力適正化を実装。
-   * `src/lib/gemini.ts` & `MobileQuoteModal.tsx`: 画像 `fetch` HTTP エラー検証、21枚以上選択時の警告表示、クライアント側要素サニタイズを追加。
-2. **設定画面・スタッフ認証管理強化（H-14）**:
-   * `supabase/functions/manage-staff-auth/index.ts` (Version 3 デプロイ済): 削除スタッフの Supabase Auth アカウント削除 (`delete_staff_account`)、自己削除禁止、最後の管理者アカウント削除防止、`activity_logs` (`account_delete`) 記録を追加。
-   * `src/hooks/useProfiles.ts` & `src/pages/Settings.tsx`: `addStaff` 失敗時のロールバック、初期タブ自動切替の認証完了待ち (`isAuthResolved`)、スタッフ追加時の初期パスワード設定バリデーションと Edge Function エラー表示、最後の管理者降格・削除ガード、カンマ/全角数値対応の単価編集、モーダルクローズタイマー整理を実装。
-3. **受付・ログイン・PWA・スケジュール細部改善（H-10, H-16 等）**:
-   * `src/pages/Login.tsx` & `public.get_login_staff_list()` RPC: DB の最新登録スタッフを含めたワンタップ入力に対応。
-   * `JobReceptionForm.tsx`: 法人名括弧（`（株）` 等）保護、顧客サジェスト切替時の旧住所クリア、初回のみログインスタッフ自動セット（未割当保存許可）、`.is('deleted_at', null).limit(1)` 照合、時刻逆転チェック＆スケジュール連携警告表示を実装。
-   * `NewTaskModal.tsx` & `Dashboard.tsx`: 送信中二重クリック防止、非同期保存成功後クローズ、ログインスタッフ自動セット＋ `<datalist>` 選択、旧電話・住所クリア、UUID スタッフ誤作成防止、`schErr` 通知を実装。
-   * `public/register-sw.js` & `PwaInstallControl.tsx`: `beforeinstallprompt` 早期捕捉復元、消費済みプロンプト破棄、古いアイコンクエリ除去。
-   * `Schedule.tsx`: タイムライン表示を 8:00〜21:00 へ拡張、予約・予定モーダルへ日付入力欄追加、開始/終了時刻逆転チェック、送信中フラグ、`addSchedule` 失敗時エラー通知、`new Date(\`${date}T00:00:00\`)` ローカル解釈統一を実装。
-4. **SQL スキーマ最新化**:
-   * `supabase/schema.sql` を本番 DB の最新スキーマ・FK・UNIQUE制約・RLS・RPC と同期。
+1. **実施日ベース集計ロジック（`useSalesData.ts`）**:
+   * `jobs.scheduled_date`（作業実施日 `YYYY-MM`）を基準月に、キャンセル案件を除外した月別の見積金額（作業実施済 / 実施日確定）と確定売上金額（入金済 / 請求済）を集計。
+   * 見積金額は正式見積（`notes.quoteData.grandTotal`）を優先し、見積不要案件や正式見積未作成案件では新規追加した `jobs.estimated_amount`（予想見積金額）を採用。
+   * 作業実施日を翌月へ延期・変更した場合は旧月から外れて変更先の月へ自動移動。
+2. **作業実施日・予想見積金額の入力機能（DB / モーダル / 各画面）**:
+   * DB マイグレーション `add_jobs_estimated_amount_column` により `jobs.estimated_amount` (`NUMERIC(12, 2)`) を追加し、`docs/03_Business_Rules_Book.md` / `docs/04_Database_Design.md` / `supabase/schema.sql` を同期。
+   * `TaskDetailModal.tsx` に「作業実施日（売上・見積 基準月）」（作業実施ステータス変更時に当日を自動補完、「今日」「クリア」付）と「予想見積金額（見積不要案件向け）」入力欄を追加。`Dashboard.tsx`・`Jobs.tsx`・`Schedule.tsx`・`InvoiceModal.tsx` に連携。
+3. **売上管理画面ダッシュボード刷新（`SalesAnalytics.tsx`）**:
+   * 月別「見積金額（実施済＋実施日確定） vs 確定売上（入金済＋請求済）」比較棒グラフ（クリックで月絞り込み可）と「実施日確定＋実施済／作業実施済のみ」切替ピルを実装。
+   * 選択月の確定売上・見積金額・達成率プログレスバー・未請求残（売上化待ち）・累計回収率の KPI カード、月別サマリー一覧、実施日未設定アラートバナーを実装。
+   * 案件明細一覧から「実施日・予想」クイック編集モーダルおよび「請求（`InvoiceModal`）」を直接呼び出し可能。
 
 ---
 
-## 2. Phase 1 修正サマリー（2026-11-27 / v1.3.0）
+## 2. 過去の作業（2026-11-27 / v1.3.0〜v1.3.1）
 
-* **Critical 全12件（C-1〜C-12）**: 親モーダル強制終了バグ (`TaskDetailModal` + `SignaturePadModal` / `InvoiceModal`)、`jobs.notes` 相互破壊＆電子サイン欠落、`Schedule` 9時間ズレ＆連動詳細・論理キャンセル、`useStaffSchedules` デモ混入、`usePriceMaster` / `Dashboard` の React 18 バッチ更新、請求保存エラー・詳細画面乖離、`staff_schedules` 外部キー制約、スタッフ削除ロールバック、`QuotePrintModal` Hooks順序・非表示を解消。
-* **主要 High バグ**: `kg` 体積連動・印刷表記/黒背景修正・見積未作成印刷ブロック・ステータス保持・売上集計・KPI二重計上・D&Dオーバーレイ・顧客更新・署名Canvas安全化・Excel取込/出力を解消。
+* **v1.3.1 (Phase 2)**: AI見積 `gemini-analyze` (Version 12) モデル順・思考除外・スキーマ検証、スタッフ設定 `manage-staff-auth` (Version 3) 自己削除/最終管理者保護・アカウント削除、ログインスタッフRPC `get_login_staff_list()`、電話受付・新規受付・スケジュール・PWA改善。
+* **v1.3.0 (Phase 1)**: Critical 12件（C-1〜C-12）および主要 High バグ一括解消。
 
 ---
 
@@ -39,14 +36,14 @@
 
 | 機能・コンポーネント | 状況 | 備考 |
 | :--- | :--- | :--- |
-| データベース（Supabase PostgreSQL） | 稼働中（最新） | `get_login_staff_list()` RPC、`staff_schedules_created_by_fkey`、`price_master.volume/sort_order` 反映済 |
-| Edge Function `manage-staff-auth` | Version 3 稼働中 | `verify_jwt: true`、アカウント設定・削除保護対応 |
-| Edge Function `gemini-analyze` | Version 12 稼働中 | `verify_jwt: true`、実在モデル・思考除外・スキーマ検証対応 |
-| フロントエンド（Netlify 本番環境） | **v1.3.1 反映対象** | Phase 1 + Phase 2 全修正反映済 |
+| データベース（Supabase PostgreSQL） | 稼働中（最新） | `jobs.estimated_amount` 追加済、`get_login_staff_list()` RPC 稼働中 |
+| Edge Function `manage-staff-auth` | Version 3 稼働中 | `verify_jwt: true` |
+| Edge Function `gemini-analyze` | Version 12 稼働中 | `verify_jwt: true` |
+| フロントエンド（Netlify 本番環境） | **v1.4.0 反映対象** | 実施日ベース 見積・売上ダッシュボード搭載 |
 
 ### 今後の確認・運用タスク
-1. **D日報用 `daily_report_*` テーブルの RLS 方針確認**: 本番 DB に同居している `daily_report_*` 6テーブルは `{anon, authenticated}` 許可のまま維持しています（D日報アプリへの影響を避けるため未変更）。D日報側で認証化が完了した後に制限を検討してください。
-2. **未設定スタッフの個別パスワード発行**: `設定 ＞ 担当者・スタッフ管理` から必要なスタッフのログインID・パスワードを設定してください。
+1. **D日報用 `daily_report_*` テーブルの RLS 方針確認**: `{anon, authenticated}` 許可のまま維持中。D日報側で認証化が完了したタイミングで制限を検討。
+2. **未設定スタッフの個別パスワード発行**: `設定 ＞ 担当者・スタッフ管理`。
 
 ---
 

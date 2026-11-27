@@ -79,6 +79,8 @@ const mapJobToProcessTask = (job: Job): ProcessTask => {
     taskType: job.title || '臨時収集',
     status: mapJobStatusToLane(job.status, stepsData),
     receptionDate: job.created_at ? new Date(job.created_at).toLocaleDateString('ja-JP') : '',
+    scheduledDate: job.scheduled_date || null,
+    estimatedAmount: job.estimated_amount ?? null,
     updatedAt: job.updated_at || job.created_at || new Date().toISOString(),
     updater: job.profiles?.display_name || '',
     stepsData,
@@ -411,6 +413,8 @@ export const Jobs: React.FC = () => {
     const success = await updateJobDetails(updatedTask.id, {
       title: updatedTask.taskType,
       status: dbStatus,
+      scheduled_date: updatedTask.scheduledDate ?? null,
+      estimated_amount: updatedTask.estimatedAmount ?? null,
       notes: notesVal,
       assigned_to: assignedUuid,
     })

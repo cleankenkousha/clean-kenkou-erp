@@ -34,6 +34,8 @@ export interface ProcessTask {
   taskType: string
   status: ProcessLane
   receptionDate: string
+  scheduledDate?: string | null
+  estimatedAmount?: number | null
   assignedTo?: string
   updater?: string
   updatedAt: string

@@ -53,9 +53,12 @@ export const InvoiceModal: React.FC<InvoiceModalProps> = ({
   const [isSaving, setIsSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
-  // 案件のnotesから見積もり金額(grandTotal)を解析
+  // 案件のnotes（正式見積）または jobs.estimated_amount（予想見積）から事前見積額を解析
   const quoteGrandTotal = useMemo(() => {
-    return parseJobNotes(job?.notes).quoteGrandTotal
+    const formal = parseJobNotes(job?.notes).quoteGrandTotal
+    if (formal > 0) return formal
+    const est = Number(job?.estimated_amount)
+    return Number.isFinite(est) && est > 0 ? est : 0
   }, [job])
 
   // モーダルオープン時に既存の請求データを取得または初期値を設定
