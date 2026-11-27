@@ -475,13 +475,18 @@ export const MobileQuoteModal: React.FC<MobileQuoteModalProps> = ({
       })
 
       if (mappedItems.length > 0) {
+        const analyzedCount = Math.min(capturedImages.length, 20)
         setItems(mappedItems)
         setAiDetectedItems(mappedItems)
         setAiMessage(
-          `✅ AI解析完了: 全${capturedImages.length}枚の写真から社内マスタと一致する【${mappedItems.length}件の回収品目】を自動算定しました！`
+          `✅ AI解析完了: ${analyzedCount}枚の写真から社内マスタと一致する【${mappedItems.length}件の回収品目】を自動算定しました！` +
+            (result.warning ? `\n⚠️ ${result.warning}` : '')
         )
       } else {
-        setAiMessage('⚠️ AI解析で品目を特定できませんでした。写真を確認して手動で品目を追加してください。')
+        setAiMessage(
+          '⚠️ AI解析で品目を特定できませんでした。写真を確認して手動で品目を追加してください。' +
+            (result.warning ? `\n⚠️ ${result.warning}` : '')
+        )
       }
     } catch (err: any) {
       console.warn('Gemini API Analysis notice:', err)

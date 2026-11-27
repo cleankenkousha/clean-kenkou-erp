@@ -30,8 +30,9 @@ export const JobReceptionForm: React.FC = () => {
   const [assignedTo, setAssignedTo] = useState('')
   const [currentStaffName, setCurrentStaffName] = useState<string | null>(null)
   const [currentStaffProfileId, setCurrentStaffProfileId] = useState<string | null>(null)
+  const hasAutoAssignedRef = useRef(false)
 
-  // ログイン中のスタッフを取得して初期担当者として自動セット
+  // ログイン中のスタッフを取得して初回のみ初期担当者として自動セット（ユーザーが「未割当」へ変更した場合は上書きしない）
   useEffect(() => {
     if (profiles.length === 0) return
     supabase.auth.getUser().then(({ data }) => {
@@ -47,7 +48,10 @@ export const JobReceptionForm: React.FC = () => {
       if (matched) {
         setCurrentStaffName(matched.display_name || null)
         setCurrentStaffProfileId(matched.id)
-        setAssignedTo((prev) => prev || matched.id)
+        if (!hasAutoAssignedRef.current) {
+          hasAutoAssignedRef.current = true
+          setAssignedTo((prev) => prev || matched.id)
+        }
       }
     })
   }, [profiles])
@@ -65,6 +69,7 @@ export const JobReceptionForm: React.FC = () => {
 
   const [isLoading, setIsLoading] = useState(false)
   const [isSaved, setIsSaved] = useState(false)
+  const [lastSavedSynced, setLastSavedSynced] = useState(false)
   const [errorMessage, setErrorMessage] = useState<string | null>(null)
 
   // 顧客サジェスト
@@ -106,10 +111,10 @@ export const JobReceptionForm: React.FC = () => {
       .slice(0, 5)
   }, [customers, customerInfo])
 
-  // 顧客候補選択時の自動補完
+  // 顧客候補選択時の自動補完（住所未登録の顧客を選んだ場合は旧住所をクリア）
   const handleSelectCustomer = (selected: any) => {
     setCustomerInfo(selected.phone ? `${selected.name} (${selected.phone})` : selected.name)
-    if (selected.address) setAddress(selected.address)
+    setAddress(selected.address || '')
     setIsSuggestOpen(false)
   }
 
@@ -166,22 +171,32 @@ export const JobReceptionForm: React.FC = () => {
       setErrorMessage('営業スケジュール連動を行う場合は、担当営業を選択してください。')
       return
     }
+    if (syncSchedule && startHour >= endHour) {
+      setErrorMessage('終了時刻は開始時刻より後に設定してください。')
+      return
+    }
 
     setIsLoading(true)
 
     try {
-      const phoneMatch = customerInfo.match(/[\d-]{7,}/)?.[0] || ''
-      const customerName = customerInfo.replace(/[\(\（].*?[\)\）]/g, '').trim() || customerInfo || '名称未設定'
+      const phoneMatch = customerInfo.match(/0\d{1,4}[-\s]?\d{1,4}[-\s]?\d{3,4}|[\d-]{7,}/)?.[0]?.replace(/\s+/g, '') || ''
+      // 電話番号を含む括弧のみ除去し、（株）・(有) などの法人名括弧は保持する
+      const withoutPhoneParens = customerInfo.replace(/[\(（]\s*[\d\-\s]{7,}\s*[\)）]/g, '')
+      const customerName =
+        (phoneMatch ? withoutPhoneParens.replace(phoneMatch, '') : withoutPhoneParens).trim() ||
+        customerInfo.trim() ||
+        '名称未設定'
 
-      // 既存顧客チェック
+      // 既存顧客チェック（論理削除除外・複数重複時も安全に1件取得）
       let customerId: string | null = null
-      let query = supabase.from('customers').select('id, address, phone')
+      let query = supabase.from('customers').select('id, address, phone').is('deleted_at', null)
       if (phoneMatch) {
         query = query.eq('phone', phoneMatch)
       } else {
         query = query.eq('name', customerName)
       }
-      const { data: existingCustomer } = await query.maybeSingle()
+      const { data: existingCustomers } = await query.limit(1)
+      const existingCustomer = existingCustomers?.[0]
 
       if (existingCustomer?.id) {
         customerId = existingCustomer.id
@@ -217,8 +232,8 @@ export const JobReceptionForm: React.FC = () => {
         .filter(Boolean)
         .join(' / ')
 
-      // 案件のステータスと担当者
-      const finalAssignedTo = syncSchedule && selectedSalesStaff ? selectedSalesStaff : assignedTo || currentStaffProfileId || null
+      // 案件のステータスと担当者（明示的な「未割当」選択時は null をそのまま保存）
+      const finalAssignedTo = syncSchedule && selectedSalesStaff ? selectedSalesStaff : assignedTo || null
       const finalStatus = syncSchedule ? 'quoting' : 'received'
 
       const { data: jobData, error: jobError } = await supabase
@@ -254,6 +269,7 @@ export const JobReceptionForm: React.FC = () => {
       })
 
       // 営業マンのスケジュール（staff_schedules）への自動登録
+      let scheduleSyncWarning: string | null = null
       if (syncSchedule && selectedSalesStaff) {
         const startIso = `${visitDate}T${startHour}:00+09:00`
         const endIso = `${visitDate}T${endHour}:00+09:00`
@@ -275,8 +291,11 @@ export const JobReceptionForm: React.FC = () => {
 
         if (schErr) {
           console.warn('営業スケジュールへの自動連携 notice:', schErr.message)
+          scheduleSyncWarning = `案件は登録されましたが、営業スケジュールへの自動連携に失敗しました: ${schErr.message}`
         }
       }
+
+      setLastSavedSynced(Boolean(syncSchedule && selectedSalesStaff && !scheduleSyncWarning))
 
       // 入力クリア
       setCustomerInfo('')
@@ -288,6 +307,9 @@ export const JobReceptionForm: React.FC = () => {
       setSyncSchedule(false)
       setScheduleNotes('')
       setIsSaved(true)
+      if (scheduleSyncWarning) {
+        setErrorMessage(scheduleSyncWarning)
+      }
 
       customerInfoRef.current?.focus()
 
@@ -330,7 +352,7 @@ export const JobReceptionForm: React.FC = () => {
         <div className="p-3 bg-emerald-50 border border-emerald-200 rounded-md text-emerald-800 text-xs font-medium flex items-center space-x-2 animate-in fade-in">
           <Check className="w-4 h-4 text-emerald-600" />
           <span>
-            受付を完了しました。案件の登録{syncSchedule ? 'および営業スケジュールへの自動連携' : ''}が完了しました。
+            受付を完了しました。案件の登録{lastSavedSynced ? 'および営業スケジュールへの自動連携' : ''}が完了しました。
           </span>
         </div>
       )}

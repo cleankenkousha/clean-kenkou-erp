@@ -273,11 +273,11 @@ export const Dashboard: React.FC = () => {
   const handleCreateNewTask = async (
     newTaskData: NewTaskSubmissionData,
     shouldPrint = false
-  ) => {
+  ): Promise<boolean> => {
     try {
       if (!newTaskData.customer.trim()) {
         alert('顧客名を入力してください。')
-        return
+        return false
       }
 
       // 1. 既存顧客の検索または新規作成
@@ -319,12 +319,12 @@ export const Dashboard: React.FC = () => {
         if (customerErr || !createdCustomer) {
           console.error('顧客登録エラー:', customerErr)
           alert(`顧客の登録に失敗しました: ${customerErr?.message || '不明なエラー'}`)
-          return
+          return false
         }
         customerId = createdCustomer.id
       }
 
-      // 2. 担当スタッフの特定および自動プロファイル登録
+      // 2. 担当スタッフの特定および自動プロファイル登録（UUID誤登録を防止）
       let assignedUuid: string | null = null
       const updaterName = newTaskData.updater?.trim()
       if (updaterName) {
@@ -333,7 +333,7 @@ export const Dashboard: React.FC = () => {
         )
         if (matchProfile) {
           assignedUuid = matchProfile.id
-        } else {
+        } else if (!isUuidString(updaterName)) {
           const newStaff = await addStaff(updaterName)
           if (newStaff) {
             assignedUuid = newStaff.id
@@ -373,7 +373,7 @@ export const Dashboard: React.FC = () => {
       if (jobErr) {
         console.error('新規受付保存エラー:', jobErr)
         alert(`案件の作成に失敗しました: ${jobErr.message}`)
-        return
+        return false
       }
 
       // 4. 営業マンスケジュール枠への自動連携
@@ -399,6 +399,7 @@ export const Dashboard: React.FC = () => {
 
         if (schErr) {
           console.warn('営業スケジュールへの自動連携 notice:', schErr.message)
+          alert(`案件は登録されましたが、営業スケジュールへの登録に失敗しました: ${schErr.message}`)
         }
       }
 
@@ -417,9 +418,11 @@ export const Dashboard: React.FC = () => {
 
       setIsNewTaskOpen(false)
       refetch()
+      return true
     } catch (err: any) {
       console.error('新規受付登録時例外:', err)
       alert(`登録処理中にエラーが発生しました: ${err.message || String(err)}`)
+      return false
     }
   }
 

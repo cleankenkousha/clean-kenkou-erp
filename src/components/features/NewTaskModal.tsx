@@ -3,6 +3,7 @@ import { Calendar, Clock, User, Phone, MapPin, CalendarCheck, Check } from 'luci
 import { ProcessTask } from './KanbanBoard'
 import { useProfiles } from '../../hooks/useProfiles'
 import { useCustomers, CustomerWithJobCount } from '../../hooks/useCustomers'
+import { supabase } from '../../lib/supabase'
 
 export interface ReceptionScheduleParams {
   enabled: boolean
@@ -21,7 +22,7 @@ export interface NewTaskSubmissionData extends Omit<ProcessTask, 'id' | 'updated
 interface NewTaskModalProps {
   isOpen: boolean
   onClose: () => void
-  onSubmit: (newTask: NewTaskSubmissionData, shouldPrint?: boolean) => void
+  onSubmit: (newTask: NewTaskSubmissionData, shouldPrint?: boolean) => Promise<boolean | void> | boolean | void
 }
 
 export const NewTaskModal: React.FC<NewTaskModalProps> = ({ isOpen, onClose, onSubmit }) => {
@@ -34,6 +35,7 @@ export const NewTaskModal: React.FC<NewTaskModalProps> = ({ isOpen, onClose, onS
   const [address, setAddress] = useState('')
   const [taskType, setTaskType] = useState('粗大ごみ回収')
   const [updater, setUpdater] = useState('')
+  const [isSubmitting, setIsSubmitting] = useState(false)
 
   // 顧客サジェスト関連
   const [isSuggestOpen, setIsSuggestOpen] = useState(false)
@@ -71,11 +73,29 @@ export const NewTaskModal: React.FC<NewTaskModalProps> = ({ isOpen, onClose, onS
       .slice(0, 5)
   }, [customers, customer])
 
-  // 顧客選択時の自動補完
+  // モーダルを開いた際、担当者欄が空ならログイン中スタッフ名を自動セット
+  useEffect(() => {
+    if (!isOpen || updater.trim()) return
+    supabase.auth.getUser().then(({ data }) => {
+      const authUser = data.user
+      if (!authUser) return
+      const matched =
+        profiles.find((p) => p.auth_user_id === authUser.id) ||
+        profiles.find((p) => p.id === authUser.id) ||
+        (authUser.email
+          ? profiles.find((p) => p.email?.toLowerCase() === authUser.email?.toLowerCase())
+          : undefined)
+      if (matched?.display_name) {
+        setUpdater((prev) => prev || matched.display_name || '')
+      }
+    })
+  }, [isOpen, profiles, updater])
+
+  // 顧客選択時の自動補完（連絡先・住所未登録の顧客を選択した場合は旧値をクリア）
   const handleSelectCustomer = (selected: CustomerWithJobCount) => {
     setCustomer(selected.name)
-    if (selected.phone) setTel(selected.phone)
-    if (selected.address) setAddress(selected.address)
+    setTel(selected.phone || '')
+    setAddress(selected.address || '')
     setIsSuggestOpen(false)
   }
 
@@ -92,7 +112,9 @@ export const NewTaskModal: React.FC<NewTaskModalProps> = ({ isOpen, onClose, onS
 
   if (!isOpen) return null
 
-  const handleFormSubmit = (shouldPrint = false) => {
+  const handleFormSubmit = async (shouldPrint = false) => {
+    if (isSubmitting) return
+
     if (!customer.trim() || !taskType.trim() || !updater.trim()) {
       alert('顧客名、案件内容、担当者名（入力者名）は必須です。')
       return
@@ -100,6 +122,11 @@ export const NewTaskModal: React.FC<NewTaskModalProps> = ({ isOpen, onClose, onS
 
     if (syncSchedule && !selectedSalesStaff) {
       alert('スケジュール連動を行う場合は、担当営業を選択してください。')
+      return
+    }
+
+    if (syncSchedule && startHour >= endHour) {
+      alert('終了時刻は開始時刻より後に設定してください。')
       return
     }
 
@@ -130,17 +157,23 @@ export const NewTaskModal: React.FC<NewTaskModalProps> = ({ isOpen, onClose, onS
       }
     }
 
-    onSubmit(submissionData, shouldPrint)
+    setIsSubmitting(true)
+    try {
+      const ok = await onSubmit(submissionData, shouldPrint)
+      if (ok === false) return
 
-    // リセット
-    setCustomer('')
-    setTel('')
-    setAddress('')
-    setTaskType('粗大ごみ回収')
-    setUpdater('')
-    setSyncSchedule(false)
-    setScheduleNotes('')
-    onClose()
+      // リセット
+      setCustomer('')
+      setTel('')
+      setAddress('')
+      setTaskType('粗大ごみ回収')
+      setUpdater('')
+      setSyncSchedule(false)
+      setScheduleNotes('')
+      onClose()
+    } finally {
+      setIsSubmitting(false)
+    }
   }
 
   return (
@@ -293,12 +326,18 @@ export const NewTaskModal: React.FC<NewTaskModalProps> = ({ isOpen, onClose, onS
               <input
                 type="text"
                 id="newUpdater"
+                list="new-task-updater-list"
                 required
                 className="form-input text-xs"
-                placeholder="例: 廣田、原口、事務員名"
+                placeholder="例: 廣田、原口、事務員名（候補から選択可）"
                 value={updater}
                 onChange={(e) => setUpdater(e.target.value)}
               />
+              <datalist id="new-task-updater-list">
+                {profiles.map((p) =>
+                  p.display_name ? <option key={p.id} value={p.display_name} /> : null
+                )}
+              </datalist>
             </div>
 
             {/* 🌟 5. 営業マンスケジュールへの自動連動オプション（目玉機能） */}
@@ -418,24 +457,26 @@ export const NewTaskModal: React.FC<NewTaskModalProps> = ({ isOpen, onClose, onS
         </div>
 
         <div className="modal-footer flex items-center justify-between border-t border-border pt-3">
-          <button type="button" className="btn-secondary text-xs" onClick={onClose}>
+          <button type="button" className="btn-secondary text-xs" onClick={onClose} disabled={isSubmitting}>
             キャンセル
           </button>
           <div className="flex items-center space-x-2">
             <button
               type="button"
-              className="btn-secondary text-xs font-semibold"
+              className="btn-secondary text-xs font-semibold disabled:opacity-50"
               style={{ background: '#ECFDF5', color: '#047857', borderColor: '#059669' }}
+              disabled={isSubmitting}
               onClick={() => handleFormSubmit(true)}
             >
-              🖨️ 登録して指示書を印刷
+              {isSubmitting ? '登録中...' : '🖨️ 登録して指示書を印刷'}
             </button>
             <button
               type="button"
-              className="btn-primary text-xs font-bold bg-brand-main hover:bg-brand-hover"
+              className="btn-primary text-xs font-bold bg-brand-main hover:bg-brand-hover disabled:opacity-50"
+              disabled={isSubmitting}
               onClick={() => handleFormSubmit(false)}
             >
-              登録する
+              {isSubmitting ? '登録中...' : '登録する'}
             </button>
           </div>
         </div>

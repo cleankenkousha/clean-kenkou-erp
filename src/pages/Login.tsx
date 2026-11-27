@@ -1,18 +1,55 @@
-import React, { useState } from 'react'
+import React, { useState, useEffect } from 'react'
 import { useNavigate, useLocation } from 'react-router-dom'
 import { Activity, AlertCircle, UserCheck } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 import { recordActivityLog } from '../lib/activityLogger'
-import { DEFAULT_PROFILES } from '../hooks/useProfiles'
+import { DEFAULT_PROFILES, Profile } from '../hooks/useProfiles'
 import { Input, Button } from '../components/ui'
 import { PwaInstallControl } from '../components/features/PwaInstallControl'
 import { APP_VERSION } from '../version'
+
+type QuickStaffItem = Pick<Profile, 'id' | 'display_name' | 'email'>
 
 export const Login: React.FC = () => {
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [isLoading, setIsLoading] = useState(false)
   const [errorMessage, setErrorMessage] = useState<string | null>(null)
+  const [quickStaffList, setQuickStaffList] = useState<QuickStaffItem[]>(() => {
+    try {
+      const cached = localStorage.getItem('clean_kenkou_erp_custom_profiles')
+      if (cached) {
+        const parsed = JSON.parse(cached)
+        if (Array.isArray(parsed)) {
+          const valid = parsed.filter(
+            (p: any) => p && typeof p.display_name === 'string' && p.display_name.trim() && typeof p.email === 'string' && p.email.trim()
+          )
+          if (valid.length > 0) return valid
+        }
+      }
+    } catch {
+      // ignore local cache parse error
+    }
+    return DEFAULT_PROFILES
+  })
+
+  useEffect(() => {
+    let active = true
+    supabase
+      .rpc('get_login_staff_list')
+      .then(({ data, error }) => {
+        if (!active || error || !Array.isArray(data) || data.length === 0) return
+        const filtered = data.filter(
+          (p: any) => p && typeof p.display_name === 'string' && p.display_name.trim() && typeof p.email === 'string' && p.email.trim()
+        )
+        if (filtered.length > 0) {
+          setQuickStaffList(filtered)
+        }
+      })
+    return () => {
+      active = false
+    }
+  }, [])
 
   const navigate = useNavigate()
   const location = useLocation()
@@ -105,7 +142,7 @@ export const Login: React.FC = () => {
             <span>スタッフ名からワンタップ入力:</span>
           </label>
           <div className="flex flex-wrap gap-1.5">
-            {DEFAULT_PROFILES.map((staff) => (
+            {quickStaffList.map((staff) => (
               <button
                 key={staff.id}
                 type="button"
@@ -113,7 +150,7 @@ export const Login: React.FC = () => {
                   if (staff.email) setEmail(staff.email)
                 }}
                 className={`px-2.5 py-1 rounded-md text-xs font-semibold border transition-colors ${
-                  normalizeLoginEmail(email) === staff.email
+                  normalizeLoginEmail(email) === (staff.email || '').toLowerCase()
                     ? 'bg-brand-main text-white border-brand-main'
                     : 'bg-slate-50 text-slate-700 border-slate-200 hover:bg-slate-100'
                 }`}

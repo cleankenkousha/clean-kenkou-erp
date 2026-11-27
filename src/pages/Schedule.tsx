@@ -44,9 +44,9 @@ const getLocalTimeStr = (iso: string): string => {
   return `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`
 }
 
-// タイムラインの表示時間帯（8:00 〜 19:00）
+// タイムラインの表示時間帯（8:00 〜 21:00）
 const START_HOUR = 8
-const END_HOUR = 19
+const END_HOUR = 21
 const HOURS = Array.from({ length: END_HOUR - START_HOUR }, (_, i) => START_HOUR + i)
 
 const SCHEDULE_TYPE_LABELS: Record<
@@ -146,6 +146,10 @@ export const Schedule: React.FC = () => {
   const [isQuoteOpen, setIsQuoteOpen] = useState(false)
   const [quoteInitialData, setQuoteInitialData] = useState<InitialQuoteData | null>(null)
 
+  // 送信中フラグ（二重送信防止）
+  const [isSavingAppointment, setIsSavingAppointment] = useState(false)
+  const [isSavingSimple, setIsSavingSimple] = useState(false)
+
   // 指示書印刷データ
   const [printTask, setPrintTask] = useState<PrintTaskData | null>(null)
 
@@ -194,7 +198,7 @@ export const Schedule: React.FC = () => {
 
   // 日付の前後ナビゲーション
   const handleDateShift = (days: number) => {
-    const current = new Date(selectedDate)
+    const current = new Date(`${selectedDate}T00:00:00`)
     current.setDate(current.getDate() + (viewMode === 'week' ? days * 7 : days))
     setSelectedDate(
       `${current.getFullYear()}-${String(current.getMonth() + 1).padStart(2, '0')}-${String(
@@ -212,14 +216,14 @@ export const Schedule: React.FC = () => {
 
   // 曜日表記
   const dayOfWeekStr = useMemo(() => {
-    const d = new Date(selectedDate)
+    const d = new Date(`${selectedDate}T00:00:00`)
     const days = ['日', '月', '火', '水', '木', '金', '土']
     return days[d.getDay()]
   }, [selectedDate])
 
   // 選択日を含む週（月曜日始まり）の7日間
   const weekDays = useMemo(() => {
-    const curr = new Date(selectedDate)
+    const curr = new Date(`${selectedDate}T00:00:00`)
     const day = curr.getDay()
     const diffToMonday = day === 0 ? -6 : 1 - day
     const monday = new Date(curr)
@@ -270,49 +274,83 @@ export const Schedule: React.FC = () => {
   // 見積訪問予約の送信
   const handleSaveAppointment = async (e: React.FormEvent) => {
     e.preventDefault()
+    if (isSavingAppointment) return
+
     if (!appointmentForm.profileId || !appointmentForm.customerName.trim()) {
       alert('担当営業とお客様名を入力してください。')
       return
     }
 
-    const title = appointmentForm.title.trim() || `${appointmentForm.customerName.trim()}様 見積訪問`
-
-    const result = await createAppointmentWithJob({
-      ...appointmentForm,
-      title,
-    })
-
-    if (!result) {
-      alert('見積訪問予約の保存に失敗しました。通信状況や入力内容をご確認ください。')
+    const startMs = new Date(appointmentForm.startTime).getTime()
+    const endMs = new Date(appointmentForm.endTime).getTime()
+    if (!Number.isFinite(startMs) || !Number.isFinite(endMs) || endMs <= startMs) {
+      alert('終了時刻は開始時刻より後に設定してください。')
       return
     }
 
-    await refetchJobs()
-    setIsAppointmentModalOpen(false)
+    const title = appointmentForm.title.trim() || `${appointmentForm.customerName.trim()}様 見積訪問`
+
+    setIsSavingAppointment(true)
+    try {
+      const result = await createAppointmentWithJob({
+        ...appointmentForm,
+        title,
+      })
+
+      if (!result) {
+        alert('見積訪問予約の保存に失敗しました。通信状況や入力内容をご確認ください。')
+        return
+      }
+
+      await refetchJobs()
+      setIsAppointmentModalOpen(false)
+    } finally {
+      setIsSavingAppointment(false)
+    }
   }
 
   // 一般予定（外出・打合せ等）の送信
   const handleSaveSimpleSchedule = async (e: React.FormEvent) => {
     e.preventDefault()
+    if (isSavingSimple) return
+
     if (!simpleForm.profileId || !simpleForm.title.trim()) {
       alert('担当者と予定名を入力してください。')
+      return
+    }
+    if (!simpleForm.date) {
+      alert('日付を選択してください。')
+      return
+    }
+    if (simpleForm.startHour >= simpleForm.endHour) {
+      alert('終了時刻は開始時刻より後に設定してください。')
       return
     }
 
     const startTime = `${simpleForm.date}T${simpleForm.startHour}:00+09:00`
     const endTime = `${simpleForm.date}T${simpleForm.endHour}:00+09:00`
 
-    await addSchedule({
-      profile_id: simpleForm.profileId,
-      title: simpleForm.title.trim(),
-      schedule_type: simpleForm.scheduleType,
-      start_time: startTime,
-      end_time: endTime,
-      location: simpleForm.location || '',
-      notes: simpleForm.notes || '',
-    })
+    setIsSavingSimple(true)
+    try {
+      const created = await addSchedule({
+        profile_id: simpleForm.profileId,
+        title: simpleForm.title.trim(),
+        schedule_type: simpleForm.scheduleType,
+        start_time: startTime,
+        end_time: endTime,
+        location: simpleForm.location || '',
+        notes: simpleForm.notes || '',
+      })
 
-    setIsSimpleModalOpen(false)
+      if (!created) {
+        alert('予定の保存に失敗しました。通信状況をご確認ください。')
+        return
+      }
+
+      setIsSimpleModalOpen(false)
+    } finally {
+      setIsSavingSimple(false)
+    }
   }
 
   // 予定の位置計算（top %, height %）
@@ -324,7 +362,7 @@ export const Schedule: React.FC = () => {
     const endMinutes = (endDate.getHours() - START_HOUR) * 60 + endDate.getMinutes()
     const totalMinutes = (END_HOUR - START_HOUR) * 60
 
-    const top = Math.max(0, (startMinutes / totalMinutes) * 100)
+    const top = Math.min(94, Math.max(0, (startMinutes / totalMinutes) * 100))
     const height = Math.max(4, Math.min(100 - top, ((endMinutes - startMinutes) / totalMinutes) * 100))
 
     return {
@@ -1096,34 +1134,54 @@ export const Schedule: React.FC = () => {
                 </div>
 
                 <div>
-                  <label className="block font-bold text-main mb-1">予約日・時間帯 *</label>
-                  <div className="flex items-center space-x-1">
-                    <Input
-                      type="time"
-                      value={appointmentForm.startTime.split('T')[1]?.slice(0, 5) || '10:00'}
-                      onChange={(e) => {
-                        const dateOnly = appointmentForm.startTime.split('T')[0] || selectedDate
-                        setAppointmentForm({
-                          ...appointmentForm,
-                          startTime: `${dateOnly}T${e.target.value}:00+09:00`,
-                        })
-                      }}
-                      required
-                    />
-                    <span className="text-slate-400">〜</span>
-                    <Input
-                      type="time"
-                      value={appointmentForm.endTime.split('T')[1]?.slice(0, 5) || '11:00'}
-                      onChange={(e) => {
-                        const dateOnly = appointmentForm.endTime.split('T')[0] || selectedDate
-                        setAppointmentForm({
-                          ...appointmentForm,
-                          endTime: `${dateOnly}T${e.target.value}:00+09:00`,
-                        })
-                      }}
-                      required
-                    />
-                  </div>
+                  <label className="block font-bold text-main mb-1">予約日 *</label>
+                  <Input
+                    type="date"
+                    value={getLocalDateStr(appointmentForm.startTime) || selectedDate}
+                    onChange={(e) => {
+                      const newDate = e.target.value
+                      if (!newDate) return
+                      const startHm = getLocalTimeStr(appointmentForm.startTime) || '10:00'
+                      const endHm = getLocalTimeStr(appointmentForm.endTime) || '11:00'
+                      setAppointmentForm({
+                        ...appointmentForm,
+                        startTime: `${newDate}T${startHm}:00+09:00`,
+                        endTime: `${newDate}T${endHm}:00+09:00`,
+                      })
+                    }}
+                    required
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="block font-bold text-main mb-1">時間帯 *</label>
+                <div className="flex items-center space-x-2">
+                  <Input
+                    type="time"
+                    value={getLocalTimeStr(appointmentForm.startTime) || '10:00'}
+                    onChange={(e) => {
+                      const dateOnly = getLocalDateStr(appointmentForm.startTime) || selectedDate
+                      setAppointmentForm({
+                        ...appointmentForm,
+                        startTime: `${dateOnly}T${e.target.value}:00+09:00`,
+                      })
+                    }}
+                    required
+                  />
+                  <span className="text-slate-400">〜</span>
+                  <Input
+                    type="time"
+                    value={getLocalTimeStr(appointmentForm.endTime) || '11:00'}
+                    onChange={(e) => {
+                      const dateOnly = getLocalDateStr(appointmentForm.endTime) || getLocalDateStr(appointmentForm.startTime) || selectedDate
+                      setAppointmentForm({
+                        ...appointmentForm,
+                        endTime: `${dateOnly}T${e.target.value}:00+09:00`,
+                      })
+                    }}
+                    required
+                  />
                 </div>
               </div>
 
@@ -1197,13 +1255,15 @@ export const Schedule: React.FC = () => {
             </div>
 
             <div className="flex items-center justify-end space-x-2 border-t border-border pt-3">
-              <Button type="button" variant="outline" size="sm" onClick={() => setIsAppointmentModalOpen(false)}>
+              <Button type="button" variant="outline" size="sm" onClick={() => setIsAppointmentModalOpen(false)} disabled={isSavingAppointment}>
                 キャンセル
               </Button>
               <Button
                 type="submit"
                 variant="primary"
                 size="sm"
+                isLoading={isSavingAppointment}
+                disabled={isSavingAppointment}
                 className="bg-amber-600 hover:bg-amber-700 text-white font-bold"
               >
                 <CalendarCheck className="w-4 h-4 mr-1 text-amber-200" />
@@ -1276,6 +1336,16 @@ export const Schedule: React.FC = () => {
                 />
               </div>
 
+              <div>
+                <label className="block font-bold text-main mb-1">日付 *</label>
+                <Input
+                  type="date"
+                  value={simpleForm.date}
+                  onChange={(e) => setSimpleForm({ ...simpleForm, date: e.target.value })}
+                  required
+                />
+              </div>
+
               <div className="grid grid-cols-2 gap-2">
                 <div>
                   <label className="block font-bold text-main mb-1">開始時刻</label>
@@ -1320,10 +1390,10 @@ export const Schedule: React.FC = () => {
             </div>
 
             <div className="flex items-center justify-end space-x-2 border-t border-border pt-3">
-              <Button type="button" variant="outline" size="sm" onClick={() => setIsSimpleModalOpen(false)}>
+              <Button type="button" variant="outline" size="sm" onClick={() => setIsSimpleModalOpen(false)} disabled={isSavingSimple}>
                 キャンセル
               </Button>
-              <Button type="submit" variant="primary" size="sm" className="font-bold">
+              <Button type="submit" variant="primary" size="sm" className="font-bold" isLoading={isSavingSimple} disabled={isSavingSimple}>
                 保存する
               </Button>
             </div>

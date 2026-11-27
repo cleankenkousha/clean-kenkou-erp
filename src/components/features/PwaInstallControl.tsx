@@ -72,14 +72,16 @@ export const PwaInstallControl: React.FC<PwaInstallControlProps> = ({ variant = 
         await promptEvent.prompt()
         const choiceResult = await promptEvent.userChoice
         if (choiceResult?.outcome === 'accepted') {
-          window.__deferredPwaPrompt = null
-          setDeferredPrompt(null)
           setStatusMessage('✅ インストールを開始しました！Android端末ではホーム画面にアイコンが出るまで1〜3分ほどそのままお待ちください。')
           setIsGuideOpen(true)
         }
       } catch (err) {
         console.warn('PWA prompt error:', err)
         setIsGuideOpen(true)
+      } finally {
+        // 一度使用した beforeinstallprompt は再利用できないため常に破棄
+        window.__deferredPwaPrompt = null
+        setDeferredPrompt(null)
       }
     } else {
       setIsGuideOpen(true)
@@ -165,7 +167,7 @@ export const PwaInstallControl: React.FC<PwaInstallControlProps> = ({ variant = 
             <div className="flex items-start justify-between border-b border-border pb-3">
               <div className="flex items-center space-x-2.5">
                 <img
-                  src="/icon-green-192.png?v=1.2.5"
+                  src="/icon-green-192.png"
                   alt="健康社ERP 新アイコン"
                   className="w-10 h-10 rounded-xl shadow-sm border border-brand-border"
                 />

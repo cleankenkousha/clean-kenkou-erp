@@ -1,6 +1,18 @@
 // Service Worker 登録スクリプト（PWA対応）
 // タブレットでのインストールフリーズを防ぐため、
 // アプリ本体の読み込みを絶対にブロックしない設計
+
+// 早期発火する beforeinstallprompt を React マウント前から捕捉
+window.addEventListener('beforeinstallprompt', function(e) {
+  e.preventDefault();
+  window.__deferredPwaPrompt = e;
+  window.dispatchEvent(new Event('pwa-install-ready'));
+});
+
+window.addEventListener('appinstalled', function() {
+  window.__deferredPwaPrompt = null;
+});
+
 if ('serviceWorker' in navigator) {
   window.addEventListener('load', function() {
     navigator.serviceWorker.register('/sw.js', { scope: '/' })

@@ -18,6 +18,8 @@ export async function validateGeminiApiKey(_apiKey: string): Promise<{ valid: bo
   return { valid: true, message: '🔒 Gemini APIキーはSupabase Edge Functionサーバーサイドで安全に管理されています。' }
 }
 
+const MAX_AI_IMAGES = 20
+
 /**
  * 画像（Blob URL または 通常URL）をブラウザ側で約100KB前後に確実・高速圧縮して Base64 変換
  */
@@ -27,6 +29,9 @@ async function processImageToBase64(
   maxHeight = 1000
 ): Promise<{ mimeType: string; data: string }> {
   const response = await fetch(url)
+  if (!response.ok) {
+    throw new Error(`画像の取得に失敗しました (HTTP ${response.status})`)
+  }
   const blob = await response.blob()
 
   // 1. createImageBitmap による超高速・安全なリサイズ
@@ -84,6 +89,7 @@ function readBlobAsBase64(blob: Blob): Promise<{ mimeType: string; data: string 
 export interface AnalyzeQuoteResult {
   items: GeminiDetectedItem[]
   error?: string
+  warning?: string
 }
 
 /**
@@ -100,8 +106,18 @@ export async function analyzeQuoteImagesWithGemini(
     return { items: [] }
   }
 
+  const targetImageUrls = imageUrls.slice(0, MAX_AI_IMAGES)
+  const warningMessage =
+    imageUrls.length > MAX_AI_IMAGES
+      ? `写真が${imageUrls.length}枚選択されているため、先頭${MAX_AI_IMAGES}枚のみをAI解析対象にしました（残り${imageUrls.length - MAX_AI_IMAGES}枚は対象外）。`
+      : undefined
+
   if (onProgress) {
-    onProgress(`全${imageUrls.length}枚の現場写真をAI用に最適化中...`)
+    onProgress(
+      warningMessage
+        ? `⚠️ ${warningMessage} 先頭${targetImageUrls.length}枚をAI用に最適化中...`
+        : `全${targetImageUrls.length}枚の現場写真をAI用に最適化中...`
+    )
   }
 
   try {
@@ -110,13 +126,13 @@ export async function analyzeQuoteImagesWithGemini(
     let images: { mimeType: string; data: string }[]
     try {
       images = await Promise.all(
-        imageUrls.slice(0, 20).map((url) => processImageToBase64(url))
+        targetImageUrls.map((url) => processImageToBase64(url))
       )
     } catch (imgErr: any) {
       console.error('写真の読み込み・圧縮エラー:', imgErr)
       const imgText = `写真の読み込みに失敗しました（端末内処理）: ${imgErr?.message || String(imgErr)}`
       if (onProgress) onProgress(`⚠️ ${imgText}`)
-      return { items: [], error: imgText }
+      return { items: [], error: imgText, warning: warningMessage }
     }
 
     if (onProgress) {
@@ -150,30 +166,44 @@ export async function analyzeQuoteImagesWithGemini(
         onProgress(`⚠️ ${userMessage}`)
       }
 
-      return { items: [], error: userMessage }
+      return { items: [], error: userMessage, warning: warningMessage }
     }
 
     if (data?.error) {
       if (onProgress) {
         onProgress(`⚠️ ${data.error}`)
       }
-      return { items: [], error: data.error }
+      return { items: [], error: data.error, warning: warningMessage }
     }
 
     if (data && Array.isArray(data.items) && data.items.length > 0) {
-      const items = data.items.map((item: any) => ({
-        ...item,
-        unit: item.unit || '点',
-        reason: item.reason || 'AI画像解析により特定',
-      }))
-      return { items }
+      const items: GeminiDetectedItem[] = data.items
+        .filter((item: any) => item && typeof item === 'object' && typeof item.name === 'string' && item.name.trim().length > 0)
+        .map((item: any) => {
+          const qtyNum = Number(item.quantity)
+          const volNum = Number(item.volume)
+          const priceNum = Number(item.unitPrice)
+          const unitStr = typeof item.unit === 'string' && item.unit.trim() ? item.unit.trim().replace(/㎏/g, 'kg') : '点'
+          const reasonStr = typeof item.reason === 'string' && item.reason.trim() ? item.reason.trim() : 'AI画像解析により特定'
+          return {
+            name: item.name.trim(),
+            quantity: Number.isFinite(qtyNum) && qtyNum > 0 ? qtyNum : 1,
+            unit: unitStr,
+            volume: Number.isFinite(volNum) && volNum >= 0 ? volNum : 0,
+            unitPrice: Number.isFinite(priceNum) && priceNum >= 0 ? priceNum : 0,
+            reason: reasonStr,
+          }
+        })
+      if (items.length > 0) {
+        return { items, warning: warningMessage }
+      }
     }
 
     // AIが品目を検出できなかった場合
     if (onProgress) {
       onProgress('⚠️ 写真から品目を検出できませんでした。')
     }
-    return { items: [], error: '写真から品目を検出できませんでした。' }
+    return { items: [], error: '写真から品目を検出できませんでした。', warning: warningMessage }
   } catch (err: any) {
     console.error('Edge Function 接続エラー:', err)
     const detail = err?.message || String(err)
@@ -183,7 +213,7 @@ export async function analyzeQuoteImagesWithGemini(
       onProgress(`⚠️ ${errText}`)
     }
 
-    return { items: [], error: errText }
+    return { items: [], error: errText, warning: warningMessage }
   }
 }
 

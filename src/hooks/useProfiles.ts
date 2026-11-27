@@ -240,11 +240,11 @@ export const useProfiles = (): UseProfilesReturn => {
         created_at: new Date().toISOString(),
       }
 
-      setProfiles((prev) => {
-        const next = [...prev, newStaff]
-        saveLocalProfiles(next)
-        return next
-      })
+      const previousProfiles = profiles
+      const next = [...previousProfiles, newStaff]
+      setProfiles(next)
+      saveLocalProfiles(next)
+      setError(null)
 
       try {
         const { error: insertErr } = await supabase
@@ -260,15 +260,19 @@ export const useProfiles = (): UseProfilesReturn => {
           ])
 
         if (insertErr) {
-          console.warn('Supabase insert profile warning:', insertErr.message)
+          throw new Error(insertErr.message)
         }
         return newStaff
       } catch (err: any) {
-        console.warn('Supabase addStaff network error:', err)
-        return newStaff
+        console.warn('Supabase addStaff error:', err)
+        // DB保存に失敗した場合はローカル状態もロールバックし、存在しないIDでの後続処理を防止
+        setProfiles(previousProfiles)
+        saveLocalProfiles(previousProfiles)
+        setError(err?.message || 'スタッフの登録に失敗しました')
+        return null
       }
     },
-    []
+    [profiles]
   )
 
   const deleteStaff = useCallback(

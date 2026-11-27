@@ -120,7 +120,10 @@ serve(async (req) => {
     const masterListText = masterItems && masterItems.length > 0
       ? masterItems.map((m: any) => {
           const normUnit = (m.unit || '点').replace(/㎏/g, 'kg')
-          return `- ${m.name} [カテゴリ:${m.category}] (単位:${normUnit}, 参考単価:¥${m.price}, 推定体積:${m.volume || 0.5}m3)`
+          const volumeInfo = normUnit === 'kg'
+            ? '重量制品目'
+            : `推定体積:${m.volume ?? 0.5}m3`
+          return `- ${m.name} [カテゴリ:${m.category}] (単位:${normUnit}, 参考単価:¥${m.price}, ${volumeInfo})`
         }).join('\n')
       : `- 大型冷蔵庫・冷蔵庫 [カテゴリ:４家電] (単位:台, 参考単価:¥9100, 推定体積:1.2m3)
 - 洗濯機 [カテゴリ:４家電] (単位:台, 参考単価:¥7100, 推定体積:0.8m3)
@@ -204,11 +207,11 @@ JSON配列(JSON Array)のみを出力してください。マークダウンの�
       })
     }
 
-    // 利用可能なモデル候補（高負荷503や障害時に自動フォールバック）
+    // 利用可能なモデル候補（実在モデルのみ・高負荷503や障害時に自動フォールバック）
     const candidateModels = [
-      'gemini-3.5-flash-lite',
-      'gemini-3.8-flash',
-      'gemini-2.5-flash'
+      'gemini-2.5-flash',
+      'gemini-2.5-flash-lite',
+      'gemini-2.0-flash',
     ]
 
     let textOutput = ''
@@ -233,11 +236,19 @@ JSON配列(JSON Array)のみを出力してください。マークダウンの�
 
         if (res.ok) {
           const resJson = await res.json()
-          textOutput = resJson.candidates?.[0]?.content?.parts?.[0]?.text || ''
+          const candidateParts = resJson.candidates?.[0]?.content?.parts
+          if (Array.isArray(candidateParts)) {
+            // 思考モデルの thought パートを除外して回答テキストを取得
+            const answerPart = candidateParts.find(
+              (p: any) => typeof p?.text === 'string' && p.text.trim().length > 0 && !p.thought
+            )
+            textOutput = answerPart?.text || ''
+          }
           if (textOutput) {
             console.log(`モデル [${model}] での解析に成功しました`)
             break
           }
+          lastError = 'AIから有効な応答テキストが返されませんでした'
         } else {
           const errJson = await res.json().catch(() => ({}))
           lastError = errJson?.error?.message || `HTTP ${res.status}`
@@ -266,9 +277,9 @@ JSON配列(JSON Array)のみを出力してください。マークダウンの�
       .replace(/```\s*/g, '')
       .trim()
 
-    let items: any[]
+    let parsed: any
     try {
-      items = JSON.parse(cleanJson)
+      parsed = JSON.parse(cleanJson)
     } catch (parseErr) {
       console.error('Gemini API レスポンスの JSON パースに失敗:', cleanJson.substring(0, 500))
       return new Response(
@@ -281,10 +292,32 @@ JSON配列(JSON Array)のみを出力してください。マークダウンの�
       )
     }
 
-    // レスポンスのバリデーション
-    if (!Array.isArray(items)) {
-      items = [items] // オブジェクト単体が返った場合は配列に変換
+    // レスポンスの配列化と要素スキーマ検証
+    let rawItems: any[] = []
+    if (Array.isArray(parsed)) {
+      rawItems = parsed
+    } else if (parsed && typeof parsed === 'object') {
+      rawItems = [parsed]
     }
+
+    const items = rawItems
+      .filter((item: any) => item && typeof item === 'object' && typeof item.name === 'string' && item.name.trim().length > 0)
+      .map((item: any) => {
+        const qtyNum = Number(item.quantity)
+        const volNum = Number(item.volume)
+        const priceNum = Number(item.unitPrice)
+        const unitStr = typeof item.unit === 'string' && item.unit.trim() ? item.unit.trim().replace(/㎏/g, 'kg') : '点'
+        const reasonStr = typeof item.reason === 'string' && item.reason.trim() ? item.reason.trim() : 'AI画像解析により特定'
+
+        return {
+          name: item.name.trim(),
+          quantity: Number.isFinite(qtyNum) && qtyNum > 0 ? qtyNum : 1,
+          unit: unitStr,
+          volume: Number.isFinite(volNum) && volNum >= 0 ? volNum : 0,
+          unitPrice: Number.isFinite(priceNum) && priceNum >= 0 ? priceNum : 0,
+          reason: reasonStr,
+        }
+      })
 
     return new Response(JSON.stringify({ items }), {
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },

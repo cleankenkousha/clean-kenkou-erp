@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react'
+import React, { useState, useEffect, useRef } from 'react'
 import { useLocation, useNavigate } from 'react-router-dom'
 import {
   Settings as SettingsIcon,
@@ -71,6 +71,7 @@ export const Settings: React.FC = () => {
   const [newStaffPassword, setNewStaffPassword] = useState('')
   const [isSavedStaff, setIsSavedStaff] = useState(false)
   const [isSyncingStaff, setIsSyncingStaff] = useState(false)
+  const [isAddingStaff, setIsAddingStaff] = useState(false)
 
   // スタッフ直接パスワード設定モーダル用ステート
   const [accountModalTarget, setAccountModalTarget] = useState<Profile | null>(null)
@@ -78,22 +79,37 @@ export const Settings: React.FC = () => {
   const [accountPasswordInput, setAccountPasswordInput] = useState('')
   const [isSavingAccount, setIsSavingAccount] = useState(false)
   const [accountModalMsg, setAccountModalMsg] = useState<{ text: string; isError: boolean } | null>(null)
+  const accountModalCloseTimerRef = useRef<number | null>(null)
 
   // 現在ログイン中のユーザー情報（権限判定用）
   const [currentAuthUserId, setCurrentAuthUserId] = useState<string | null>(null)
   const [currentAuthEmail, setCurrentAuthEmail] = useState<string | null>(null)
+  const [isAuthResolved, setIsAuthResolved] = useState(false)
 
   useEffect(() => {
-    supabase.auth.getUser().then(({ data }) => {
-      if (data.user) {
-        setCurrentAuthUserId(data.user.id)
-        setCurrentAuthEmail(data.user.email || null)
+    supabase.auth
+      .getUser()
+      .then(({ data }) => {
+        if (data.user) {
+          setCurrentAuthUserId(data.user.id)
+          setCurrentAuthEmail(data.user.email || null)
+        }
+      })
+      .finally(() => {
+        setIsAuthResolved(true)
+      })
+
+    return () => {
+      if (accountModalCloseTimerRef.current !== null) {
+        window.clearTimeout(accountModalCloseTimerRef.current)
       }
-    })
+    }
   }, [])
 
   // 管理者(admin)アカウントが既に1名以上セットアップ済みか、および現在のログインユーザーが管理者か判定
-  const hasConfiguredAdmin = profiles.some((p) => p.role === 'admin' && Boolean(p.auth_user_id))
+  const allAdmins = profiles.filter((p) => p.role === 'admin')
+  const configuredAdmins = profiles.filter((p) => p.role === 'admin' && Boolean(p.auth_user_id))
+  const hasConfiguredAdmin = configuredAdmins.length > 0
   const currentStaffProfile = profiles.find(
     (p) =>
       (currentAuthUserId && (p.auth_user_id === currentAuthUserId || p.id === currentAuthUserId)) ||
@@ -102,12 +118,12 @@ export const Settings: React.FC = () => {
   // 初回セットアップ中（まだadminのパスワードが未設定）は全員操作可、admin設定完了後はadminのみ操作・表示可
   const canManageStaffAccounts = !hasConfiguredAdmin || currentStaffProfile?.role === 'admin'
 
-  // 管理者以外のスタッフがログインした際、初期タブが 'staff' の場合は 'company' に自動で切り替える
+  // 管理者以外のスタッフがログインした際、auth確定後に初期タブが 'staff' の場合は 'company' に切り替える
   useEffect(() => {
-    if (!isLoadingProfiles && !canManageStaffAccounts && activeTab === 'staff') {
+    if (!isLoadingProfiles && isAuthResolved && !canManageStaffAccounts && activeTab === 'staff') {
       setActiveTab('company')
     }
-  }, [isLoadingProfiles, canManageStaffAccounts, activeTab])
+  }, [isLoadingProfiles, isAuthResolved, canManageStaffAccounts, activeTab])
 
   // 3. ログイン・操作履歴（activity_logs）
   const [activityLogs, setActivityLogs] = useState<ActivityLog[]>([])
@@ -169,51 +185,146 @@ export const Settings: React.FC = () => {
     setTimeout(() => setIsSavedCompany(false), 4000)
   }
 
+  // Edge Function レスポンス・例外からの詳細エラー抽出
+  const extractFunctionError = async (error: any, data: any): Promise<string> => {
+    if (data?.error) return String(data.error)
+    try {
+      if (error?.context && typeof error.context.json === 'function') {
+        const errBody = await error.context.json()
+        if (errBody?.error) return String(errBody.error)
+      }
+    } catch {
+      // ignore parse failure
+    }
+    return error?.message || '設定に失敗しました'
+  }
+
   // ---------------- スタッフ追加 ----------------
   const handleAddStaff = async (e: React.FormEvent) => {
     e.preventDefault()
-    if (!newStaffName.trim()) return
+    if (isAddingStaff) return
 
-    const createdProfile = await addStaff(newStaffName.trim(), newStaffRole, newStaffEmail.trim())
+    const trimmedName = newStaffName.trim()
+    const trimmedEmail = newStaffEmail.trim()
+    const trimmedPassword = newStaffPassword.trim()
+    if (!trimmedName) return
 
-    // もし初期パスワードも同時に入力されていた場合はアカウントも即座に発行
-    if (createdProfile && newStaffEmail.trim() && newStaffPassword.trim().length >= 6) {
-      const normalizedEmail = newStaffEmail.trim().includes('@')
-        ? newStaffEmail.trim().toLowerCase()
-        : `${newStaffEmail.trim().toLowerCase()}@kenkou.co.jp`
-
-      await supabase.functions.invoke('manage-staff-auth', {
-        body: {
-          action: 'set_staff_account',
-          profileId: createdProfile.id,
-          email: normalizedEmail,
-          password: newStaffPassword.trim(),
-          displayName: createdProfile.display_name,
-          role: createdProfile.role,
-        },
-      })
-      await refetchProfiles()
+    if (trimmedPassword && !trimmedEmail) {
+      alert('初期パスワードを設定する場合は、ログインID / メールアドレスも入力してください。')
+      return
+    }
+    if (trimmedPassword.length > 0 && trimmedPassword.length < 6) {
+      alert('初期パスワードは6文字以上で入力してください。')
+      return
     }
 
-    if (createdProfile) {
+    setIsAddingStaff(true)
+    try {
+      const createdProfile = await addStaff(trimmedName, newStaffRole, trimmedEmail)
+      if (!createdProfile) {
+        alert('スタッフの登録に失敗しました。通信状況をご確認ください。')
+        return
+      }
+
+      // もし初期パスワードも同時に入力されていた場合はアカウントも即座に発行
+      if (trimmedEmail && trimmedPassword.length >= 6) {
+        const normalizedEmail = trimmedEmail.includes('@')
+          ? trimmedEmail.toLowerCase()
+          : `${trimmedEmail.toLowerCase()}@kenkou.co.jp`
+
+        const { data: fnData, error: fnError } = await supabase.functions.invoke('manage-staff-auth', {
+          body: {
+            action: 'set_staff_account',
+            profileId: createdProfile.id,
+            email: normalizedEmail,
+            password: trimmedPassword,
+            displayName: createdProfile.display_name,
+            role: createdProfile.role,
+          },
+        })
+
+        if (fnError || fnData?.error) {
+          const detail = await extractFunctionError(fnError, fnData)
+          alert(`スタッフ「${trimmedName}」は追加されましたが、ログインアカウント発行に失敗しました: ${detail}`)
+        }
+        await refetchProfiles()
+      }
+
       setNewStaffName('')
       setNewStaffEmail('')
       setNewStaffPassword('')
       setIsSavedStaff(true)
       setTimeout(() => setIsSavedStaff(false), 4000)
+    } catch (err: any) {
+      alert(`スタッフの追加中にエラーが発生しました: ${err?.message || String(err)}`)
+    } finally {
+      setIsAddingStaff(false)
     }
   }
 
-  const handleDeleteStaff = async (id: string, name: string) => {
-    if (confirm(`スタッフ「${name}」を削除してもよろしいですか？`)) {
-      await deleteStaff(id)
-      setIsSavedStaff(true)
-      setTimeout(() => setIsSavedStaff(false), 4000)
+  const isLastProtectedAdmin = (profile: Profile) => {
+    if (profile.role !== 'admin') return false
+    return allAdmins.length <= 1 || (Boolean(profile.auth_user_id) && configuredAdmins.length <= 1)
+  }
+
+  const handleDeleteStaff = async (profile: Profile) => {
+    if (
+      currentStaffProfile?.id === profile.id ||
+      (currentAuthUserId && profile.auth_user_id === currentAuthUserId)
+    ) {
+      alert('現在ログイン中の自分自身のアカウントは削除できません。')
+      return
     }
+
+    if (isLastProtectedAdmin(profile)) {
+      alert('最後の管理者は削除できません。別のスタッフを管理者（パスワード設定済）にしてから削除してください。')
+      return
+    }
+
+    const name = profile.display_name || 'スタッフ'
+    if (!confirm(`スタッフ「${name}」を削除してもよろしいですか？`)) return
+
+    if (profile.auth_user_id) {
+      const { data: fnData, error: fnError } = await supabase.functions.invoke('manage-staff-auth', {
+        body: {
+          action: 'delete_staff_account',
+          profileId: profile.id,
+          authUserId: profile.auth_user_id,
+          displayName: profile.display_name,
+          email: profile.email,
+        },
+      })
+      if (fnError || fnData?.error) {
+        const detail = await extractFunctionError(fnError, fnData)
+        alert(`認証アカウントの削除に失敗しました: ${detail}`)
+        return
+      }
+    }
+
+    const ok = await deleteStaff(profile.id)
+    if (!ok) {
+      alert('スタッフの削除に失敗しました。通信状況をご確認ください。')
+      return
+    }
+    setIsSavedStaff(true)
+    setTimeout(() => setIsSavedStaff(false), 4000)
   }
 
   // ---------------- スタッフの直接パスワード発行・変更 ----------------
+  const closeAccountModal = () => {
+    if (accountModalCloseTimerRef.current !== null) {
+      window.clearTimeout(accountModalCloseTimerRef.current)
+      accountModalCloseTimerRef.current = null
+    }
+    setAccountModalTarget(null)
+    setAccountModalMsg(null)
+  }
+
   const openAccountModal = (profile: Profile) => {
+    if (accountModalCloseTimerRef.current !== null) {
+      window.clearTimeout(accountModalCloseTimerRef.current)
+      accountModalCloseTimerRef.current = null
+    }
     setAccountModalTarget(profile)
     setAccountEmailInput(profile.email || '')
     setAccountPasswordInput('')
@@ -223,6 +334,11 @@ export const Settings: React.FC = () => {
   const handleSaveStaffAccount = async (e: React.FormEvent) => {
     e.preventDefault()
     if (!accountModalTarget) return
+
+    if (accountModalCloseTimerRef.current !== null) {
+      window.clearTimeout(accountModalCloseTimerRef.current)
+      accountModalCloseTimerRef.current = null
+    }
 
     setAccountModalMsg(null)
     const rawEmail = accountEmailInput.trim().toLowerCase()
@@ -259,8 +375,9 @@ export const Settings: React.FC = () => {
       })
 
       if (error || data?.error) {
+        const detail = await extractFunctionError(error, data)
         setAccountModalMsg({
-          text: `エラー: ${data?.error || error?.message || '設定に失敗しました'}`,
+          text: `エラー: ${detail}`,
           isError: true,
         })
       } else {
@@ -275,9 +392,8 @@ export const Settings: React.FC = () => {
         })
         setAccountPasswordInput('')
         setIsSavedStaff(true)
-        setTimeout(() => {
-          setAccountModalTarget(null)
-          setAccountModalMsg(null)
+        accountModalCloseTimerRef.current = window.setTimeout(() => {
+          closeAccountModal()
         }, 1800)
       }
     } catch (err: any) {
@@ -313,13 +429,15 @@ export const Settings: React.FC = () => {
   const handleEditPrice = async (id: string, currentPrice: number, name: string) => {
     const input = prompt(`「${name}」の新しい参考単価（円）を入力してください:`, currentPrice.toString())
     if (input !== null) {
-      const val = parseInt(input, 10)
-      if (!isNaN(val) && val >= 0) {
+      const asciiInput = input.replace(/[０-９]/g, (ch) => String.fromCharCode(ch.charCodeAt(0) - 0xfee0))
+      const normalized = asciiInput.replace(/[,，、\s¥￥円]/g, '')
+      if (/^\d+$/.test(normalized)) {
+        const val = parseInt(normalized, 10)
         await updateItemPrice(id, val)
         setIsSavedItems(true)
         setTimeout(() => setIsSavedItems(false), 4000)
       } else {
-        alert('有効な金額を入力してください。')
+        alert('有効な金額（0以上の整数）を入力してください。')
       }
     }
   }
@@ -600,7 +718,7 @@ export const Settings: React.FC = () => {
                 />
               </div>
               <div>
-                <Button type="submit" variant="primary" size="sm" className="w-full py-2">
+                <Button type="submit" variant="primary" size="sm" className="w-full py-2" isLoading={isAddingStaff} disabled={isAddingStaff}>
                   <Plus className="w-4 h-4 mr-1" />
                   スタッフ追加
                 </Button>
@@ -658,7 +776,17 @@ export const Settings: React.FC = () => {
                                 <select
                                   value={profile.role}
                                   onChange={async (e) => {
-                                    await updateProfile(profile.id, { role: e.target.value as StaffRole })
+                                    const nextRole = e.target.value as StaffRole
+                                    if (profile.role === 'admin' && nextRole !== 'admin' && isLastProtectedAdmin(profile)) {
+                                      alert('最後の管理者の権限は変更できません。別のスタッフを管理者（パスワード設定済）にしてから変更してください。')
+                                      return
+                                    }
+                                    const ok = await updateProfile(profile.id, { role: nextRole })
+                                    if (!ok) {
+                                      alert('役割の変更に失敗しました。通信状況をご確認ください。')
+                                      await refetchProfiles()
+                                      return
+                                    }
                                     setIsSavedStaff(true)
                                     setTimeout(() => setIsSavedStaff(false), 4000)
                                   }}
@@ -734,7 +862,7 @@ export const Settings: React.FC = () => {
                                   type="button"
                                   variant="outline"
                                   size="sm"
-                                  onClick={() => handleDeleteStaff(profile.id, profile.display_name || 'スタッフ')}
+                                  onClick={() => handleDeleteStaff(profile)}
                                   className="hover:bg-rose-50 hover:text-rose-700 hover:border-rose-200 py-1 px-2"
                                 >
                                   <Trash2 className="w-3 h-3 text-rose-500" />
@@ -771,7 +899,7 @@ export const Settings: React.FC = () => {
               </div>
               <button
                 type="button"
-                onClick={() => setAccountModalTarget(null)}
+                onClick={closeAccountModal}
                 className="text-slate-400 hover:text-slate-600 text-lg font-bold p-1"
               >
                 ✕
@@ -829,7 +957,7 @@ export const Settings: React.FC = () => {
                   type="button"
                   variant="outline"
                   size="sm"
-                  onClick={() => setAccountModalTarget(null)}
+                  onClick={closeAccountModal}
                 >
                   キャンセル
                 </Button>
@@ -901,6 +1029,8 @@ export const Settings: React.FC = () => {
                           ? { label: '新規受付', style: 'bg-blue-100 text-blue-800 border-blue-200' }
                           : log.action_type === 'account_update'
                           ? { label: 'アカウント設定', style: 'bg-amber-100 text-amber-800 border-amber-200' }
+                          : log.action_type === 'account_delete'
+                          ? { label: 'アカウント削除', style: 'bg-rose-100 text-rose-800 border-rose-200' }
                           : { label: log.action_type, style: 'bg-purple-100 text-purple-800 border-purple-200' }
 
                       return (
@@ -1147,7 +1277,7 @@ export const Settings: React.FC = () => {
               <div className="flex items-center space-x-2">
                 <Sparkles className="w-5 h-5 text-purple-600 flex-shrink-0" />
                 <span className="text-xs font-bold text-slate-800">
-                  Google Gemini 2.0 Flash AI 画像解析キー設定（1日1,500回 完全無料枠）
+                  Google Gemini Flash AI 画像解析キー設定（サーバープロキシ構成）
                 </span>
               </div>
               <a
