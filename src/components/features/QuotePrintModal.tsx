@@ -53,9 +53,19 @@ export const QuotePrintModal: React.FC<QuotePrintModalProps> = ({
   autoPrint = false,
 }) => {
   const { companyInfo } = useCompanySettings()
+
+  useEffect(() => {
+    if (isOpen && autoPrint && quoteData) {
+      const timer = setTimeout(() => {
+        window.print()
+      }, 300)
+      return () => clearTimeout(timer)
+    }
+  }, [isOpen, autoPrint, quoteData])
+
   if (!isOpen || !quoteData) return null
 
-  const targetElement = document.getElementById('print-root') || document.body
+  const targetElement = document.body
 
   const handlePrint = (e?: React.MouseEvent) => {
     if (e) {
@@ -72,15 +82,6 @@ export const QuotePrintModal: React.FC<QuotePrintModalProps> = ({
     }, 150)
   }
 
-  useEffect(() => {
-    if (isOpen && autoPrint) {
-      const timer = setTimeout(() => {
-        window.print()
-      }, 300)
-      return () => clearTimeout(timer)
-    }
-  }, [isOpen, autoPrint])
-
   const todayStr = quoteData.createdDate
     ? new Date(quoteData.createdDate).toLocaleDateString('ja-JP', {
         year: 'numeric',
@@ -94,6 +95,10 @@ export const QuotePrintModal: React.FC<QuotePrintModalProps> = ({
       })
 
   const packLabelMap: Record<string, string> = {
+    light: '軽トラパック (約2.5m³ / ¥18,000)',
+    '2t_short': '2tショートパック (約6.0m³ / ¥45,000)',
+    '2t_long': '2tロングパック (約10.0m³ / ¥75,000)',
+    multi: '2tロング超 (複数台対応)',
     軽トラパック: '軽トラパック (約2.5m³)',
     '1.5tトラックパック': '1.5tトラックパック (約5.0m³)',
     '2tトラックパック': '2tトラックパック (約7.0m³)',
@@ -101,10 +106,20 @@ export const QuotePrintModal: React.FC<QuotePrintModalProps> = ({
     none: 'パック適用なし (単品積み上げ算定)',
   }
 
+  const packPriceMap: Record<string, number> = {
+    light: 18000,
+    '2t_short': 45000,
+    '2t_long': 75000,
+  }
+  const appliedPackPrice = quoteData.appliedPack ? packPriceMap[quoteData.appliedPack] : undefined
+  const packDiscountAmount =
+    appliedPackPrice !== undefined && quoteData.itemsSubtotal > appliedPackPrice
+      ? quoteData.itemsSubtotal - appliedPackPrice
+      : 0
+
   return ReactDOM.createPortal(
     <div
-      id="quotePrintArea"
-      className="print-container fixed inset-0 z-[9999] flex items-center justify-center bg-black/70 backdrop-blur-sm p-2 sm:p-4 overflow-y-auto print:p-0 print:bg-white print:static print:block pointer-events-auto"
+      className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/70 backdrop-blur-sm p-2 sm:p-4 overflow-y-auto print:p-0 print:bg-white print:static print:block pointer-events-auto"
       onClick={(e) => e.stopPropagation()}
     >
       {/* モーダル本体 (印刷時: フル画面) */}
@@ -201,7 +216,7 @@ export const QuotePrintModal: React.FC<QuotePrintModalProps> = ({
             </div>
 
             {/* 見積合計金額ボックス */}
-            <div className="bg-slate-900 text-white p-3.5 rounded-xl flex flex-col justify-center items-end shadow-md">
+            <div className="print-quote-total-box bg-slate-900 text-white p-3.5 rounded-xl flex flex-col justify-center items-end shadow-md">
               <p className="text-[10px] font-semibold text-slate-300">概算お見積り合計金額 (税込)</p>
               <p className="text-2xl sm:text-3xl font-black text-emerald-400 mt-0.5">
                 ¥{quoteData.grandTotal.toLocaleString()} <span className="text-xs font-normal text-white">円</span>
@@ -301,6 +316,18 @@ export const QuotePrintModal: React.FC<QuotePrintModalProps> = ({
                     <span>+¥{quoteData.disassemblyFee.toLocaleString()}</span>
                   </p>
                 ) : null}
+                {quoteData.expenses ? (
+                  <p className="flex justify-between text-amber-800 font-medium">
+                    <span>諸経費:</span>
+                    <span>+¥{quoteData.expenses.toLocaleString()}</span>
+                  </p>
+                ) : null}
+                {packDiscountAmount > 0 && (
+                  <p className="flex justify-between text-emerald-700 font-bold">
+                    <span>定額パック割引:</span>
+                    <span>-¥{packDiscountAmount.toLocaleString()}</span>
+                  </p>
+                )}
                 <p className="flex justify-between border-t border-slate-200 pt-1 mt-1 font-semibold text-slate-800">
                   <span>適用プラン:</span>
                   <span className="text-emerald-700">

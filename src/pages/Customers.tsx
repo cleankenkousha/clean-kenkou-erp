@@ -58,11 +58,15 @@ export const Customers: React.FC = () => {
     setIsModalOpen(true)
   }
 
-  const handleSaveCustomer = async (data: { name: string; phone?: string; address?: string }) => {
+  const handleSaveCustomer = async (data: { name: string; phone?: string | null; address?: string | null }) => {
     if (selectedCustomer) {
       return await updateCustomer(selectedCustomer.id, data)
     } else {
-      const newCust = await addCustomer(data)
+      const newCust = await addCustomer({
+        name: data.name,
+        phone: data.phone || undefined,
+        address: data.address || undefined,
+      })
       return newCust !== null
     }
   }

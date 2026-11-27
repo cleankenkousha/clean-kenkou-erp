@@ -13,6 +13,7 @@ const statusLabelMap: Record<string, string> = {
   received: '新規受付済',
   quoting: '見積中',
   arranged: '手配済 / 作業日程調整',
+  scheduled: '日程確定',
   collected: '作業実施',
   billed: '請求済',
   completed: '完了済',
@@ -54,11 +55,13 @@ export const ExportModal: React.FC<ExportModalProps> = ({ isOpen, onClose, jobs 
   const handleExecuteExport = () => {
     setIsExporting(true)
     try {
-      // 1. 年月フィルター
+      // 1. 年月フィルター（ローカル日付JST基準で判定）
       const filteredJobs = jobs.filter((j) => {
         if (selectedMonth === 'all') return true
         if (!j.created_at) return false
-        const jobMonth = j.created_at.slice(0, 7) // YYYY-MM
+        const d = new Date(j.created_at)
+        if (isNaN(d.getTime())) return false
+        const jobMonth = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`
         return jobMonth === selectedMonth
       })
 

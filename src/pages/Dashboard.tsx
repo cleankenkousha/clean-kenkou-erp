@@ -22,6 +22,10 @@ import { useViewMode } from '../hooks/useViewMode'
 import { supabase } from '../lib/supabase'
 import { JobStatus } from '../types'
 import { mapJobStatusToLane, mapLaneToJobStatus } from '../lib/statusMapping'
+import { parseJobNotes, mergeJobNotes } from '../lib/jobNotes'
+
+const isUuidString = (val: string) =>
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(val)
 
 export const Dashboard: React.FC = () => {
   const navigate = useNavigate()
@@ -55,19 +59,8 @@ export const Dashboard: React.FC = () => {
   useEffect(() => {
     if (jobs) {
       const convertedTasks: ProcessTask[] = jobs.map((job) => {
-        let stepsData = {}
-        if (job.notes) {
-          try {
-            const parsed = JSON.parse(job.notes)
-            if (parsed && typeof parsed === 'object' && parsed.stepsData) {
-              stepsData = parsed.stepsData
-            } else if (job.notes.startsWith('{')) {
-              stepsData = JSON.parse(job.notes)
-            }
-          } catch (e) {
-            // ignore
-          }
-        }
+        const parsed = parseJobNotes(job.notes)
+        const stepsData = parsed.stepsData
 
         return {
           id: job.id,
@@ -84,6 +77,9 @@ export const Dashboard: React.FC = () => {
           assignedTo: job.assigned_to || '',
           updater: job.profiles?.display_name || '',
           stepsData,
+          signature: parsed.signature,
+          rawNotes: job.notes,
+          dbStatus: job.status,
         }
       })
       setTasks(convertedTasks)
@@ -106,48 +102,57 @@ export const Dashboard: React.FC = () => {
   }, [filteredTasks])
 
 
-  // ドラッグ＆ドロップでステータス更新
+  // ドラッグ＆ドロップでステータス更新（React 18 バッチ更新前の同期計算によりDBへ確実に反映）
   const handleTaskMove = async (taskId: string, newStatus: ProcessLane) => {
+    const targetTask = tasks.find((t) => t.id === taskId)
+    if (!targetTask || targetTask.status === newStatus) return
+
     const nowStr = new Date().toISOString()
-    let updatedStepsData: any = null
+    const nextStepsData: any = targetTask.stepsData ? { ...targetTask.stepsData } : {}
+
+    if (newStatus !== '失注・キャンセル') {
+      const oldRank = getStatusRank(targetTask.status)
+      const newRank = getStatusRank(newStatus)
+      if (newRank < oldRank && targetTask.status !== '失注・キャンセル') {
+        resetStepsAfterStatus(nextStepsData, newStatus)
+      }
+      if (newStatus === '日程確定') {
+        nextStepsData.schedule_confirmed = {
+          status: '済',
+          memo: nextStepsData.schedule_confirmed?.memo || '',
+          worker: nextStepsData.schedule_confirmed?.worker || targetTask.updater || '',
+        }
+      }
+    }
 
     setTasks((prev) =>
-      prev.map((t) => {
-        if (t.id !== taskId) return t
-        const oldRank = getStatusRank(t.status)
-        const newRank = getStatusRank(newStatus)
-        const stepsData = t.stepsData ? { ...t.stepsData } : {}
-
-        if (newRank < oldRank) {
-          resetStepsAfterStatus(stepsData, newStatus)
-        }
-        if (newStatus === '日程確定') {
-          stepsData.schedule_confirmed = {
-            status: '済',
-            memo: stepsData.schedule_confirmed?.memo || '',
-            worker: stepsData.schedule_confirmed?.worker || t.updater || '',
-          }
-        }
-        updatedStepsData = stepsData
-
-        return {
-          ...t,
-          status: newStatus,
-          updatedAt: nowStr,
-          stepsData,
-        }
-      })
+      prev.map((t) =>
+        t.id === taskId
+          ? {
+              ...t,
+              status: newStatus,
+              updatedAt: nowStr,
+              stepsData: nextStepsData,
+            }
+          : t
+      )
     )
 
     // DB側へも連動更新 (UUID形式のIDであれば)
-    const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(taskId)
-    if (isUuid) {
-      const dbStatus = mapLaneToJobStatus(newStatus)
-      await updateJobDetails(taskId, {
-        status: dbStatus,
-        notes: updatedStepsData ? JSON.stringify(updatedStepsData) : undefined,
+    if (isUuidString(taskId)) {
+      const origJob = jobs.find((j) => j.id === taskId)
+      const dbStatus = mapLaneToJobStatus(newStatus, origJob?.status)
+      const mergedNotes = mergeJobNotes(origJob?.notes ?? targetTask.rawNotes, {
+        stepsData: nextStepsData,
       })
-      refetch()
+      const ok = await updateJobDetails(taskId, {
+        status: dbStatus,
+        notes: mergedNotes,
+      })
+      if (!ok) {
+        alert('ステータスの保存に失敗しました。画面を最新状態に戻します。')
+      }
+      await refetch()
     }
   }
 
@@ -167,9 +172,16 @@ export const Dashboard: React.FC = () => {
         worker: stepsData.schedule_confirmed?.worker || updatedTask.updater || '',
       }
     }
+    const origJob = jobs.find((j) => j.id === updatedTask.id)
+    const mergedNotes = mergeJobNotes(origJob?.notes ?? updatedTask.rawNotes, {
+      stepsData,
+      signature: updatedTask.signature,
+    })
+
     const finalTask: ProcessTask = {
       ...updatedTask,
       stepsData,
+      rawNotes: mergedNotes,
     }
 
     setTasks((prev) =>
@@ -177,16 +189,10 @@ export const Dashboard: React.FC = () => {
     )
     setSelectedTask(finalTask)
 
-    const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(finalTask.id)
-    if (isUuid) {
-      const dbStatus: JobStatus = mapLaneToJobStatus(finalTask.status)
+    if (isUuidString(finalTask.id)) {
+      const dbStatus: JobStatus = mapLaneToJobStatus(finalTask.status, origJob?.status)
 
-      let notesVal: string | undefined = undefined
-      if (stepsData && Object.keys(stepsData).length > 0) {
-        notesVal = JSON.stringify(stepsData)
-      }
-
-      // 担当スタッフの特定および自動プロファイル登録
+      // 担当スタッフの特定および自動プロファイル登録（UUID文字列そのものの誤登録を防止）
       let assignedUuid: string | null = null
       const updaterName = updatedTask.updater?.trim()
       if (updaterName) {
@@ -195,7 +201,7 @@ export const Dashboard: React.FC = () => {
         )
         if (matchProfile) {
           assignedUuid = matchProfile.id
-        } else {
+        } else if (!isUuidString(updaterName)) {
           const newStaff = await addStaff(updaterName)
           if (newStaff) {
             assignedUuid = newStaff.id
@@ -203,37 +209,48 @@ export const Dashboard: React.FC = () => {
         }
       }
 
-      await updateJobDetails(updatedTask.id, {
+      const ok = await updateJobDetails(updatedTask.id, {
         title: updatedTask.taskType,
         status: dbStatus,
-        notes: notesVal,
+        notes: mergedNotes,
         assigned_to: assignedUuid,
       })
-      refetch()
+      if (!ok) {
+        alert('案件詳細の保存に失敗しました。通信状況をご確認ください。')
+      }
+      await refetch()
     }
   }
 
   // タスクのキャンセル処理（データは消さずにキャンセルステータスへ更新）
-  const handleDeleteTask = (taskId: string) => {
-    const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(taskId)
-    if (isUuid) {
-      updateJobStatus(taskId, 'cancelled')
+  const handleDeleteTask = async (taskId: string) => {
+    if (isUuidString(taskId)) {
+      const ok = await updateJobStatus(taskId, 'cancelled')
+      if (!ok) {
+        alert('キャンセル処理に失敗しました。')
+      }
+      setSelectedTask(null)
+      await refetch()
     } else {
       setTasks((prev) =>
         prev.map((t) => (t.id === taskId ? { ...t, status: '失注・キャンセル' } : t))
       )
+      setSelectedTask(null)
     }
-    setSelectedTask(null)
-    refetch()
   }
 
-  // 印刷データ発火用エフェクト (DOM完全描画を待ってwindow.print起動)
+  // 印刷データ発火用エフェクト (DOM完全描画を待ってwindow.print起動 & 終了後クリア)
   useEffect(() => {
     if (printTask) {
+      const handleAfterPrint = () => setPrintTask(null)
+      window.addEventListener('afterprint', handleAfterPrint)
       const timer = setTimeout(() => {
         window.print()
       }, 250)
-      return () => clearTimeout(timer)
+      return () => {
+        clearTimeout(timer)
+        window.removeEventListener('afterprint', handleAfterPrint)
+      }
     }
   }, [printTask])
 
@@ -248,6 +265,7 @@ export const Dashboard: React.FC = () => {
       receptionDate: task.receptionDate,
       updater: task.updater || '未指定',
       stepsData: task.stepsData,
+      signature: task.signature,
     })
   }
 
@@ -270,14 +288,16 @@ export const Dashboard: React.FC = () => {
         address: newTaskData.address?.trim() || null,
       }
 
-      // 既存顧客チェック (名前または電話番号で既存を照合)
-      let query = supabase.from('customers').select('id, name, phone, address')
-      if (newTaskData.tel?.trim()) {
-        query = query.eq('phone', newTaskData.tel.trim())
-      } else {
-        query = query.eq('name', newTaskData.customer.trim())
-      }
-      const { data: existingCustomer } = await query.maybeSingle()
+      // 既存顧客チェック (論理削除済みを除外、複数重複時でもエラーにならないよう limit(1) を使用)
+      const baseCustQuery = supabase
+        .from('customers')
+        .select('id, name, phone, address')
+        .is('deleted_at', null)
+      const query = newTaskData.tel?.trim()
+        ? baseCustQuery.eq('phone', newTaskData.tel.trim())
+        : baseCustQuery.eq('name', newTaskData.customer.trim())
+      const { data: existingCustomers } = await query.limit(1)
+      const existingCustomer = existingCustomers?.[0]
 
       if (existingCustomer?.id) {
         customerId = existingCustomer.id
@@ -449,25 +469,25 @@ export const Dashboard: React.FC = () => {
       </header>
 
       {/* View Filter Switcher Tabs & Staff Filter */}
-      <div className="view-switcher-container" style={{ margin: '1rem 0 0.5rem 0', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '0.5rem' }}>
-        <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
+      <div className="view-tabs-container" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '0.5rem' }}>
+        <div className="view-tabs">
           <button
-            className={`btn-filter ${viewFilter === 'active' ? 'active' : ''}`}
+            className={`tab-btn ${viewFilter === 'active' ? 'active' : ''}`}
             onClick={() => setViewFilter('active')}
           >
-            📄 進行中 <span className="badge">{counts.active}</span>
+            📄 進行中 <span className="tab-count">{counts.active}</span>
           </button>
           <button
-            className={`btn-filter ${viewFilter === 'archived' ? 'active' : ''}`}
+            className={`tab-btn ${viewFilter === 'archived' ? 'active' : ''}`}
             onClick={() => setViewFilter('archived')}
           >
-            🎨 完了・過去履歴 <span className="badge">{counts.archived}</span>
+            🎨 完了・過去履歴 <span className="tab-count">{counts.archived}</span>
           </button>
           <button
-            className={`btn-filter ${viewFilter === 'all' ? 'active' : ''}`}
+            className={`tab-btn ${viewFilter === 'all' ? 'active' : ''}`}
             onClick={() => setViewFilter('all')}
           >
-            📂 すべて <span className="badge">{counts.all}</span>
+            📂 すべて <span className="tab-count">{counts.all}</span>
           </button>
         </div>
 
@@ -522,6 +542,7 @@ export const Dashboard: React.FC = () => {
         onSave={handleSaveTaskDetail}
         onDelete={handleDeleteTask}
         onPrint={handlePrintTask}
+        onInvoiceSuccess={() => refetch()}
         onOpenQuoteWithData={(data) => {
           setQuoteInitialData(data)
           setIsQuoteOpen(true)

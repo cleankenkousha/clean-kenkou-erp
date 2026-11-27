@@ -34,6 +34,7 @@ import { PrintQuoteArea, PrintQuoteData } from '../components/features/PrintQuot
 import { InvoiceModal } from '../components/features/InvoiceModal'
 import { Input, Button, MapLink } from '../components/ui'
 import { mapJobStatusToLane, mapLaneToJobStatus } from '../lib/statusMapping'
+import { parseJobNotes, mergeJobNotes } from '../lib/jobNotes'
 
 const statusBadgeConfig: Record<JobStatus, { label: string; style: string }> = {
   received: { label: '新規受付済', style: 'bg-amber-100 text-amber-800 border-amber-200' },
@@ -51,14 +52,9 @@ const statusBadgeConfig: Record<JobStatus, { label: string; style: string }> = {
 const getJobBadge = (job: Job) => {
   let effectiveStatus: JobStatus = job.status
   if (job.status === 'arranged' && job.notes) {
-    try {
-      const parsed = JSON.parse(job.notes)
-      const steps = parsed?.stepsData || (job.notes.startsWith('{') ? parsed : null)
-      if (steps?.schedule_confirmed?.status === '済') {
-        effectiveStatus = 'scheduled'
-      }
-    } catch (e) {
-      // ignore
+    const steps = parseJobNotes(job.notes).stepsData
+    if (steps?.schedule_confirmed?.status === '済') {
+      effectiveStatus = 'scheduled'
     }
   }
   return (
@@ -71,19 +67,8 @@ const getJobBadge = (job: Job) => {
 
 // Job -> ProcessTask 変換ヘルパー
 const mapJobToProcessTask = (job: Job): ProcessTask => {
-  let stepsData = {}
-  if (job.notes) {
-    try {
-      const parsed = JSON.parse(job.notes)
-      if (parsed && typeof parsed === 'object' && parsed.stepsData) {
-        stepsData = parsed.stepsData
-      } else if (job.notes.startsWith('{')) {
-        stepsData = JSON.parse(job.notes)
-      }
-    } catch (e) {
-      // JSONでない場合はスルー
-    }
-  }
+  const parsed = parseJobNotes(job.notes)
+  const stepsData = parsed.stepsData
 
   return {
     id: job.id,
@@ -97,6 +82,9 @@ const mapJobToProcessTask = (job: Job): ProcessTask => {
     updatedAt: job.updated_at || job.created_at || new Date().toISOString(),
     updater: job.profiles?.display_name || '',
     stepsData,
+    signature: parsed.signature,
+    rawNotes: job.notes,
+    dbStatus: job.status,
   }
 }
 
@@ -127,77 +115,41 @@ export const Jobs: React.FC = () => {
     setIsInvoiceModalOpen(true)
   }
 
-  // 案件のnotesから概算見積データ(PrintQuoteData)を抽出するヘルパー（フォールバック付き）
-  const parseQuoteDataFromJob = (job: Job): PrintQuoteData => {
-    if (job.notes) {
-      try {
-        const parsed = JSON.parse(job.notes)
-        if (parsed && typeof parsed === 'object' && parsed.quoteType === 'mobile_ai_quote') {
-          return {
-            jobId: job.id,
-            customerName: job.customers?.name || '名称未設定',
-            customerPhone: job.customers?.phone || '',
-            customerAddress: job.customers?.address || '',
-            title: job.title,
-            createdDate: job.created_at || undefined,
-            items: (parsed.items || []).map((it: any) => ({
-              name: it.name || '',
-              price: it.unitPrice || it.price || 0,
-              quantity: it.quantity || 1,
-              unit: it.unit,
-              volume: it.volume || 0,
-            })),
-            itemsSubtotal: parsed.itemsSubtotal || 0,
-            baseFee: 0,
-            expenses: parsed.expenses || 0,
-            workExpenses: parsed.workExpenses || 0,
-            floorLevel: parsed.floorLevel,
-            hasCarryOut: parsed.hasCarryOut ?? true,
-            autoStairFee: parsed.autoStairFee,
-            disassemblyFee: parsed.disassemblyFee,
-            appliedPack: parsed.appliedPack,
-            totalVolume: parsed.totalVolume || 0,
-            volumeWorkFee: parsed.volumeWorkFee || 0,
-            workFeePerM3: parsed.workFeePerM3 || 1500,
-            grandTotal: parsed.grandTotal || 0,
-            notes: parsed.notes,
-          }
-        }
-      } catch (e) {
-        // JSONでない場合は標準フォールバックへ
-      }
-    }
+  // 案件のnotesから概算見積データ(PrintQuoteData)を抽出するヘルパー（見積未作成時はnullを返す）
+  const parseQuoteDataFromJob = (job: Job): PrintQuoteData | null => {
+    const parsedNotes = parseJobNotes(job.notes)
+    const q = parsedNotes.quoteData
+    if (!q) return null
 
-    // 標準フォールバック見積データ
     return {
       jobId: job.id,
       customerName: job.customers?.name || '名称未設定',
       customerPhone: job.customers?.phone || '',
       customerAddress: job.customers?.address || '',
-      title: job.title || '回収・作業依頼',
+      title: job.title,
       createdDate: job.created_at || undefined,
-      items: [
-        {
-          name: job.title || '不用品回収・作業費用',
-          price: 15000,
-          quantity: 1,
-          volume: 2.0,
-        },
-      ],
-      itemsSubtotal: 15000,
+      items: (q.items || []).map((it: any) => ({
+        name: it.name || '',
+        price: it.unitPrice || it.price || 0,
+        quantity: it.quantity || 1,
+        unit: it.unit,
+        volume: it.volume || 0,
+      })),
+      itemsSubtotal: q.itemsSubtotal || 0,
       baseFee: 0,
-      expenses: 0,
-      workExpenses: 0,
-      floorLevel: 1,
-      hasCarryOut: true,
-      autoStairFee: 0,
-      disassemblyFee: 0,
-      appliedPack: '軽トラパック',
-      totalVolume: 2.0,
-      volumeWorkFee: 3000,
-      workFeePerM3: 1500,
-      grandTotal: 18000,
-      notes: job.notes || '電話・受付時メモ',
+      expenses: q.expenses || 0,
+      workExpenses: q.workExpenses || 0,
+      floorLevel: q.floorLevel,
+      hasCarryOut: q.hasCarryOut ?? true,
+      autoStairFee: q.autoStairFee,
+      disassemblyFee: q.disassemblyFee,
+      appliedPack: q.appliedPack,
+      totalVolume: q.totalVolume || 0,
+      volumeWorkFee: q.volumeWorkFee || 0,
+      workFeePerM3: q.workFeePerM3 || 1500,
+      grandTotal: q.grandTotal || 0,
+      notes: q.notes,
+      signature: parsedNotes.signature || q.signature || null,
     }
   }
 
@@ -220,13 +172,15 @@ export const Jobs: React.FC = () => {
         address: newTaskData.address?.trim() || null,
       }
 
-      let query = supabase.from('customers').select('id, name, phone, address')
-      if (newTaskData.tel?.trim()) {
-        query = query.eq('phone', newTaskData.tel.trim())
-      } else {
-        query = query.eq('name', newTaskData.customer.trim())
-      }
-      const { data: existingCustomer } = await query.maybeSingle()
+      const baseCustQuery = supabase
+        .from('customers')
+        .select('id, name, phone, address')
+        .is('deleted_at', null)
+      const query = newTaskData.tel?.trim()
+        ? baseCustQuery.eq('phone', newTaskData.tel.trim())
+        : baseCustQuery.eq('name', newTaskData.customer.trim())
+      const { data: existingCustomers } = await query.limit(1)
+      const existingCustomer = existingCustomers?.[0]
 
       if (existingCustomer?.id) {
         customerId = existingCustomer.id
@@ -361,11 +315,11 @@ export const Jobs: React.FC = () => {
   // フィルタリング処理
   const filteredJobs = useMemo(() => {
     return jobs.filter((job) => {
-      // 1. ステータスフィルター
+      // 1. ステータスフィルター（相互排他：進行中 / 完了済 / キャンセル）
       if (statusFilter === 'active') {
         if (['completed', 'cancelled'].includes(job.status)) return false
       } else if (statusFilter === 'completed') {
-        if (!['collected', 'billed', 'completed'].includes(job.status)) return false
+        if (job.status !== 'completed') return false
       } else if (statusFilter === 'cancelled') {
         if (job.status !== 'cancelled') return false
       }
@@ -394,11 +348,11 @@ export const Jobs: React.FC = () => {
     })
   }, [jobs, searchQuery, statusFilter, staffFilter])
 
-  // KPI 集計
+  // KPI 集計（全案件 = 進行中 + 完了済 + キャンセル が整合するよう相互排他集計）
   const kpiStats = useMemo(() => {
     const total = jobs.length
     const active = jobs.filter((j) => !['completed', 'cancelled'].includes(j.status)).length
-    const completed = jobs.filter((j) => ['collected', 'billed', 'completed'].includes(j.status)).length
+    const completed = jobs.filter((j) => j.status === 'completed').length
     const pending = jobs.filter((j) => j.status === 'pending').length
     return { total, active, completed, pending }
   }, [jobs])
@@ -430,9 +384,12 @@ export const Jobs: React.FC = () => {
       }
     }
 
-    const dbStatus: JobStatus = mapLaneToJobStatus(updatedTask.status)
-    const notesVal: string | undefined =
-      Object.keys(stepsData).length > 0 ? JSON.stringify(stepsData) : undefined
+    const origJob = jobs.find((j) => j.id === updatedTask.id)
+    const dbStatus: JobStatus = mapLaneToJobStatus(updatedTask.status, origJob?.status)
+    const notesVal: string = mergeJobNotes(origJob?.notes ?? updatedTask.rawNotes, {
+      stepsData,
+      signature: updatedTask.signature,
+    })
 
     // 担当スタッフ（表示名・ID・自由記述）の保持検索および自動登録
     let assignedUuid: string | null = null
@@ -451,15 +408,20 @@ export const Jobs: React.FC = () => {
       }
     }
 
-    await updateJobDetails(updatedTask.id, {
+    const success = await updateJobDetails(updatedTask.id, {
       title: updatedTask.taskType,
       status: dbStatus,
       notes: notesVal,
       assigned_to: assignedUuid,
     })
 
+    if (!success) {
+      alert('案件詳細の保存に失敗しました。通信状況をご確認のうえ再度お試しください。')
+      return
+    }
+
     setIsDetailModalOpen(false)
-    refetch()
+    await refetch()
   }
 
   const handleDeleteJob = async (taskId: string) => {
@@ -510,6 +472,7 @@ export const Jobs: React.FC = () => {
       receptionDate: task.receptionDate,
       updater: task.updater || '未指定',
       stepsData: task.stepsData,
+      signature: task.signature,
     })
   }
 
@@ -822,6 +785,10 @@ export const Jobs: React.FC = () => {
                             type="button"
                             onClick={(e) => {
                               e.stopPropagation()
+                              if (!existingQuoteData) {
+                                alert('この案件には概算見積がまだ作成されていません。先に「作成」から見積書を作成してください。')
+                                return
+                              }
                               setPrintQuoteData(existingQuoteData)
                             }}
                             className="px-2 py-0.5 bg-emerald-600 hover:bg-emerald-700 active:scale-95 text-white text-[10px] font-bold rounded shadow-sm flex items-center space-x-1 transition-all"
@@ -1025,6 +992,10 @@ export const Jobs: React.FC = () => {
                                 size="sm"
                                 onClick={(e) => {
                                   e.stopPropagation()
+                                  if (!existingQuoteData) {
+                                    alert('この案件には概算見積がまだ作成されていません。先に「見積作成」を行ってください。')
+                                    return
+                                  }
                                   setPrintQuoteData(existingQuoteData)
                                 }}
                                 title="概算見積書を表示・印刷"
@@ -1087,6 +1058,7 @@ export const Jobs: React.FC = () => {
         onSave={handleSaveProcessTask}
         onDelete={handleDeleteJob}
         onPrint={handlePrintTask}
+        onInvoiceSuccess={() => refetch()}
         onOpenQuoteWithData={(data) => {
           setQuoteInitialData(data)
           setIsMobileQuoteOpen(true)

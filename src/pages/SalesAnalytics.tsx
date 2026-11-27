@@ -26,7 +26,8 @@ import {
 import { useSalesData, VarianceItem } from '../hooks/useSalesData'
 
 // ── ユーティリティ ──
-const fmt = (n: number) => `¥${n.toLocaleString('ja-JP')}`
+const fmt = (n: number) =>
+  n < 0 ? `-¥${Math.abs(n).toLocaleString('ja-JP')}` : `¥${n.toLocaleString('ja-JP')}`
 
 // 入金ステータス表示用
 const statusLabel = (s: 'unissued' | 'issued' | 'paid') =>
@@ -95,8 +96,17 @@ export const SalesAnalytics: React.FC = () => {
     return [...list].sort((a, b) => {
       const dir = sortDir === 'asc' ? 1 : -1
       if (sortKey === 'invoiceAmount') return (a.invoiceAmount - b.invoiceAmount) * dir
-      if (sortKey === 'variance') return (a.variance - b.variance) * dir
-      if (sortKey === 'varianceRate') return (a.varianceRate - b.varianceRate) * dir
+      if (sortKey === 'variance' || sortKey === 'varianceRate') {
+        // 事前見積未算定（quoteAmount === 0）の行は常に末尾へ配置
+        const aHas = a.quoteAmount > 0
+        const bHas = b.quoteAmount > 0
+        if (!aHas && !bHas) return 0
+        if (!aHas) return 1
+        if (!bHas) return -1
+        return sortKey === 'variance'
+          ? (a.variance - b.variance) * dir
+          : (a.varianceRate - b.varianceRate) * dir
+      }
       // issuedAt (デフォルト)
       const aDate = a.issuedAt ?? '0'
       const bDate = b.issuedAt ?? '0'

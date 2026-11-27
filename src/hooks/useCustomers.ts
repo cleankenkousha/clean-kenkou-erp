@@ -112,7 +112,16 @@ export const useCustomers = (): UseCustomersReturn => {
         for (const key of Object.keys(updates)) {
           if (allowedKeys.includes(key)) {
             const val = (updates as any)[key]
-            cleanUpdates[key] = typeof val === 'string' ? val.trim() || null : val
+            if (val === undefined) continue
+            if (key === 'name') {
+              const trimmed = typeof val === 'string' ? val.trim() : ''
+              if (!trimmed) {
+                throw new Error('顧客名は空にできません')
+              }
+              cleanUpdates[key] = trimmed
+            } else {
+              cleanUpdates[key] = typeof val === 'string' ? val.trim() || null : val
+            }
           }
         }
 

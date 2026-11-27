@@ -16,6 +16,7 @@ interface TaskDetailModalProps {
   onDelete: (taskId: string) => void
   onPrint: (task: ProcessTask) => void
   onOpenQuoteWithData?: (data: InitialQuoteData) => void
+  onInvoiceSuccess?: () => void
 }
 
 export function getStatusRank(statusStr: string): number {
@@ -94,6 +95,7 @@ export const TaskDetailModal: React.FC<TaskDetailModalProps> = ({
   onDelete,
   onPrint,
   onOpenQuoteWithData,
+  onInvoiceSuccess,
 }) => {
   const { profiles } = useProfiles()
   const [currentStatus, setCurrentStatus] = useState<ProcessLane>('未着手')
@@ -104,13 +106,18 @@ export const TaskDetailModal: React.FC<TaskDetailModalProps> = ({
   const [isInvoiceModalOpen, setIsInvoiceModalOpen] = useState(false)
 
   useEffect(() => {
-    if (task) {
+    if (isOpen && task) {
       setCurrentStatus(task.status)
       setUpdater(task.updater || task.assignedTo || '')
       setStepsData(task.stepsData || {})
       setSignature(task.signature || null)
+      setIsSignatureModalOpen(false)
+      setIsInvoiceModalOpen(false)
+    } else if (!isOpen) {
+      setIsSignatureModalOpen(false)
+      setIsInvoiceModalOpen(false)
     }
-  }, [task])
+  }, [task, isOpen])
 
   if (!isOpen || !task) return null
 
@@ -129,10 +136,15 @@ export const TaskDetailModal: React.FC<TaskDetailModalProps> = ({
 
   // ステータスセレクト手動変更時の処理
   const handleStatusSelectChange = (newStatus: ProcessLane) => {
+    setCurrentStatus(newStatus)
+
+    // 失注・キャンセル時は過去の工程履歴を維持するため stepsData をリセットしない
+    if (newStatus === '失注・キャンセル') {
+      return
+    }
+
     const newRank = getStatusRank(newStatus)
     const oldRank = getStatusRank(currentStatus)
-
-    setCurrentStatus(newStatus)
 
     setStepsData((prev) => {
       const nextData = { ...prev }
@@ -149,7 +161,7 @@ export const TaskDetailModal: React.FC<TaskDetailModalProps> = ({
       }
 
       // ランクが下がった場合は後ろのステップをリセット
-      if (newRank < oldRank) {
+      if (newRank < oldRank && currentStatus !== '失注・キャンセル') {
         Object.keys(STEP_MIN_RANK).forEach((sKey) => {
           const stepId = sKey as keyof StepsData
           if (STEP_MIN_RANK[sKey] > newRank && nextData[stepId]) {
@@ -191,53 +203,51 @@ export const TaskDetailModal: React.FC<TaskDetailModalProps> = ({
 
   // ステップボタンクリック時 (自動連動 & 自動昇格機能)
   const handleStepStatusChange = (stepId: keyof StepsData, statusVal: string) => {
-    setStepsData((prev) => {
-      let nextData = { ...prev }
-      const currentUpdater = updater.trim()
+    let nextData = { ...stepsData }
+    const currentUpdater = updater.trim()
 
-      if (stepId === 'estimate_schedule' && statusVal === '見積不要') {
-        const autoWorker = prev.estimate_schedule?.worker || currentUpdater
-        nextData = {
-          ...nextData,
-          estimate_schedule: { status: '見積不要', memo: prev.estimate_schedule?.memo || '', worker: autoWorker },
-          estimate_do: { status: '不要', memo: prev.estimate_do?.memo || '', worker: prev.estimate_do?.worker || autoWorker },
-          estimate_submit: { status: '不要', memo: prev.estimate_submit?.memo || '', worker: prev.estimate_submit?.worker || autoWorker },
-          customer_consideration: { status: '不要', memo: prev.customer_consideration?.memo || '', worker: prev.customer_consideration?.worker || autoWorker },
+    if (stepId === 'estimate_schedule' && statusVal === '見積不要') {
+      const autoWorker = stepsData.estimate_schedule?.worker || currentUpdater
+      nextData = {
+        ...nextData,
+        estimate_schedule: { status: '見積不要', memo: stepsData.estimate_schedule?.memo || '', worker: autoWorker },
+        estimate_do: { status: '不要', memo: stepsData.estimate_do?.memo || '', worker: stepsData.estimate_do?.worker || autoWorker },
+        estimate_submit: { status: '不要', memo: stepsData.estimate_submit?.memo || '', worker: stepsData.estimate_submit?.worker || autoWorker },
+        customer_consideration: { status: '不要', memo: stepsData.customer_consideration?.memo || '', worker: stepsData.customer_consideration?.worker || autoWorker },
+      }
+    } else if (stepId === 'estimate_schedule' && statusVal !== '見積不要' && stepsData.estimate_schedule?.status === '見積不要') {
+      nextData = {
+        ...nextData,
+        estimate_schedule: { status: statusVal, memo: stepsData.estimate_schedule?.memo || '', worker: stepsData.estimate_schedule?.worker || currentUpdater },
+      }
+      ;(['estimate_do', 'estimate_submit', 'customer_consideration'] as (keyof StepsData)[]).forEach((tId) => {
+        if (nextData[tId]?.status === '不要') {
+          nextData[tId] = { ...nextData[tId]!, status: '未' }
         }
-      } else if (stepId === 'estimate_schedule' && statusVal !== '見積不要' && prev.estimate_schedule?.status === '見積不要') {
-        nextData = {
-          ...nextData,
-          estimate_schedule: { status: statusVal, memo: prev.estimate_schedule?.memo || '', worker: prev.estimate_schedule?.worker || currentUpdater },
-        }
-        ;(['estimate_do', 'estimate_submit', 'customer_consideration'] as (keyof StepsData)[]).forEach((tId) => {
-          if (nextData[tId]?.status === '不要') {
-            nextData[tId] = { ...nextData[tId]!, status: '未' }
-          }
-        })
-      } else {
-        let autoWorker = prev[stepId]?.worker || ''
-        if (!autoWorker && statusVal !== '未') {
-          if (stepId === 'work_execution' || stepId === 'work_schedule' || stepId === 'schedule_confirmed') {
-            autoWorker = currentUpdater
-          }
-        }
-
-        nextData = {
-          ...nextData,
-          [stepId]: {
-            status: statusVal,
-            memo: prev[stepId]?.memo || '',
-            worker: autoWorker,
-          },
+      })
+    } else {
+      let autoWorker = stepsData[stepId]?.worker || ''
+      if (!autoWorker && statusVal !== '未') {
+        if (stepId === 'work_execution' || stepId === 'work_schedule' || stepId === 'schedule_confirmed') {
+          autoWorker = currentUpdater
         }
       }
 
-      const suggestedStatus = computeTaskStatus(nextData)
-      // チェックリストの変更に合わせてステータスを即座に連動
-      setCurrentStatus(suggestedStatus)
+      nextData = {
+        ...nextData,
+        [stepId]: {
+          status: statusVal,
+          memo: stepsData[stepId]?.memo || '',
+          worker: autoWorker,
+        },
+      }
+    }
 
-      return nextData
-    })
+    setStepsData(nextData)
+    if (currentStatus !== '失注・キャンセル') {
+      const suggestedStatus = computeTaskStatus(nextData)
+      setCurrentStatus(suggestedStatus)
+    }
   }
 
   // ステップメモ変更
@@ -273,10 +283,15 @@ export const TaskDetailModal: React.FC<TaskDetailModalProps> = ({
     const nowStr = new Date().toISOString()
     const autoStatus = computeTaskStatus(stepsData)
 
-    // ユーザー選択ステータス、またはチェックリスト進捗から高い方を採用
-    const selectedRank = getStatusRank(currentStatus)
-    const autoRank = getStatusRank(autoStatus)
-    const finalStatus: ProcessLane = selectedRank >= autoRank ? currentStatus : autoStatus
+    // 「失注・キャンセル」が選択されている場合はそのまま維持し、それ以外は進捗と選択の高い方を採用
+    let finalStatus: ProcessLane
+    if (currentStatus === '失注・キャンセル') {
+      finalStatus = '失注・キャンセル'
+    } else {
+      const selectedRank = getStatusRank(currentStatus)
+      const autoRank = getStatusRank(autoStatus)
+      finalStatus = selectedRank >= autoRank ? currentStatus : autoStatus
+    }
 
     // finalStatus が「日程確定」の場合は、stepsData.schedule_confirmed が確実に「済」になるよう保証
     const finalStepsData = { ...stepsData }
@@ -311,11 +326,12 @@ export const TaskDetailModal: React.FC<TaskDetailModalProps> = ({
 
 
   return (
-    <div className="modal-overlay active" onClick={onClose}>
-      <div
-        className="modal-content"
-        onClick={(e) => e.stopPropagation()}
-      >
+    <>
+      <div className="modal-overlay active" onClick={onClose}>
+        <div
+          className="modal-content"
+          onClick={(e) => e.stopPropagation()}
+        >
         <div className="modal-header">
           <h2 id="modalTitle">案件詳細 #{task.id}</h2>
           <button type="button" className="close-btn" onClick={onClose} aria-label="閉じる">
@@ -762,8 +778,9 @@ export const TaskDetailModal: React.FC<TaskDetailModalProps> = ({
           </button>
         </div>
       </div>
+      </div>
 
-      {/* 電子サイン受領モーダル */}
+      {/* 電子サイン受領モーダル（親オーバーレイと兄弟配置にしてC-1クリック閉じバグを完全解消） */}
       <SignaturePadModal
         isOpen={isSignatureModalOpen}
         onClose={() => setIsSignatureModalOpen(false)}
@@ -774,7 +791,7 @@ export const TaskDetailModal: React.FC<TaskDetailModalProps> = ({
         existingSignature={signature}
       />
 
-      {/* 完了済み案件の請求・売上確定モーダル */}
+      {/* 完了済み案件の請求・売上確定モーダル（親オーバーレイと兄弟配置） */}
       <InvoiceModal
         job={
           task
@@ -782,8 +799,8 @@ export const TaskDetailModal: React.FC<TaskDetailModalProps> = ({
                 id: task.id,
                 customer_id: '',
                 title: task.taskType,
-                status: 'billed',
-                notes: task.stepsData ? JSON.stringify(task.stepsData) : null,
+                status: task.dbStatus || 'billed',
+                notes: task.rawNotes ?? (task.stepsData ? JSON.stringify(task.stepsData) : null),
                 created_at: task.receptionDate,
                 customers: {
                   name: task.customer,
@@ -797,8 +814,11 @@ export const TaskDetailModal: React.FC<TaskDetailModalProps> = ({
         onClose={() => setIsInvoiceModalOpen(false)}
         onSuccess={() => {
           setIsInvoiceModalOpen(false)
+          if (onInvoiceSuccess) {
+            onInvoiceSuccess()
+          }
         }}
       />
-    </div>
+    </>
   )
 }

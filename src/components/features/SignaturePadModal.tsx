@@ -43,8 +43,8 @@ export const SignaturePadModal: React.FC<SignaturePadModalProps> = ({
     ctx.strokeStyle = '#0f172a' // 濃いネイビーブラック
     ctx.lineWidth = 2.5
 
-    // 既存のサインがあれば復元
-    if (existingSignature) {
+    // 既存のサイン画像（data:image/ 形式）がある場合のみ復元（「立ち会い無し」等の文字列で404を出さない）
+    if (existingSignature && existingSignature.startsWith('data:image/')) {
       const img = new Image()
       img.onload = () => {
         ctx.drawImage(img, 0, 0, rect.width, rect.height)
@@ -58,11 +58,14 @@ export const SignaturePadModal: React.FC<SignaturePadModalProps> = ({
 
   useEffect(() => {
     if (isOpen) {
+      setIsDrawing(false)
       // モーダル表示のアニメーション完了後にキャンバスサイズを確定
       const timer = setTimeout(() => {
         initCanvas()
       }, 100)
       return () => clearTimeout(timer)
+    } else {
+      setIsDrawing(false)
     }
   }, [isOpen, initCanvas])
 
@@ -89,10 +92,6 @@ export const SignaturePadModal: React.FC<SignaturePadModalProps> = ({
 
   // 描画開始
   const handleStart = (e: React.MouseEvent<HTMLCanvasElement> | React.TouchEvent<HTMLCanvasElement>) => {
-    if ('touches' in e) {
-      // スクロール防止
-      e.preventDefault()
-    }
     const canvas = canvasRef.current
     if (!canvas) return
     const ctx = canvas.getContext('2d')
@@ -102,15 +101,11 @@ export const SignaturePadModal: React.FC<SignaturePadModalProps> = ({
     ctx.beginPath()
     ctx.moveTo(x, y)
     setIsDrawing(true)
-    setHasDrawn(true)
   }
 
-  // 描画中
+  // 描画中（実際に線が描かれた場合のみ hasDrawn を true にする）
   const handleMove = (e: React.MouseEvent<HTMLCanvasElement> | React.TouchEvent<HTMLCanvasElement>) => {
     if (!isDrawing) return
-    if ('touches' in e) {
-      e.preventDefault()
-    }
     const canvas = canvasRef.current
     if (!canvas) return
     const ctx = canvas.getContext('2d')
@@ -119,6 +114,9 @@ export const SignaturePadModal: React.FC<SignaturePadModalProps> = ({
     const { x, y } = getCoordinates(e)
     ctx.lineTo(x, y)
     ctx.stroke()
+    if (!hasDrawn) {
+      setHasDrawn(true)
+    }
   }
 
   // 描画終了
@@ -158,7 +156,10 @@ export const SignaturePadModal: React.FC<SignaturePadModalProps> = ({
   if (!isOpen) return null
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm animate-fade-in">
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm animate-fade-in"
+      onClick={(e) => e.stopPropagation()}
+    >
       <div className="bg-white rounded-2xl shadow-2xl w-full max-w-lg border border-slate-200 overflow-hidden flex flex-col">
         {/* ヘッダー */}
         <div className="flex items-center justify-between px-5 py-3.5 border-b border-slate-100 bg-slate-50">
@@ -200,6 +201,7 @@ export const SignaturePadModal: React.FC<SignaturePadModalProps> = ({
               onTouchStart={handleStart}
               onTouchMove={handleMove}
               onTouchEnd={handleEnd}
+              onTouchCancel={handleEnd}
               className="w-full h-52 bg-white cursor-crosshair touch-none select-none block"
               style={{ touchAction: 'none' }}
             />

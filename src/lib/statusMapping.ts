@@ -50,12 +50,15 @@ export const mapJobStatusToLane = (
 /**
  * カンバンボードの ProcessLane から Supabase の JobStatus へのマッピング
  */
-export const mapLaneToJobStatus = (lane: ProcessLane): JobStatus => {
+export const mapLaneToJobStatus = (
+  lane: ProcessLane,
+  currentDbStatus?: JobStatus | null
+): JobStatus => {
   switch (lane) {
     case '未着手':
       return 'received'
     case '顧客検討':
-      return 'quoting'
+      return currentDbStatus === 'pending' ? 'pending' : 'quoting'
     case '作業日程調整':
       return 'arranged'
     case '日程確定':
@@ -63,7 +66,7 @@ export const mapLaneToJobStatus = (lane: ProcessLane): JobStatus => {
     case '作業実施':
       return 'collected'
     case '請求書送付':
-      return 'billed'
+      return currentDbStatus === 'completed' ? 'completed' : 'billed'
     case '失注・キャンセル':
       return 'cancelled'
     default:

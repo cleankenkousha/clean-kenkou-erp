@@ -899,6 +899,16 @@ body {
         color: #000000 !important;
     }
 
+    .print-quote-total-box,
+    .print-quote-total-box * {
+        background-color: #ffffff !important;
+        color: #000000 !important;
+    }
+
+    .print-quote-total-box {
+        border: 2px solid #000000 !important;
+    }
+
     .print-page {
         width: 100% !important;
         box-sizing: border-box !important;

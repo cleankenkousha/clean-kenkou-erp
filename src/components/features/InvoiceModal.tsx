@@ -14,9 +14,18 @@ import {
   Clock,
   Sparkles,
 } from 'lucide-react'
-import { Job, Invoice } from '../../types'
+import { Job } from '../../types'
 import { Button, Input } from '../ui'
 import { supabase } from '../../lib/supabase'
+import { parseJobNotes } from '../../lib/jobNotes'
+
+// ローカルタイム（JST）基準で YYYY-MM-DD を取得
+const formatLocalDate = (d: Date): string => {
+  const y = d.getFullYear()
+  const m = String(d.getMonth() + 1).padStart(2, '0')
+  const day = String(d.getDate()).padStart(2, '0')
+  return `${y}-${m}-${day}`
+}
 
 export interface InvoiceModalProps {
   job: Job | null
@@ -46,16 +55,7 @@ export const InvoiceModal: React.FC<InvoiceModalProps> = ({
 
   // 案件のnotesから見積もり金額(grandTotal)を解析
   const quoteGrandTotal = useMemo(() => {
-    if (!job?.notes) return 0
-    try {
-      const parsed = JSON.parse(job.notes)
-      if (typeof parsed.grandTotal === 'number') {
-        return parsed.grandTotal
-      }
-    } catch {
-      // JSONでない場合は0
-    }
-    return 0
+    return parseJobNotes(job?.notes).quoteGrandTotal
   }, [job])
 
   // モーダルオープン時に既存の請求データを取得または初期値を設定
@@ -66,11 +66,11 @@ export const InvoiceModal: React.FC<InvoiceModalProps> = ({
     setIsLoading(true)
     setError(null)
 
-    const todayStr = new Date().toISOString().split('T')[0]
-    // 支払期日は標準で翌月末
+    const todayStr = formatLocalDate(new Date())
+    // 支払期日は標準で翌月末（ローカル日付基準）
     const nextMonth = new Date()
     nextMonth.setMonth(nextMonth.getMonth() + 2, 0)
-    const defaultDueDate = nextMonth.toISOString().split('T')[0]
+    const defaultDueDate = formatLocalDate(nextMonth)
 
     const fetchInvoiceData = async () => {
       try {
@@ -83,12 +83,16 @@ export const InvoiceModal: React.FC<InvoiceModalProps> = ({
         if (!isMounted) return
 
         if (!fetchErr && data) {
-          // 既存請求データあり
-          setAmount(Number(data.amount) || quoteGrandTotal || 0)
+          // 既存請求データあり（¥0も正しく保持）
+          const savedAmount =
+            data.amount !== null && data.amount !== undefined
+              ? Number(data.amount)
+              : quoteGrandTotal || 0
+          setAmount(Number.isNaN(savedAmount) ? 0 : savedAmount)
           setBillingStatus(data.billing_status || 'unissued')
-          setIssuedAt(data.issued_at ? data.issued_at.split('T')[0] : todayStr)
-          setDueDate(data.due_date ? data.due_date.split('T')[0] : defaultDueDate)
-          setPaidAt(data.paid_at ? data.paid_at.split('T')[0] : '')
+          setIssuedAt(data.issued_at ? formatLocalDate(new Date(data.issued_at)) : todayStr)
+          setDueDate(data.due_date ? formatLocalDate(new Date(data.due_date)) : defaultDueDate)
+          setPaidAt(data.paid_at ? formatLocalDate(new Date(data.paid_at)) : '')
           setInvoiceNumber(data.invoice_number || `INV-${job.id.slice(0, 8).toUpperCase()}`)
           setVarianceReason(data.variance_reason || '')
           setNotes(data.notes || '')
@@ -136,16 +140,22 @@ export const InvoiceModal: React.FC<InvoiceModalProps> = ({
     setIsSaving(true)
     setError(null)
 
-    const invoicePayload: Partial<Invoice> = {
+    const invoicePayload: Record<string, any> = {
       job_id: job.id,
       amount: Number(amount) || 0,
       billing_status: billingStatus,
-      issued_at: issuedAt ? `${issuedAt}T00:00:00Z` : null,
-      due_date: dueDate ? `${dueDate}T00:00:00Z` : null,
-      paid_at: billingStatus === 'paid' ? (paidAt ? `${paidAt}T00:00:00Z` : new Date().toISOString()) : null,
-      invoice_number: invoiceNumber.trim() || undefined,
-      variance_reason: varianceReason.trim() || undefined,
-      notes: notes.trim() || undefined,
+      issued_at: issuedAt ? `${issuedAt}T00:00:00+09:00` : null,
+      due_date: dueDate ? `${dueDate}T00:00:00+09:00` : null,
+      paid_at:
+        billingStatus === 'paid'
+          ? paidAt
+            ? `${paidAt}T00:00:00+09:00`
+            : `${formatLocalDate(new Date())}T00:00:00+09:00`
+          : null,
+      invoice_number: invoiceNumber.trim() || null,
+      variance_reason: varianceReason.trim() || null,
+      notes: notes.trim() || null,
+      updated_at: new Date().toISOString(),
     }
 
     try {
@@ -155,19 +165,24 @@ export const InvoiceModal: React.FC<InvoiceModalProps> = ({
         .upsert(invoicePayload, { onConflict: 'job_id' })
 
       if (invoiceErr) {
-        // テーブルが存在しない場合などのフォールバック: jobs.notes にバックアップ保存
-        console.warn('invoices table upsert failed, falling back to job notes:', invoiceErr)
+        throw new Error(`請求データの保存に失敗しました: ${invoiceErr.message}`)
       }
 
-      // 2. 案件ステータスの自動追従 (入金済みならcompleted、請求書発行済ならbilled)
-      const nextJobStatus = billingStatus === 'paid' ? 'completed' : 'billed'
-      await supabase
-        .from('jobs')
-        .update({
-          status: nextJobStatus,
-          updated_at: new Date().toISOString(),
-        })
-        .eq('id', job.id)
+      // 2. 案件ステータスの追従 (入金済みなら completed、請求書発行済なら billed、未請求時は元ステータスを維持)
+      if (billingStatus === 'paid' || billingStatus === 'issued') {
+        const nextJobStatus = billingStatus === 'paid' ? 'completed' : 'billed'
+        const { error: jobUpdateErr } = await supabase
+          .from('jobs')
+          .update({
+            status: nextJobStatus,
+            updated_at: new Date().toISOString(),
+          })
+          .eq('id', job.id)
+
+        if (jobUpdateErr) {
+          throw new Error(`案件ステータスの更新に失敗しました: ${jobUpdateErr.message}`)
+        }
+      }
 
       onSuccess()
       onClose()
@@ -180,7 +195,10 @@ export const InvoiceModal: React.FC<InvoiceModalProps> = ({
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/50 backdrop-blur-sm p-4 overflow-y-auto">
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/50 backdrop-blur-sm p-4 overflow-y-auto"
+      onClick={(e) => e.stopPropagation()}
+    >
       <div className="bg-white rounded-2xl shadow-2xl border border-slate-200 w-full max-w-xl overflow-hidden animate-in fade-in zoom-in-95 duration-150 my-6">
         {/* Header */}
         <div className="px-6 py-4 border-b border-slate-200 flex items-center justify-between bg-gradient-to-r from-slate-900 to-slate-800 text-white">
@@ -309,8 +327,12 @@ export const InvoiceModal: React.FC<InvoiceModalProps> = ({
                     min="0"
                     step="1"
                     className="pl-7 text-base font-bold"
-                    value={amount || ''}
-                    onChange={(e) => setAmount(Number(e.target.value) || 0)}
+                    value={amount}
+                    onFocus={(e) => e.target.select()}
+                    onChange={(e) => {
+                      const v = e.target.value
+                      setAmount(v === '' ? 0 : Number(v) || 0)
+                    }}
                     placeholder="40000"
                     required
                   />

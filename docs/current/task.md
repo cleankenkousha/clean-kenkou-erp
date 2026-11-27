@@ -1,86 +1,83 @@
 # Clean KENKOU ERP - 作業進捗および次回残課題ログ
 
-**最終更新日時**: 2026-11-11 16:55
+**最終更新日時**: 2026-11-27 16:50
 
-**現在のバージョン**: v1.2.3
+**現在のバージョン**: v1.3.0
 
 **ステータス**:
-見積書作成画面における「搬出環境・作業難易度」の選択項目見直し（「エレベーター」を「運び出し（あり・なし）」へ変更し、「あり」の場合のみ総㎥連動の搬出作業費を算定）および不要な「運搬作業費」入力欄の廃止を実装（v1.2.2）。
-さらに、品目の重量・数量等の数値入力欄で最小値「1」が消えず入力しづらかった操作性課題の解消（Backspaceでの空欄クリア許可・クリック時の自動全選択）と、印刷プレビュー時に重量制（`kg`）品目の単位が引き継がれず想定体積が過大表示されていた不具合の修正を完了し、本番デプロイ済（v1.2.3）。
+全システムのソースコードおよび本番 Supabase DB の網羅監査を実施し、ユーザー報告の不具合 **C-1（案件詳細モーダル内での電子サイン・請求入力クリック時に親モーダルごと閉じる問題）** を含む全 **Critical バグ（C-1〜C-12）** および業務影響の大きい **High バグ** を一括修正し、本番ビルド・DBマイグレーションを完了（v1.3.0）。
 
 ---
 
-## 1. 本日の作業サマリー（2026-11-11）
+## 1. 本日の作業サマリー（2026-11-27 / v1.3.0）
 
-### 1-1. 見積書作成画面の「運び出し（あり・なし）」変更・総㎥連動条件化および「運搬作業費」削除（v1.2.2）【完了】
+### 1-1. Critical バグ一括解消（C-1〜C-12）【完了】
 
-* **目的**: 現場の実態に即した見積算定ルールへ整理するため、見積作成画面（`MobileQuoteModal.tsx`）の搬出環境設定と費用項目を改修。
-* **対応**:
-  1. **「エレベーター」を「運び出し（あり・なし）」へ変更**:
-     * 「3. 搬出環境・作業難易度」の選択欄を「運び出し」に変更。
-     * **「あり (総㎥連動を適用)」** 選択時のみ、`総体積(m³) × 作業費単価(¥1,500/m³)` を自動算定・加算し、**「なし (運び出し作業なし)」** 選択時は搬出作業費を `¥0` とするロジックへ変更。
-     * 作業階数（2階〜5階以上）を選択した場合は階段手下ろし作業費が自動加算されるよう整理。
-  2. **「運搬作業費」入力欄の廃止**:
-     * 品目明細下部にあった「運搬作業費 (円)」入力欄および概算計算内訳の「運搬作業基本費」を削除し、「諸経費 (円)」のみのシンプルな構成に整理。
-  3. **印刷プレビュー・業務ルール設計書の同期**:
-     * `PrintQuoteArea.tsx`、`QuotePrintModal.tsx`、`Jobs.tsx` の印刷表記を「作業階数 / 運び出し（運び出しあり・なし）」へ統一し、`docs/03_Business_Rules_Book.md` の第3章3.3を更新。
+1. **C-1（親モーダル強制終了バグ）**:
+   * `TaskDetailModal.tsx` 内の `SignaturePadModal` と `InvoiceModal` を親の `.modal-overlay` (`onClick={onClose}`) の外側の兄弟要素へ移動し、両子モーダルにも `stopPropagation()` を追加。サインパッドや請求入力内でのクリック・入力で案件詳細が閉じる不具合を完全解消。
+2. **C-2・C-3（`jobs.notes` 相互破壊 ＆ 電子サイン未保存・未印字）**:
+   * 共通ヘルパー `src/lib/jobNotes.ts`（`parseJobNotes` / `mergeJobNotes`）を新設し、受付メモ・工程進捗（`stepsData`）・電子サイン（`signature`）・概算見積JSON（`quoteData`）を互いに破壊せずマージ保存するよう `Dashboard.tsx`・`Jobs.tsx`・`Schedule.tsx`・`MobileQuoteModal.tsx` を全面改修。
+   * 保存時・印刷時の `signature` 欠落（`Dashboard` / `Jobs` / `Schedule` / `MobileQuoteModal`）を解消。
+3. **C-4・C-5・C-6（スケジュール画面の9時間ズレ・連動詳細破綻・架空デモ混入）**:
+   * `Schedule.tsx` の `TIMESTAMPTZ` 文字列分割（UTC）による9時間ズレを、ローカル時刻変換ヘルパー（`getLocalDateStr` / `getLocalTimeStr`）へ統一。
+   * スケジュールから開く `TaskDetailModal` の読込・保存・論理キャンセル（物理削除の誤爆廃止）・指示書印刷（`PrintArea` 配置）を修正。
+   * `useStaffSchedules.ts` の初期デモ予定（山田太郎・高森物産）自動生成と `localStorage` 和集合マージを廃止し、DB を唯一の正に統一。
+4. **C-7・C-8（React 18 バッチ更新による DB 保存スキップ）**:
+   * `usePriceMaster.ts`（`updateItemPrice`, `moveItemUp`, `moveItemDown`）および `Dashboard.tsx`（`handleTaskMove` カンバン D&D）において、`setState` updater 内で値を代入して直後に同期参照していた不具合を解消。あわせて `price_master` に `volume` / `sort_order` 列を追加マイグレーション。
+5. **C-9・C-11（請求保存エラー握り潰し・詳細画面からの乖離欠落・キャンセル状態保存不能）**:
+   * `InvoiceModal.tsx` で `invoices.upsert`・`jobs.update` のエラーを厳格に検証し、「未請求 (`unissued`)」で勝手に `billed` へ進む不具合を修正（日付の UTC 1日ズレ・`¥0` 入力・メモ空更新も修正）。
+   * `TaskDetailModal.tsx` から `InvoiceModal` へ `rawNotes` を引き渡して事前見積乖離を有効化し、入金完了時の親画面リフェッチを連携。また「失注・キャンセル」選択時の履歴消去・保存巻き戻りを解消。
+6. **C-10（スタッフ削除時の外部キー制約エラー・ロールバック欠如）**:
+   * `staff_schedules_created_by_fkey` に `ON DELETE SET NULL` を適用する DB マイグレーションを実施し、`useProfiles.ts` の `deleteStaff` で全FK整理と失敗時ロールバックを実装。
+7. **C-12（`QuotePrintModal.tsx` Hooks順序違反＆非表示）**:
+   * `useEffect` を early return の前に移動し、通常画面でモーダルが正常表示されるよう出力先・クラス構成を修正。
 
-### 1-2. 見積数値入力欄の操作性改善と印刷プレビューの想定体積計算バグ修正（v1.2.3）【完了】
+### 1-2. 主要 High バグ解消【完了】
 
-* **事象1（数値入力欄）**: 見積作成画面で品目の重量（数値）や数量を入力する際、Backspace で消しても最小値 `1` が消えないため、`5` を入力すると `15` になってしまい、PC操作時にカーソル移動して `1` を消す手間が発生していた。
-* **原因1 & 対応**: `onChange` 内の `|| 1` により空欄時に即座に `1` が復元されていたため、空欄（クリア）状態を許容するよう変更。あわせて全数値入力欄（重量/数量・体積・単価・特殊作業費・諸経費）に `onFocus={(e) => e.target.select()}` を設定し、クリックした瞬間に既存の数値が全選択されそのまま上書き入力できるよう改善。
-* **事象2（印刷プレビューの想定体積不整合）**: 見積作成画面では合計概算体積が `0.6m³` なのに、印刷プレビューでは明細の想定体積が `20.5m³` など異常に大きく表示されていた。
-* **原因2 & 対応**: `MobileQuoteModal.tsx` の「印刷プレビュー」ボタンおよび `Jobs.tsx` の見積データ変換処理で品目の単位（`unit`）が引き渡されておらず、重量制（`kg`）品目が個数制（`重量 × 1点あたり体積`）として掛け算されていたため、`unit` を確実に引き渡し、印刷側（`PrintQuoteArea.tsx` / `QuotePrintModal.tsx`）でも見積画面と同一の体積算出ロジック（`kg` / `㎏` / `m3` / `㎥` 正規化対応）に統一。
+* **見積・印刷 (`MobileQuoteModal`, `PrintQuoteArea`, `index.css`, `Jobs`)**: `kg` 品目の体積 `0.5m³` 張り付き解消（動的重量連動）、印刷見積の英語パックキー表記（`light` 等）修正・諸経費＆割引表示追加、印刷時黒背景ボックスの白地黒文字化、見積未作成案件での架空 ¥18,000 印刷をブロック。
+* **ステータス・集計・UI (`statusMapping`, `useSalesData`, `SalesAnalytics`, `Jobs`, `Dashboard`, `KanbanBoard`, `CustomerModal`, `SignaturePadModal`, `ExcelImportModal`, `ExportModal`)**:
+  * `completed`/`pending` の詳細保存時先祖返り防止。
+  * `useSalesData` からキャンセル案件を除外・未請求完了案件を算入・`quoteAmount === 0` の差額ソート＆負数表記修正。
+  * `Jobs` の KPI・タブ二重計上（`collected`/`billed`）解消。
+  * `Dashboard` のフィルタータブ CSS クラス修正・`KanbanBoard` の `<DragOverlay>` ID 二重登録解消＆カード短縮番号表示。
+  * `CustomerModal` の空欄保存＆顧客名欠落修正。
+  * `SignaturePadModal` の1タップ白紙署名防止＆文字列渡り時の404防止。
+  * `ExcelImportModal` の2回目再利用リセット＆1行ファイル/日程確定/`備考`列対応、`ExportModal` の `scheduled` 追加＆JST基準年月判定。
 
 ---
 
-## 2. 前回までの作業サマリー（アーカイブ）
-
-* **2026-11-04（v1.2.0〜v1.2.1）**:
-  * スタッフ氏名変更・削除時に初期データ（`DEFAULT_PROFILES`）が自動復活するバグを修正し、「木下りな」様から「桑村りな」様（`kuwamura@kenkou.co.jp`）への名簿更新・DB整理を完了（v1.2.0）。
-  * テスト用共通アカウント（`test@example.com`）の完全削除（使用不可化）と、「担当者・スタッフ管理」タブの管理者（`admin`）限定表示化を実装（v1.2.1）。
-* **2026-10-30（v1.1.8〜v1.1.9）**:
-  * Supabase 一時停止からの復旧、Edge Function `manage-staff-auth` による直接パスワード発行、ログイン画面のワンタップ選択、受付担当者の自動セット、`activity_logs` 履歴タブを実装（v1.1.8）。
-  * 全テーブルの `anon` 許可ポリシー撤廃（`authenticated` 限定化）、Edge Functions の `verify_jwt: true` 化、不要テーブル（`course_records` / `course_photos`）の分離・削除完了（v1.1.9）。
-
----
-
-## 3. システムの現状
+## 2. システムの現状
 
 | 機能・コンポーネント | 状況 | 備考 |
 | :--- | :--- | :--- |
-| データベース（Supabase PostgreSQL） | 稼働中（保護済） | 全9テーブル `authenticated` 限定 RLS、不要・重複レコード整理済 |
-| 認証アカウント（Supabase Auth） | **個人別運用へ移行済** | `test@example.com` 完全削除済。`千葉正和`様・`桑村りな`様 設定済 |
-| Edge Function `manage-staff-auth` | **Version 2 稼働中** | `verify_jwt: true` ＋ 管理者（`admin`）ロール検証適用済 |
-| Edge Function `gemini-analyze` | **Version 11 稼働中** | `verify_jwt: true`、最大20枚対応、複数部屋重複制御 |
-| フロントエンド（Netlify本番環境） | **v1.2.3 ビルド・デプロイ済** | 運び出し有無による総㎥連動、運搬作業費廃止、数値入力＆印刷体積バグ修正済 |
+| データベース（Supabase PostgreSQL） | 稼働中（更新済） | `staff_schedules_created_by_fkey` (`ON DELETE SET NULL`)、`price_master.volume/sort_order` 追加済 |
+| Edge Function `manage-staff-auth` | Version 2 稼働中 | `verify_jwt: true` ＋ 管理者検証済 |
+| Edge Function `gemini-analyze` | Version 11 稼働中 | ※Phase 2 でモデルリスト・応答検証の改修予定 |
+| フロントエンド（Netlify 本番環境） | **v1.3.0 ビルド・デプロイ済** | C-1〜C-12 および主要 High バグ修正反映済 |
 
 ---
 
-## 4. 次回やるべき残課題・未対応
+## 3. 次回（Phase 2）で対応予定の残課題・検証項目
 
-### 優先度：高（業務運用・AI精度改善）
+### 優先度：高（Phase 2 バグ修正予定）
 
-1. **残りスタッフの個別パスワード発行と配布**
-   * **内容**: 管理者（`chiba@kenkou.co.jp`）でログインし、「設定 ＞ 担当者・スタッフ管理（管理者専用）」から、まだパスワード未設定のスタッフ（川上様、廣田様、原口様、古川様、矢部川様、中原様、宮本様）のパスワードを設定して配布する。
-   * **補足**: 不要なテスト登録スタッフ（`宮本流`、`Jimuin`）があれば、スタッフ管理画面のゴミ箱ボタンから削除する。
-2. **同一部屋・複数アングル撮影時における特定品目（テレビ、座卓等）の重複カウント抑制**
-   * **現状の課題**: 同一の部屋を別アングルから撮影した複数枚の写真において、同一のテレビや座卓を複数台として重複カウントしてしまうケースがある。
-   * **対策方針**: プロンプトにおける「同一部屋判定ロジック（壁・床・配置の特徴一致による空間一意性ルール）」の微調整。
+1. **AI見積 Edge Function (`gemini-analyze/index.ts`) & クライアント (`gemini.ts`) の修正（H-4）**
+   * 存在しない先頭2モデル名（`gemini-3.5-flash-lite` 等）を実在モデル（`gemini-2.5-flash` 等）へ修正し404遅延・フォールバック不全を解消。
+   * 思考パート (`thought: true`) スキップ・要素スキーマ検証・`!response.ok` チェック・21枚以上時の警告表示を追加。
+2. **設定画面（`Settings.tsx`）の管理者アカウント・スタッフ管理強化（H-14）**
+   * `handleAddStaff` の Edge Function エラー・6文字未満パスワード検証、`handleSaveStaffAccount` の詳細エラー抽出＆タイマー整理、最後の管理者の降格・削除ガード、削除スタッフの `auth.users` 無効化、管理者の初期タブ遷移競合対策。
+   * 単価編集 `prompt` のカンマ付き数値対応（`3,500` → `¥3` 防止）。
+3. **受付・ログイン・PWA・スケジュール細部の改善（H-10, H-16 等）**
+   * `JobReceptionForm.tsx` / `NewTaskModal.tsx`: 法人名括弧（`（株）` 等）欠損防止、未割当保存許可、顧客サジェスト再選択時の旧電話・住所残留解消、非同期完了前の即閉じ防止、`NewTaskModal` 担当者欄の改善。
+   * `Login.tsx`: ハードコードの `DEFAULT_PROFILES` ではなく `useProfiles` / DB と連携して新規登録スタッフ（田中淳様等）も選択可能にする。
+   * `PwaInstallControl.tsx` / `register-sw.js`: `beforeinstallprompt` の早期捕捉復元・キャンセル後再クリック時の破棄処理・`?v=1.2.5` 古い参照除去。
+   * `Schedule.tsx`: モーダル内の日付入力欄追加・送信中フラグ・開始/終了時刻逆転検証・`19時以降`予定表示改善。
 
-### 優先度：中（セキュリティ・保守）
+### 優先度：中（DB・ドキュメント・保守）
 
-1. **単価マスタ・自社基本情報の DB レベルでの更新権限分離（必要に応じた検討）**
-   * **内容**: 現在 `company_settings` / `price_master` はログイン済みスタッフ全員が更新可能（現場からの単価調整等を考慮）。もし管理者のみに限定したい場合は、RLS の `UPDATE / DELETE` 条件および画面タブを `admin` ロールのみに絞る。
-2. **案件ステータス変更・見積保存・請求発行時の操作履歴（`activity_logs`）記録対象の拡大**
-   * **内容**: 現在は「ログイン」「ログアウト」「新規受付登録」「アカウント設定」を自動記録中。必要に応じて「見積確定」「回収完了」「請求書発行」なども履歴タブに記録するよう拡張する。
-
-### 優先度：低
-
-1. **依存パッケージ `xlsx`（SheetJS）の整理**
-   * CSV 出力がメインで Excel 読み込みを行っていない場合、不要であれば `xlsx` パッケージの削除または代替ライブラリへの置き換えで `npm audit` 警告をゼロにする。
-2. **Gemini 予備モデルリストの定期メンテナンス**
-   * `supabase/functions/gemini-analyze/index.ts` 内のフォールバック候補モデルリストを最新の安定稼働モデルに保つ。
+1. **Supabase リポジトリ SQL 群（`schema.sql` 等）の最新化と `daily_report_*` テーブルのアクセス方針確認**
+   * 本番 DB に同居している D日報用 `daily_report_*` 6テーブルの `{anon, authenticated}` RLS 方針を D日報側と確認する。
+2. **運用タスク**: 未設定スタッフの個別パスワード発行（`設定 ＞ 担当者・スタッフ管理`）。
 
 ---
 

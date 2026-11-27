@@ -1,4 +1,4 @@
-import React, { useState } from 'react'
+import React, { useState, useEffect, useRef } from 'react'
 import { X, FileSpreadsheet, Upload, CheckCircle2, AlertCircle, RefreshCw } from 'lucide-react'
 import * as XLSX from 'xlsx'
 import { supabase } from '../../lib/supabase'
@@ -29,7 +29,8 @@ const mapStatusToEnum = (raw?: string): JobStatus => {
   const s = raw.trim()
   if (s.includes('未着手') || s.includes('受付')) return 'received'
   if (s.includes('見積') || s.includes('検討')) return 'quoting'
-  if (s.includes('手配') || s.includes('調整') || s.includes('確定')) return 'arranged'
+  if (s.includes('確定')) return 'scheduled'
+  if (s.includes('手配') || s.includes('調整')) return 'arranged'
   if (s.includes('実施') || s.includes('回収')) return 'collected'
   if (s.includes('請求')) return 'billed'
   if (s.includes('完了')) return 'completed'
@@ -43,6 +44,7 @@ export const ExcelImportModal: React.FC<ExcelImportModalProps> = ({
   onClose,
   onImportSuccess,
 }) => {
+  const fileInputRef = useRef<HTMLInputElement>(null)
   const [parsedRows, setParsedRows] = useState<ParsedRow[]>([])
   const [fileName, setFileName] = useState<string | null>(null)
   const [isLoading, setIsLoading] = useState(false)
@@ -50,6 +52,21 @@ export const ExcelImportModal: React.FC<ExcelImportModalProps> = ({
   const [isDragging, setIsDragging] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [importResult, setImportResult] = useState<{ count: number } | null>(null)
+
+  // モーダルが閉じられた際に全状態をリセット（2回目以降の再取り込みを確実化）
+  useEffect(() => {
+    if (!isOpen) {
+      setParsedRows([])
+      setFileName(null)
+      setError(null)
+      setImportResult(null)
+      setIsImporting(false)
+      setIsLoading(false)
+      if (fileInputRef.current) {
+        fileInputRef.current.value = ''
+      }
+    }
+  }, [isOpen])
 
   if (!isOpen) return null
 
@@ -74,15 +91,15 @@ export const ExcelImportModal: React.FC<ExcelImportModalProps> = ({
         throw new Error('有効なワークシートが見つかりませんでした')
       }
 
-      // 二次元配列として取得 (2行目がヘッダーの可能性)
+      // 二次元配列として取得 (1行目または2行目がヘッダー)
       const rawData = XLSX.utils.sheet_to_json<any[]>(worksheet, { header: 1 })
 
-      if (rawData.length < 3) {
+      if (rawData.length < 2) {
         throw new Error('データ行が見つかりません')
       }
 
       // ヘッダー行の特定 (2行目または1行目から「顧客名」などの列インデックスを検索)
-      let headerRowIndex = 1 // 2行目がデフォルト
+      let headerRowIndex = 0 // 1行目がデフォルト
       let colIdx = {
         managementNo: 0, // A列
         receivedDate: 1, // B列
@@ -105,7 +122,7 @@ export const ExcelImportModal: React.FC<ExcelImportModalProps> = ({
           headerRowIndex = r
           colIdx.customerName = custIndex
           colIdx.managementNo = row.findIndex(
-            (c) => typeof c === 'string' && c.includes('管理番号')
+            (c) => typeof c === 'string' && (c.includes('管理番号') || c.includes('管理コード'))
           )
           colIdx.receivedDate = row.findIndex(
             (c) => typeof c === 'string' && c.includes('受付日')
@@ -117,7 +134,7 @@ export const ExcelImportModal: React.FC<ExcelImportModalProps> = ({
             (c) => typeof c === 'string' && (c.includes('ステータス') || c.includes('状態'))
           )
           colIdx.notes = row.findIndex(
-            (c) => typeof c === 'string' && c.includes('メモ')
+            (c) => typeof c === 'string' && (c.includes('メモ') || c.includes('備考'))
           )
           break
         }
@@ -249,12 +266,21 @@ export const ExcelImportModal: React.FC<ExcelImportModalProps> = ({
           noteCombined = `[管理番号: ${row.managementNo}] ${noteCombined}`.trim()
         }
 
-        return {
+        const payload: Record<string, any> = {
           customer_id: custId,
           title: row.title,
           status: row.statusMapped,
           notes: noteCombined || null,
         }
+
+        if (row.receivedDate) {
+          const parsedRec = new Date(row.receivedDate.replace(/\//g, '-'))
+          if (!isNaN(parsedRec.getTime())) {
+            payload.received_at = parsedRec.toISOString()
+          }
+        }
+
+        return payload
       })
 
       const { error: jobInsertErr } = await supabase
@@ -344,6 +370,7 @@ export const ExcelImportModal: React.FC<ExcelImportModalProps> = ({
                 }`}
               >
                 <input
+                  ref={fileInputRef}
                   type="file"
                   accept=".xlsx, .xlsm, .xls"
                   onChange={handleFileChange}

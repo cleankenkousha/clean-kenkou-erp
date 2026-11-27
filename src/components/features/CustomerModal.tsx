@@ -9,7 +9,7 @@ export interface CustomerModalProps {
   customer: Customer | null
   isOpen: boolean
   onClose: () => void
-  onSave: (data: { name: string; phone?: string; address?: string }) => Promise<boolean | Customer | null>
+  onSave: (data: { name: string; phone?: string | null; address?: string | null }) => Promise<boolean | Customer | null>
 }
 
 export const CustomerModal: React.FC<CustomerModalProps> = ({
@@ -31,19 +31,24 @@ export const CustomerModal: React.FC<CustomerModalProps> = ({
   const [isInvoiceModalOpen, setIsInvoiceModalOpen] = useState(false)
 
   useEffect(() => {
+    if (!isOpen) return
+    let isMounted = true
+
     if (customer) {
       setName(customer.name || '')
       setPhone(customer.phone || '')
       setAddress(customer.address || '')
+      setCustomerJobs([])
 
-      // 編集モード時: この顧客の過去案件履歴を取得
+      // 編集モード時: この顧客の過去案件履歴（顧客名リレーション含む）を取得
       setIsLoadingJobs(true)
       supabase
         .from('jobs')
-        .select('*')
+        .select('*, customers (name, phone, address)')
         .eq('customer_id', customer.id)
         .order('created_at', { ascending: false })
         .then(({ data, error: fetchErr }) => {
+          if (!isMounted) return
           setIsLoadingJobs(false)
           if (!fetchErr && data) {
             setCustomerJobs(data as Job[])
@@ -56,6 +61,10 @@ export const CustomerModal: React.FC<CustomerModalProps> = ({
       setCustomerJobs([])
     }
     setError(null)
+
+    return () => {
+      isMounted = false
+    }
   }, [customer, isOpen])
 
   if (!isOpen) return null
@@ -73,12 +82,14 @@ export const CustomerModal: React.FC<CustomerModalProps> = ({
     try {
       const success = await onSave({
         name: name.trim(),
-        phone: phone.trim() || undefined,
-        address: address.trim() || undefined,
+        phone: phone.trim() ? phone.trim() : null,
+        address: address.trim() ? address.trim() : null,
       })
 
       if (success) {
         onClose()
+      } else {
+        setError('保存に失敗しました。入力内容や通信環境をご確認ください。')
       }
     } catch (err: any) {
       setError(err.message || '保存に失敗しました')
@@ -248,7 +259,7 @@ export const CustomerModal: React.FC<CustomerModalProps> = ({
           if (customer) {
             supabase
               .from('jobs')
-              .select('*')
+              .select('*, customers (name, phone, address)')
               .eq('customer_id', customer.id)
               .order('created_at', { ascending: false })
               .then(({ data }) => {

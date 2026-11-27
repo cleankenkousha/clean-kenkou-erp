@@ -273,30 +273,50 @@ export const useProfiles = (): UseProfilesReturn => {
 
   const deleteStaff = useCallback(
     async (id: string): Promise<boolean> => {
-      setProfiles((prev) => {
-        const next = prev.filter((p) => p.id !== id)
-        saveLocalProfiles(next)
-        return next
-      })
+      const previousProfiles = profiles
+      const next = profiles.filter((p) => p.id !== id)
+      setProfiles(next)
+      saveLocalProfiles(next)
+      setError(null)
 
       try {
         if (isUuid(id)) {
-          // 外部キー参照（jobs.assigned_to 等）がある場合は先に null に解除してから削除
-          await supabase.from('jobs').update({ assigned_to: null }).eq('assigned_to', id)
-          await supabase.from('staff_schedules').delete().eq('profile_id', id)
+          // 外部キー参照（jobs.assigned_to / staff_schedules.created_by / staff_schedules.profile_id）を先に解除・整理してから削除
+          const { error: jobErr } = await supabase
+            .from('jobs')
+            .update({ assigned_to: null })
+            .eq('assigned_to', id)
+          if (jobErr) throw new Error(jobErr.message)
 
-          const { error: deleteErr } = await supabase.from('profiles').delete().eq('id', id)
-          if (deleteErr) {
-            console.warn('Supabase delete profile warning:', deleteErr.message)
-            return false
-          }
+          const { error: createdByErr } = await supabase
+            .from('staff_schedules')
+            .update({ created_by: null })
+            .eq('created_by', id)
+          if (createdByErr) throw new Error(createdByErr.message)
+
+          const { error: schedDelErr } = await supabase
+            .from('staff_schedules')
+            .delete()
+            .eq('profile_id', id)
+          if (schedDelErr) throw new Error(schedDelErr.message)
+
+          const { error: deleteErr } = await supabase
+            .from('profiles')
+            .delete()
+            .eq('id', id)
+          if (deleteErr) throw new Error(deleteErr.message)
         }
         return true
       } catch (err: any) {
-        return true
+        console.warn('Supabase delete profile error:', err)
+        // 削除に失敗した場合はローカル状態もロールバック
+        setProfiles(previousProfiles)
+        saveLocalProfiles(previousProfiles)
+        setError(err.message || 'スタッフの削除に失敗しました')
+        return false
       }
     },
-    []
+    [profiles]
   )
 
   useEffect(() => {

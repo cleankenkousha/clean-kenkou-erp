@@ -66,12 +66,27 @@ export const PrintQuoteArea: React.FC<PrintQuoteAreaProps> = ({ quote }) => {
       })
 
   const packLabelMap: Record<string, string> = {
+    light: '軽トラパック (約2.5m³ / ¥18,000)',
+    '2t_short': '2tショートパック (約6.0m³ / ¥45,000)',
+    '2t_long': '2tロングパック (約10.0m³ / ¥75,000)',
+    multi: '2tロング超 (複数台対応)',
     軽トラパック: '軽トラパック (約2.5m³)',
     '1.5tトラックパック': '1.5tトラックパック (約5.0m³)',
     '2tトラックパック': '2tトラックパック (約7.0m³)',
     '2tロングトラックパック': '2tロングトラックパック (約10.0m³)',
     none: 'パック適用なし (単品積み上げ算定)',
   }
+
+  const packPriceMap: Record<string, number> = {
+    light: 18000,
+    '2t_short': 45000,
+    '2t_long': 75000,
+  }
+  const appliedPackPrice = quote.appliedPack ? packPriceMap[quote.appliedPack] : undefined
+  const packDiscountAmount =
+    appliedPackPrice !== undefined && quote.itemsSubtotal > appliedPackPrice
+      ? quote.itemsSubtotal - appliedPackPrice
+      : 0
 
   return ReactDOM.createPortal(
     <div id="printQuoteArea" className="print-container">
@@ -116,7 +131,7 @@ export const PrintQuoteArea: React.FC<PrintQuoteAreaProps> = ({ quote }) => {
             {quote.customerAddress && <p className="text-slate-600">住所: {quote.customerAddress}</p>}
           </div>
 
-          <div className="bg-slate-900 text-white p-3 rounded-lg flex flex-col justify-center items-end">
+          <div className="print-quote-total-box bg-slate-900 text-white p-3 rounded-lg flex flex-col justify-center items-end">
             <p className="text-[10px] text-slate-300">概算御見積合計金額 (税込)</p>
             <p className="text-2xl font-black text-emerald-400">
               ¥{quote.grandTotal.toLocaleString()} <span className="text-xs text-white">円</span>
@@ -164,7 +179,7 @@ export const PrintQuoteArea: React.FC<PrintQuoteAreaProps> = ({ quote }) => {
                       {item.quantity} {item.unit || ''}
                     </td>
                     <td className="py-1.5 px-2 text-right">
-                      ¥{item.price.toLocaleString()}{isKg ? '/kg' : ''}
+                      ¥{item.price.toLocaleString()}{isKg ? '/kg' : isM3 ? '/m³' : ''}
                     </td>
                     <td className="py-1.5 px-2 text-right">{displayVol.toFixed(1)} m³</td>
                     <td className="py-1.5 px-2 text-right font-bold">
@@ -201,10 +216,22 @@ export const PrintQuoteArea: React.FC<PrintQuoteAreaProps> = ({ quote }) => {
             ) : null}
             {quote.disassemblyFee ? (
               <p className="flex justify-between text-indigo-900 font-medium">
-                <span>家具分解・作業費:</span>
+                <span>特殊作業費 (エアコン・解体等):</span>
                 <span>+¥{quote.disassemblyFee.toLocaleString()}</span>
               </p>
             ) : null}
+            {quote.expenses ? (
+              <p className="flex justify-between text-amber-900 font-medium">
+                <span>諸経費:</span>
+                <span>+¥{quote.expenses.toLocaleString()}</span>
+              </p>
+            ) : null}
+            {packDiscountAmount > 0 && (
+              <p className="flex justify-between text-emerald-800 font-bold">
+                <span>定額パック割引:</span>
+                <span>-¥{packDiscountAmount.toLocaleString()}</span>
+              </p>
+            )}
             <p className="flex justify-between border-t border-slate-300 pt-1 font-bold text-emerald-800">
               <span>適用パック:</span>
               <span>{packLabelMap[quote.appliedPack || 'none'] || quote.appliedPack}</span>

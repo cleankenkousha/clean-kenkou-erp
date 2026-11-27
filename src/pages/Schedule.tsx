@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react'
+import React, { useState, useMemo, useEffect } from 'react'
 import { Link } from 'react-router-dom'
 import {
   Calendar as CalendarIcon,
@@ -24,9 +24,25 @@ import { StaffSchedule, ScheduleType } from '../types'
 import { Button, Input } from '../components/ui'
 import { TaskDetailModal } from '../components/features/TaskDetailModal'
 import { MobileQuoteModal, InitialQuoteData } from '../components/features/MobileQuoteModal'
+import { PrintArea, PrintTaskData } from '../components/features/PrintArea'
 import { useJobs } from '../hooks/useJobs'
-import { mapJobStatusToLane } from '../lib/statusMapping'
-import { supabase } from '../lib/supabase'
+import { mapJobStatusToLane, mapLaneToJobStatus } from '../lib/statusMapping'
+import { parseJobNotes, mergeJobNotes } from '../lib/jobNotes'
+
+// TIMESTAMPTZ（UTC含む）を端末ローカル（JST）の日付・時刻文字列へ正確に変換
+const getLocalDateStr = (iso: string): string => {
+  if (!iso) return ''
+  const d = new Date(iso)
+  if (isNaN(d.getTime())) return iso.split('T')[0] || ''
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
+}
+
+const getLocalTimeStr = (iso: string): string => {
+  if (!iso) return ''
+  const d = new Date(iso)
+  if (isNaN(d.getTime())) return iso.split('T')[1]?.slice(0, 5) || ''
+  return `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`
+}
 
 // タイムラインの表示時間帯（8:00 〜 19:00）
 const START_HOUR = 8
@@ -130,6 +146,23 @@ export const Schedule: React.FC = () => {
   const [isQuoteOpen, setIsQuoteOpen] = useState(false)
   const [quoteInitialData, setQuoteInitialData] = useState<InitialQuoteData | null>(null)
 
+  // 指示書印刷データ
+  const [printTask, setPrintTask] = useState<PrintTaskData | null>(null)
+
+  useEffect(() => {
+    if (printTask) {
+      const handleAfterPrint = () => setPrintTask(null)
+      window.addEventListener('afterprint', handleAfterPrint)
+      const timer = setTimeout(() => {
+        window.print()
+      }, 250)
+      return () => {
+        clearTimeout(timer)
+        window.removeEventListener('afterprint', handleAfterPrint)
+      }
+    }
+  }, [printTask])
+
   // スケジュール（予定）からAIカメラ写真見積を開くハンドラー
   const handleOpenQuoteFromSchedule = (sch: StaffSchedule) => {
     setQuoteInitialData({
@@ -154,12 +187,9 @@ export const Schedule: React.FC = () => {
     return salesProfiles
   }, [salesProfiles, selectedStaffFilter])
 
-  // 当日のスケジュール一覧
+  // 当日のスケジュール一覧（UTC/JST変換したローカル日付で判定）
   const daySchedules = useMemo(() => {
-    return schedules.filter((s) => {
-      const schDate = s.start_time.split('T')[0]
-      return schDate === selectedDate
-    })
+    return schedules.filter((s) => getLocalDateStr(s.start_time) === selectedDate)
   }, [schedules, selectedDate])
 
   // 日付の前後ナビゲーション
@@ -247,11 +277,17 @@ export const Schedule: React.FC = () => {
 
     const title = appointmentForm.title.trim() || `${appointmentForm.customerName.trim()}様 見積訪問`
 
-    await createAppointmentWithJob({
+    const result = await createAppointmentWithJob({
       ...appointmentForm,
       title,
     })
 
+    if (!result) {
+      alert('見積訪問予約の保存に失敗しました。通信状況や入力内容をご確認ください。')
+      return
+    }
+
+    await refetchJobs()
     setIsAppointmentModalOpen(false)
   }
 
@@ -304,6 +340,9 @@ export const Schedule: React.FC = () => {
 
   return (
     <div className="space-y-4 max-w-[1600px] mx-auto pb-12 font-sans">
+      {/* 指示書印刷用ポータル領域 */}
+      <PrintArea task={printTask} />
+
       {/* 1. ヘッダー＆コントロールバー */}
       <div className="bg-white p-4 md:p-5 rounded-xl border border-border shadow-sm flex flex-col md:flex-row md:items-center justify-between gap-4">
         {/* 左側：タイトル＆日付ナビ */}
@@ -594,8 +633,8 @@ export const Schedule: React.FC = () => {
                           const style = getScheduleStyle(item.start_time, item.end_time)
                           const meta = SCHEDULE_TYPE_LABELS[item.schedule_type] || SCHEDULE_TYPE_LABELS.other
 
-                          const startStr = item.start_time.split('T')[1]?.slice(0, 5) || ''
-                          const endStr = item.end_time.split('T')[1]?.slice(0, 5) || ''
+                          const startStr = getLocalTimeStr(item.start_time)
+                          const endStr = getLocalTimeStr(item.end_time)
 
                           return (
                             <div
@@ -717,7 +756,7 @@ export const Schedule: React.FC = () => {
           <div className="grid grid-cols-1 md:grid-cols-7 gap-3">
             {weekDays.map((day) => {
               const dayItems = schedules.filter((s) => {
-                const sDate = s.start_time.split('T')[0]
+                const sDate = getLocalDateStr(s.start_time)
                 if (sDate !== day.dateStr) return false
                 if (selectedStaffFilter !== 'all') {
                   return s.profile_id === selectedStaffFilter
@@ -776,7 +815,7 @@ export const Schedule: React.FC = () => {
                     ) : (
                       dayItems.map((item) => {
                         const meta = SCHEDULE_TYPE_LABELS[item.schedule_type] || SCHEDULE_TYPE_LABELS.other
-                        const startStr = item.start_time.split('T')[1]?.slice(0, 5) || ''
+                        const startStr = getLocalTimeStr(item.start_time)
                         const staff = profiles.find((p) => p.id === item.profile_id)
 
                         return (
@@ -858,16 +897,21 @@ export const Schedule: React.FC = () => {
               <div className="flex items-center space-x-2 text-slate-700">
                 <Clock className="w-4 h-4 text-slate-500 flex-shrink-0" />
                 <span className="font-semibold">
-                  {selectedSchedule.start_time.split('T')[0]} (
-                  {selectedSchedule.start_time.split('T')[1]?.slice(0, 5)} 〜{' '}
-                  {selectedSchedule.end_time.split('T')[1]?.slice(0, 5)})
+                  {getLocalDateStr(selectedSchedule.start_time)} (
+                  {getLocalTimeStr(selectedSchedule.start_time)} 〜{' '}
+                  {getLocalTimeStr(selectedSchedule.end_time)})
                 </span>
               </div>
 
               <div className="flex items-center space-x-2 text-slate-700">
                 <User className="w-4 h-4 text-slate-500 flex-shrink-0" />
                 <span>
-                  担当者: <strong className="text-slate-900">{selectedSchedule.profiles?.display_name || '未設定'}</strong>
+                  担当者:{' '}
+                  <strong className="text-slate-900">
+                    {selectedSchedule.profiles?.display_name ||
+                      profiles.find((p) => p.id === selectedSchedule.profile_id)?.display_name ||
+                      '未設定'}
+                  </strong>
                 </span>
               </div>
 
@@ -1288,45 +1332,100 @@ export const Schedule: React.FC = () => {
       )}
 
       {/* 7. 連動案件詳細モーダル（TaskDetailModal） */}
-      {activeJob && (
-        <TaskDetailModal
-          task={{
-            id: activeJob.id,
-            customer: activeJob.customers?.name || '名称未設定',
-            tel: activeJob.customers?.phone || '',
-            address: activeJob.customers?.address || '',
-            taskType: activeJob.title || '見積訪問案件',
-            status: mapJobStatusToLane(activeJob.status),
-            receptionDate: activeJob.scheduled_date || activeJob.created_at.split('T')[0],
-            assignedTo: activeJob.assigned_to || '',
-            updatedAt: activeJob.updated_at || activeJob.created_at,
-          }}
-          isOpen={true}
-          onClose={() => setActiveJobDetailId(null)}
-          onSave={async (updated) => {
-            await updateJobDetails(updated.id, {
-              title: updated.taskType,
-              assigned_to: updated.assignedTo || null,
-            })
-            setActiveJobDetailId(null)
-          }}
+      {activeJob && (() => {
+        const parsedNotes = parseJobNotes(activeJob.notes)
+        const assignedProfile = profiles.find((p) => p.id === activeJob.assigned_to)
+        const updaterName = assignedProfile?.display_name || activeJob.profiles?.display_name || ''
 
-          onDelete={async (taskId) => {
-            if (confirm('案件を削除してもよろしいですか？')) {
-              await supabase.from('jobs').delete().eq('id', taskId)
+        return (
+          <TaskDetailModal
+            task={{
+              id: activeJob.id,
+              receptionNo: `#${activeJob.id.slice(0, 4)}`,
+              customer: activeJob.customers?.name || '名称未設定',
+              tel: activeJob.customers?.phone || '',
+              address: activeJob.customers?.address || '',
+              taskType: activeJob.title || '見積訪問案件',
+              status: mapJobStatusToLane(activeJob.status, parsedNotes.stepsData),
+              receptionDate: activeJob.scheduled_date || getLocalDateStr(activeJob.created_at),
+              assignedTo: activeJob.assigned_to || '',
+              updater: updaterName,
+              updatedAt: activeJob.updated_at || activeJob.created_at,
+              stepsData: parsedNotes.stepsData,
+              signature: parsedNotes.signature,
+              rawNotes: activeJob.notes,
+              dbStatus: activeJob.status,
+            }}
+            isOpen={true}
+            onClose={() => setActiveJobDetailId(null)}
+            onSave={async (updated) => {
+              const stepsData = updated.stepsData ? { ...updated.stepsData } : {}
+              if (updated.status === '日程確定') {
+                stepsData.schedule_confirmed = {
+                  status: '済',
+                  memo: stepsData.schedule_confirmed?.memo || '',
+                  worker: stepsData.schedule_confirmed?.worker || updated.updater || '',
+                }
+              }
+
+              const updaterStr = updated.updater?.trim() || ''
+              const matchedStaff = updaterStr
+                ? profiles.find((p) => (p.display_name || '').trim() === updaterStr || p.id === updaterStr)
+                : undefined
+              const assignedUuid = matchedStaff ? matchedStaff.id : activeJob.assigned_to || null
+
+              const mergedNotes = mergeJobNotes(activeJob.notes, {
+                stepsData,
+                signature: updated.signature,
+              })
+
+              const ok = await updateJobDetails(updated.id, {
+                title: updated.taskType,
+                status: mapLaneToJobStatus(updated.status, activeJob.status),
+                notes: mergedNotes,
+                assigned_to: assignedUuid,
+              })
+              if (!ok) {
+                alert('案件詳細の保存に失敗しました。通信状況をご確認ください。')
+                return
+              }
+              await refetchJobs()
               setActiveJobDetailId(null)
-            }
-          }}
-          onPrint={() => {
-            window.print()
-          }}
-          onOpenQuoteWithData={(data) => {
-            setActiveJobDetailId(null)
-            setQuoteInitialData(data)
-            setIsQuoteOpen(true)
-          }}
-        />
-      )}
+            }}
+            onDelete={async (taskId) => {
+              // TaskDetailModal側で確認済みのため、二重confirmせず論理キャンセル（cancelled）へ更新
+              const ok = await updateJobDetails(taskId, { status: 'cancelled' })
+              if (!ok) {
+                alert('キャンセル処理に失敗しました。')
+                return
+              }
+              setActiveJobDetailId(null)
+              await Promise.all([refetchJobs(), refetchSchedules()])
+            }}
+            onPrint={(task) => {
+              setPrintTask({
+                receptionNo: task.receptionNo || `#${task.id.slice(0, 4)}`,
+                customer: task.customer,
+                tel: task.tel,
+                address: task.address,
+                taskType: task.taskType,
+                receptionDate: task.receptionDate,
+                updater: task.updater || '未指定',
+                stepsData: task.stepsData,
+                signature: task.signature,
+              })
+            }}
+            onInvoiceSuccess={async () => {
+              await refetchJobs()
+            }}
+            onOpenQuoteWithData={(data) => {
+              setActiveJobDetailId(null)
+              setQuoteInitialData(data)
+              setIsQuoteOpen(true)
+            }}
+          />
+        )
+      })()}
 
       {/* 8. 現場直結 AIカメラ写真概算見積モーダル */}
       <MobileQuoteModal

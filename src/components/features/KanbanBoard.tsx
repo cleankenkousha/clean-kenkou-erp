@@ -13,8 +13,8 @@ import {
   useDraggable,
   useDroppable,
 } from '@dnd-kit/core'
-import { CSS } from '@dnd-kit/utilities'
 import { StepsData } from './PrintArea'
+import { JobStatus } from '../../types'
 
 export type ProcessLane =
   | '未着手'
@@ -40,6 +40,8 @@ export interface ProcessTask {
   isArchived?: boolean
   stepsData?: StepsData
   signature?: string | null
+  rawNotes?: string | null
+  dbStatus?: JobStatus
 }
 
 export const STEP_DEFINITIONS = [
@@ -119,6 +121,7 @@ export function getTaskStalledInfo(lastUpdatedStr?: string) {
 export function isTaskCompleted(task: ProcessTask): boolean {
   if (!task) return false
   if (task.status === '失注・キャンセル') return true
+  if (task.dbStatus === 'completed' || task.dbStatus === 'cancelled') return true
   if (
     task.status === '請求書送付' &&
     task.stepsData &&
@@ -235,23 +238,25 @@ export const initialDummyTasks: ProcessTask[] = [
 interface TaskCardProps {
   task: ProcessTask
   isOverlay?: boolean
+  isDragging?: boolean
   onClick?: (task: ProcessTask) => void
   onOpenQuoteWithData?: (data: InitialQuoteData) => void
+  cardRef?: (element: HTMLElement | null) => void
+  dragAttributes?: any
+  dragListeners?: any
 }
 
-const TaskCard: React.FC<TaskCardProps> = ({ task, isOverlay, onClick, onOpenQuoteWithData }) => {
-  const { attributes, listeners, setNodeRef, transform, isDragging } =
-    useDraggable({
-      id: task.id,
-      data: { task },
-    })
-
-  const style = transform
-    ? {
-        transform: CSS.Translate.toString(transform),
-      }
-    : undefined
-
+// 純粋表示コンポーネント（DragOverlay内でのuseDraggable二重登録を防止）
+const TaskCardContent: React.FC<TaskCardProps> = ({
+  task,
+  isOverlay,
+  isDragging,
+  onClick,
+  onOpenQuoteWithData,
+  cardRef,
+  dragAttributes,
+  dragListeners,
+}) => {
   const stalledInfo = getTaskStalledInfo(task.updatedAt)
   const isEstimateUnnecessary =
     task.stepsData &&
@@ -280,10 +285,10 @@ const TaskCard: React.FC<TaskCardProps> = ({ task, isOverlay, onClick, onOpenQuo
 
   return (
     <div
-      ref={setNodeRef}
-      style={style}
-      {...attributes}
-      {...listeners}
+      ref={cardRef}
+      style={isDragging && !isOverlay ? { opacity: 0.35 } : undefined}
+      {...(dragAttributes || {})}
+      {...(dragListeners || {})}
       onClick={() => !isDragging && onClick?.(task)}
       className={`task-card ${isDragging ? 'is-dragging' : ''} ${
         isOverlay ? 'shadow-2xl ring-2 ring-sky-500 scale-105 rotate-1' : ''
@@ -323,7 +328,7 @@ const TaskCard: React.FC<TaskCardProps> = ({ task, isOverlay, onClick, onOpenQuo
           )}
         </div>
 
-        {/* 下部 (フッター): 受付日・更新・担当者 + 右端に控えめな管理ID */}
+        {/* 下部 (フッター): 受付日・更新・担当者 + 右端に控えめな短縮管理番号 */}
         <div className="pt-2 border-t border-slate-100 flex items-center justify-between text-[11px] text-sub">
           <div className="flex items-center space-x-2 truncate">
             <span>{task.receptionDate} 受付</span>
@@ -333,13 +338,35 @@ const TaskCard: React.FC<TaskCardProps> = ({ task, isOverlay, onClick, onOpenQuo
               </span>
             )}
           </div>
-          {/* IDは右端に小さく薄いグレーで表示 */}
           <span className="font-mono text-[10px] text-slate-400 font-normal ml-1 flex-shrink-0" title={`最終更新: ${displayDate}`}>
-            #{task.id}
+            {task.receptionNo || `#${task.id.slice(0, 4)}`}
           </span>
         </div>
       </div>
     </div>
+  )
+}
+
+const DraggableTaskCard: React.FC<{
+  task: ProcessTask
+  onClick?: (task: ProcessTask) => void
+  onOpenQuoteWithData?: (data: InitialQuoteData) => void
+}> = ({ task, onClick, onOpenQuoteWithData }) => {
+  const { attributes, listeners, setNodeRef, isDragging } = useDraggable({
+    id: task.id,
+    data: { task },
+  })
+
+  return (
+    <TaskCardContent
+      task={task}
+      isDragging={isDragging}
+      onClick={onClick}
+      onOpenQuoteWithData={onOpenQuoteWithData}
+      cardRef={setNodeRef}
+      dragAttributes={attributes}
+      dragListeners={listeners}
+    />
   )
 }
 
@@ -367,7 +394,7 @@ const KanbanColumn: React.FC<ColumnProps> = ({ lane, tasks, onCardClick, onOpenQ
       </div>
       <div className="lane-tasks">
         {tasks.map((task) => (
-          <TaskCard key={task.id} task={task} onClick={onCardClick} onOpenQuoteWithData={onOpenQuoteWithData} />
+          <DraggableTaskCard key={task.id} task={task} onClick={onCardClick} onOpenQuoteWithData={onOpenQuoteWithData} />
         ))}
       </div>
     </div>
@@ -431,6 +458,11 @@ export const KanbanBoard: React.FC<KanbanBoardProps> = ({
 
     const taskId = active.id as string
     const targetLane = over.id as ProcessLane
+    const sourceTask = tasks.find((t) => t.id === taskId)
+
+    if (sourceTask && sourceTask.status === targetLane) {
+      return
+    }
 
     if (onTaskMove) {
       onTaskMove(taskId, targetLane)
@@ -465,7 +497,7 @@ export const KanbanBoard: React.FC<KanbanBoardProps> = ({
       </div>
 
       <DragOverlay>
-        {activeTask ? <TaskCard task={activeTask} isOverlay /> : null}
+        {activeTask ? <TaskCardContent task={activeTask} isOverlay /> : null}
       </DragOverlay>
     </DndContext>
   )

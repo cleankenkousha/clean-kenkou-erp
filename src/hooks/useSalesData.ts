@@ -1,5 +1,6 @@
 import { useEffect, useState, useCallback } from 'react'
 import { supabase } from '../lib/supabase'
+import { parseJobNotes } from '../lib/jobNotes'
 
 // 月別売上データ
 export interface MonthlyRevenue {
@@ -71,8 +72,7 @@ export const useSalesData = (): UseSalesDataReturn => {
     setError(null)
 
     try {
-      // invoices + jobs（顧客情報含む）を JOIN して取得
-      // ※ invoices テーブルの列は DB マイグレーション状況により異なるため * で取得
+      // invoices + jobs（顧客情報・案件ステータス含む）を JOIN して取得
       const { data: invoices, error: fetchErr } = await supabase
         .from('invoices')
         .select(`
@@ -80,6 +80,7 @@ export const useSalesData = (): UseSalesDataReturn => {
           jobs (
             id,
             title,
+            status,
             notes,
             customers (
               name
@@ -92,6 +93,17 @@ export const useSalesData = (): UseSalesDataReturn => {
 
       const rows = (invoices || []) as any[]
 
+      // 請求書レコードがまだ未作成の作業実施済み (status === 'collected') 案件数も取得
+      const { data: collectedJobs } = await supabase
+        .from('jobs')
+        .select('id')
+        .eq('status', 'collected')
+
+      const invoicedJobIds = new Set(rows.map((r) => r.job_id))
+      const missingInvoiceJobCount = (collectedJobs || []).filter(
+        (j: any) => !invoicedJobIds.has(j.id)
+      ).length
+
       // ── 月別集計用マップ ──
       const monthMap = new Map<string, MonthlyRevenue>()
 
@@ -102,7 +114,7 @@ export const useSalesData = (): UseSalesDataReturn => {
       let totalRevenue = 0
       let paidRevenue = 0
       let issuedRevenue = 0
-      let unissuedCount = 0
+      let unissuedCount = missingInvoiceJobCount
       let unpaidCount = 0
 
       const now = new Date()
@@ -114,23 +126,18 @@ export const useSalesData = (): UseSalesDataReturn => {
       let lastMonthRevenue = 0
 
       for (const row of rows) {
+        const job = row.jobs as any
+        // キャンセル済み案件は売上・未入金・乖離分析から除外
+        if (job?.status === 'cancelled') {
+          continue
+        }
+
         const amount = Number(row.amount) || 0
         const status = row.billing_status as 'unissued' | 'issued' | 'paid'
-        const job = row.jobs as any
         const customer = job?.customers as any
 
         // ── 事前見積金額の抽出 (jobs.notes の grandTotal) ──
-        let quoteAmount = 0
-        if (job?.notes) {
-          try {
-            const parsed = JSON.parse(job.notes)
-            if (typeof parsed.grandTotal === 'number') {
-              quoteAmount = parsed.grandTotal
-            }
-          } catch {
-            // JSON パースエラーは無視
-          }
-        }
+        const quoteAmount = parseJobNotes(job?.notes).quoteGrandTotal
 
         // ── KPI 集計 ──
         if (status === 'paid') {
@@ -146,38 +153,42 @@ export const useSalesData = (): UseSalesDataReturn => {
 
         // ── 月別集計 (paid + issued のみ) ──
         if (status === 'paid' || status === 'issued') {
-          // 月の基準: issued_at → created_at の順で判断
           const baseDate = row.issued_at
             ? new Date(row.issued_at)
+            : row.paid_at
+            ? new Date(row.paid_at)
             : new Date(row.created_at)
-          const ym = `${baseDate.getFullYear()}-${String(baseDate.getMonth() + 1).padStart(2, '0')}`
-          const yearNum = baseDate.getFullYear()
-          const monthNum = baseDate.getMonth() + 1
-          const label = `${yearNum}年${monthNum}月`
 
-          if (!monthMap.has(ym)) {
-            monthMap.set(ym, {
-              month: ym,
-              label,
-              revenue: 0,
-              paidRevenue: 0,
-              issuedRevenue: 0,
-              count: 0,
-            })
+          if (!isNaN(baseDate.getTime())) {
+            const ym = `${baseDate.getFullYear()}-${String(baseDate.getMonth() + 1).padStart(2, '0')}`
+            const yearNum = baseDate.getFullYear()
+            const monthNum = baseDate.getMonth() + 1
+            const label = `${yearNum}年${monthNum}月`
+
+            if (!monthMap.has(ym)) {
+              monthMap.set(ym, {
+                month: ym,
+                label,
+                revenue: 0,
+                paidRevenue: 0,
+                issuedRevenue: 0,
+                count: 0,
+              })
+            }
+            const m = monthMap.get(ym)!
+            m.revenue += amount
+            m.count++
+            if (status === 'paid') m.paidRevenue += amount
+            else m.issuedRevenue += amount
+
+            // 今月・先月集計
+            if (ym === thisYM) thisMonthRevenue += amount
+            if (ym === lastYM) lastMonthRevenue += amount
           }
-          const m = monthMap.get(ym)!
-          m.revenue += amount
-          m.count++
-          if (status === 'paid') m.paidRevenue += amount
-          else m.issuedRevenue += amount
-
-          // 今月・先月集計
-          if (ym === thisYM) thisMonthRevenue += amount
-          if (ym === lastYM) lastMonthRevenue += amount
         }
 
-        // ── 乖離分析リスト ──
-        const variance = amount - quoteAmount
+        // ── 乖離分析リスト（事前見積未算定時は差額0扱い） ──
+        const variance = quoteAmount > 0 ? amount - quoteAmount : 0
         const varianceRate = quoteAmount > 0 ? (variance / quoteAmount) * 100 : 0
 
         varianceList.push({

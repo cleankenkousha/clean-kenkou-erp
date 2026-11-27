@@ -26,6 +26,7 @@ import { usePriceMaster } from '../../hooks/usePriceMaster'
 import { useViewMode } from '../../hooks/useViewMode'
 import { PrintQuoteArea, PrintQuoteData } from './PrintQuoteArea'
 import { analyzeQuoteImagesWithGemini } from '../../lib/gemini'
+import { mergeJobNotes } from '../../lib/jobNotes'
 import { SignaturePadModal } from './SignaturePadModal'
 import { APP_VERSION } from '../../version'
 
@@ -86,11 +87,15 @@ const matchMasterItem = (
   const exactMatch = masterList.find((m) => m.name.trim() === aiName)
   if (exactMatch) {
     const matchedUnit = normalizeUnit(exactMatch.unit || aiUnit)
+    const resolvedVol =
+      matchedUnit === 'kg'
+        ? (aiItem.volume !== undefined ? aiItem.volume : (exactMatch.volume || 0))
+        : (exactMatch.volume !== undefined ? exactMatch.volume : (aiItem.volume || 0.4))
     return {
       name: exactMatch.name,
       unit: matchedUnit,
       unitPrice: exactMatch.price,
-      volume: exactMatch.volume !== undefined ? exactMatch.volume : (aiItem.volume || 0.4),
+      volume: resolvedVol,
       reason: reason || '社内マスタ完全一致',
     }
   }
@@ -99,11 +104,15 @@ const matchMasterItem = (
   const partialMatch = masterList.find((m) => aiName.includes(m.name) || m.name.includes(aiName))
   if (partialMatch) {
     const matchedUnit = normalizeUnit(partialMatch.unit || aiUnit)
+    const resolvedVol =
+      matchedUnit === 'kg'
+        ? (aiItem.volume !== undefined ? aiItem.volume : (partialMatch.volume || 0))
+        : (partialMatch.volume !== undefined ? partialMatch.volume : (aiItem.volume || 0.4))
     return {
       name: partialMatch.name,
       unit: matchedUnit,
       unitPrice: partialMatch.price,
-      volume: partialMatch.volume !== undefined ? partialMatch.volume : (aiItem.volume || 0.4),
+      volume: resolvedVol,
       reason: reason || '社内マスタ部分照合',
     }
   }
@@ -209,11 +218,15 @@ const matchMasterItem = (
         const match = masterList.find((m) => m.name.includes(masterKw))
         if (match) {
           const matchedUnit = normalizeUnit(match.unit || aiUnit)
+          const resolvedVol =
+            matchedUnit === 'kg'
+              ? (aiItem.volume !== undefined ? aiItem.volume : (match.volume || 0))
+              : (match.volume !== undefined ? match.volume : (aiItem.volume || 0.4))
           return {
             name: match.name,
             unit: matchedUnit,
             unitPrice: match.price,
-            volume: match.volume !== undefined ? match.volume : (aiItem.volume || 0.4),
+            volume: resolvedVol,
             reason: reason || `カテゴリ同義語「${matchedKeyword}」より社内マスタ「${match.name}」判定`,
           }
         }
@@ -282,6 +295,7 @@ export const MobileQuoteModal: React.FC<MobileQuoteModalProps> = ({
   const [notes, setNotes] = useState('')
   const [signature, setSignature] = useState<string | null>(null)
   const [isSignatureModalOpen, setIsSignatureModalOpen] = useState(false)
+  const [savedJobId, setSavedJobId] = useState<string | undefined>(undefined)
   const [isSaving, setIsSaving] = useState(false)
   const [errorMsg, setErrorMsg] = useState<string | null>(null)
 
@@ -309,6 +323,7 @@ export const MobileQuoteModal: React.FC<MobileQuoteModalProps> = ({
     setExpenses(0)
     setNotes('')
     setSignature(null)
+    setSavedJobId(initialData?.jobId)
     setErrorMsg(null)
     if (initialData) {
       setCustomerName(initialData.customerName || '')
@@ -497,7 +512,7 @@ export const MobileQuoteModal: React.FC<MobileQuoteModalProps> = ({
           unitPrice: targetMaster.price,
           unit: normUnit,
           quantity: newQty,
-          volume: targetMaster.volume !== undefined ? targetMaster.volume : item.volume,
+          volume: normUnit === 'kg' ? (targetMaster.volume || 0) : (targetMaster.volume !== undefined ? targetMaster.volume : item.volume),
           reason: `自社単価マスタ「${targetMaster.name}」へ1タップ補正`,
         }
       })
@@ -508,12 +523,18 @@ export const MobileQuoteModal: React.FC<MobileQuoteModalProps> = ({
     const firstMaster = masterItems && masterItems.length > 0 ? masterItems[0] : null
     const initialUnit = normalizeUnit(preset?.unit || (firstMaster?.unit || '点'))
     const initialQty = initialUnit === 'kg' ? 50 : 1
+    const defaultVol =
+      preset?.volume !== undefined
+        ? preset.volume
+        : initialUnit === 'kg'
+        ? (firstMaster?.volume || 0)
+        : (firstMaster?.volume !== undefined ? firstMaster.volume : 0.4)
     const newItem: QuoteItem = {
       id: Date.now().toString(),
       name: preset ? preset.name : (firstMaster ? firstMaster.name : '新規不用品'),
       quantity: initialQty,
       unit: initialUnit,
-      volume: preset?.volume !== undefined ? preset.volume : (firstMaster?.volume !== undefined ? firstMaster.volume : 0.4),
+      volume: defaultVol,
       unitPrice: preset ? preset.unitPrice : (firstMaster ? firstMaster.price : 3000),
       reason: '手動追加品目',
     }
@@ -646,20 +667,32 @@ export const MobileQuoteModal: React.FC<MobileQuoteModalProps> = ({
         workFeePerM3,
         grandTotal,
         notes,
+        signature,
         imagesCount: capturedImages.length,
       }
 
-      let savedJobId = initialData?.jobId
+      let targetJobId = savedJobId || initialData?.jobId
 
-      if (initialData?.jobId) {
-        // 既存案件の更新
+      if (targetJobId) {
+        // 既存案件の更新（既存の工程進捗 stepsData や受付メモを保持したままマージ保存）
+        const { data: currentJobRow } = await supabase
+          .from('jobs')
+          .select('notes')
+          .eq('id', targetJobId)
+          .maybeSingle()
+
+        const mergedNotes = mergeJobNotes(currentJobRow?.notes, {
+          quoteData: quoteDetailsNote,
+          signature,
+        })
+
         const { error: updateErr } = await supabase
           .from('jobs')
           .update({
             status: 'quoting',
-            notes: JSON.stringify(quoteDetailsNote),
+            notes: mergedNotes,
           })
-          .eq('id', initialData.jobId)
+          .eq('id', targetJobId)
 
         if (updateErr) throw updateErr
       } else {
@@ -676,24 +709,32 @@ export const MobileQuoteModal: React.FC<MobileQuoteModalProps> = ({
 
         if (customerErr) throw customerErr
 
+        const mergedNotes = mergeJobNotes(null, {
+          quoteData: quoteDetailsNote,
+          signature,
+        })
+
         const { data: jobData, error: jobErr } = await supabase
           .from('jobs')
           .insert({
             customer_id: customerData.id,
             title: `【概算見積】${customerName.trim()}様（約${totalVolume.toFixed(1)}m3 / ¥${grandTotal.toLocaleString()}）`,
             status: 'quoting',
-            notes: JSON.stringify(quoteDetailsNote),
+            notes: mergedNotes,
           })
           .select('id')
           .single()
 
         if (jobErr) throw jobErr
-        if (jobData) savedJobId = jobData.id
+        if (jobData) {
+          targetJobId = jobData.id
+          setSavedJobId(jobData.id)
+        }
       }
 
       // 見積印刷用データの構築
       const printData: PrintQuoteData = {
-        jobId: savedJobId,
+        jobId: targetJobId,
         customerName: customerName.trim(),
         customerPhone: customerPhone.trim(),
         customerAddress: customerAddress.trim(),
@@ -718,6 +759,7 @@ export const MobileQuoteModal: React.FC<MobileQuoteModalProps> = ({
         workFeePerM3,
         grandTotal,
         notes,
+        signature,
       }
 
       setPrintQuoteData(printData)

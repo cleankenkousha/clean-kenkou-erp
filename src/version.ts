@@ -6,6 +6,6 @@
  * クライアントのキャッシュ状態を即座に確認できます。
  */
 
-export const APP_VERSION = 'v1.2.7'
-export const APP_BUILD_DATE = '2026.11.26-11:13'
-export const APP_DESCRIPTION = 'Android WebAPK再インストール時の旧パッケージID衝突を回避する新マニフェストURL(manifest-erp.webmanifest)・新ID発行およびキャッシュヘッダー最適化'
+export const APP_VERSION = 'v1.3.0'
+export const APP_BUILD_DATE = '2026.11.27-16:50'
+export const APP_DESCRIPTION = '全システム網羅監査によるCritical/主要Highバグ一括修正（モーダル閉じ不具合C-1・電子サイン保存・notes上書き防止・スケジュールJSTズレ・単価マスタDB保存・請求/売上/印刷/Excel改善）'
